@@ -148,6 +148,7 @@ describe('POST /share', () => {
   it('refuses other origins, bad pictures and bad facts, and stores nothing', async () => {
     const env = { GRADES: fakeKV() }
     expect((await post(env, { meta: meta(), png: b64(png()) }, { origin: 'https://evil.example' })).status).toBe(403)
+    expect((await post(env, { meta: meta(), png: b64(png()) }, { origin: 'https://sujeff.com' })).status).toBe(403)
     expect((await post(env, { meta: meta(), png: b64(png()) }, { origin: null })).status).toBe(403)
     expect((await post(env, { meta: meta(), png: b64(png(800, 400)) })).status).toBe(400)
     expect((await post(env, { meta: meta(), png: b64(png(1200, 630, MAX_PNG)) })).status).toBe(413)

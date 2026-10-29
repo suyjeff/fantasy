@@ -91,7 +91,7 @@ These two GET routes are open to any site; everything else keeps the CORS rule b
 ranking costs two KV writes, so the free tier's 1,000 writes a day is roughly 500 shares (the app
 remembers the link it made for an unchanged ranking, so a repeat share costs nothing).
 
-CORS allows https://ff.sujeff.com, https://sujeff.com (until the old /fantasy page is gone) and http://localhost (any port). The per-IP rate limit lives in
+CORS allows only https://ff.sujeff.com and http://localhost (any port). The per-IP rate limit lives in
 the isolate's memory, so it is a speed bump and not a hard cap. To get a hard cap, add a Cloudflare
 rate limiting rule on the worker's route in the dashboard.
 

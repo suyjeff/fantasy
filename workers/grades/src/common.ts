@@ -1,7 +1,6 @@
 // What the worker's endpoints share: which sites may call it, the JSON reply with its CORS headers, and the per-IP limit.
 
-// sujeff.com stays until the old /fantasy page is gone: until then, a tab opened before the move still saves there.
-const ORIGINS = [/^https:\/\/ff\.sujeff\.com$/, /^https:\/\/sujeff\.com$/, /^http:\/\/localhost(:\d+)?$/]
+const ORIGINS = [/^https:\/\/ff\.sujeff\.com$/, /^http:\/\/localhost(:\d+)?$/]
 
 export const allowed = (origin: string | null) => (origin && ORIGINS.some((r) => r.test(origin)) ? origin : null)
 
