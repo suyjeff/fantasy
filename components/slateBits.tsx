@@ -1,5 +1,5 @@
 import React from 'react'
-import type { SlatePlayer } from '../../lib/fantasy/slate'
+import type { SlatePlayer } from '../lib/slate'
 import TeamName from './TeamName'
 import { cx } from './ui'
 

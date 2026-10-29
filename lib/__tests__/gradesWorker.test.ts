@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanGrade, clientKey, clientOf, contribute, priorFor, TARGET, type Contribution, type StoredGrade } from '../../../workers/grades/src/aggregate'
+import { cleanGrade, clientKey, clientOf, contribute, priorFor, TARGET, type Contribution, type StoredGrade } from '../../workers/grades/src/aggregate'
 
 const g = (over: Partial<StoredGrade> = {}): StoredGrade => ({ key: 'abcd1234', partnerId: 3, grade: 'no', x: 0.5, ask: null, at: 1, ...over })
 const logit = (p: number) => Math.log(p / (1 - p))

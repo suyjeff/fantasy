@@ -1,9 +1,9 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ELO, EFFICIENCY_PRIOR_GAMES, FORM_PRIOR_GAMES, FORM_WEIGHT, SIM, type BacktestModel, type BacktestScore } from '../../../lib/fantasy/forecast'
-import { gradeSnapshots, loadSnapshots, MARKET_WEIGHT, MEDIAN_TO_MEAN } from '../../../lib/fantasy/lines'
+import { ELO, EFFICIENCY_PRIOR_GAMES, FORM_PRIOR_GAMES, FORM_WEIGHT, SIM, type BacktestModel, type BacktestScore } from '../../lib/forecast'
+import { gradeSnapshots, loadSnapshots, MARKET_WEIGHT, MEDIAN_TO_MEAN } from '../../lib/lines'
 import { useFantasy } from '../FantasyContext'
 import { MONKE } from '../Shell'
-import { surname } from '../../../lib/fantasy/scout'
+import { surname } from '../../lib/scout'
 import { Badge, N, Num, Panel, Sentences, Stat, StatGrid, Table, cx, fmt, fmtSigned, simOdds, pct } from '../ui'
 
 // ---------- Overview ----------

@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react'
-import type { Analysis } from '../../../lib/fantasy/analysis'
-import { waiverTargets } from '../../../lib/fantasy/search'
-import { dropCandidate as dropCandidateFor } from '../../../lib/fantasy/moves'
-import type { TradeTarget } from '../../../lib/fantasy/trades'
-import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
+import type { Analysis } from '../../lib/analysis'
+import { waiverTargets } from '../../lib/search'
+import { dropCandidate as dropCandidateFor } from '../../lib/moves'
+import type { TradeTarget } from '../../lib/trades'
+import type { LeagueData } from '../../lib/useLeagueData'
 import {
   impliedTotals,
   pointsAllowed,
@@ -15,8 +15,8 @@ import {
   type StreamPos,
   type StreamRow,
   type TeamTotal,
-} from '../../../lib/fantasy/waivers'
-import { suggestBid, type BidAdvice } from '../../../lib/fantasy/faab'
+} from '../../lib/waivers'
+import { suggestBid, type BidAdvice } from '../../lib/faab'
 import { ContextNotes, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import WaiverMoves, { TrendingFree } from './WaiverMoves'
@@ -149,7 +149,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   // Everyone off the wire who would start for you, with the cut it forces already priced in.
   const adds = useMemo(() => ((tab === 'adds' || tab === 'moves') && me ? waiverTargets(data, analysis) : []), [tab, me, data, analysis])
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
-  // The weakest bench player, with the consensus price as a floor (lib/fantasy/moves).
+  // The weakest bench player, with the consensus price as a floor (lib/moves).
   const dropCandidate = useMemo(() => (me ? dropCandidateFor(analysis, me.rosterId, models.perceived) : null), [me, analysis, models.perceived])
 
   const posLabel = POS_LABEL[pos]

@@ -5,7 +5,7 @@
 //                the league has points for (regular season or playoffs), and each team's starters add up to its
 //                matchup points, within 0.01
 //   projections  no projection line, that week or the coming one, carries a key the league scores in a form we leave
-//                unscored (lib/fantasy/scoring unscoredProjectionKeys)
+//                unscored (lib/scoring unscoredProjectionKeys)
 //
 // Out of season (no coming week, or no week with points) the checks that need one skip with the reason, so the weekly
 // job stays green from the last game to the first and fails only on real drift.
@@ -13,7 +13,7 @@
 //                projection, to the rounding of the published line
 //   sanity       every starter Sleeper projects for a point or more scores above zero in league scoring
 import { beforeAll, describe, expect, it } from 'vitest'
-import { roundingTolerance, scoreProjectionLine, scoreStatLine, SLEEPER_HALF_PPR, unscoredProjectionKeys } from '../../lib/fantasy/scoring'
+import { roundingTolerance, scoreProjectionLine, scoreStatLine, SLEEPER_HALF_PPR, unscoredProjectionKeys } from '../../lib/scoring'
 import config from './leagues.json'
 
 type Line = Record<string, number>

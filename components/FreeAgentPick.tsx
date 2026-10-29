@@ -1,6 +1,6 @@
 import React from 'react'
-import { bestFreeAgent as bestFreeAgentIn } from '../../lib/fantasy/moves'
-import type { LeagueData } from '../../lib/fantasy/useLeagueData'
+import { bestFreeAgent as bestFreeAgentIn } from '../lib/moves'
+import type { LeagueData } from '../lib/useLeagueData'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
 

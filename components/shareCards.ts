@@ -116,7 +116,7 @@ export const renderRankCard = async ({ league, week, teams }: CardInput, palette
   try {
     // Each cut with the text it will draw, so the right slice of the font is fetched.
     const words = `Power Rank Week 0123456789 ${league} ${teams.map((t) => t.name).join(' ')}`
-    const digits = '0123456789.–· PWRKMOVETA sujeff.com/fantasy chance to beat an average team'
+    const digits = '0123456789.–· PWRKMOVETA ff.sujeff.com chance to beat an average team'
     await Promise.all([
       ...['500', '600'].map((w) => document.fonts.load(`${w} 40px "IBM Plex Sans"`, words)),
       ...['400', '500'].map((w) => document.fonts.load(`${w} 40px "Chivo Mono"`, digits + league.toUpperCase())),
@@ -285,7 +285,7 @@ export const renderRankCard = async ({ league, week, teams }: CardInput, palette
   ctx.textAlign = 'left'
   ctx.fillStyle = rgb(p.text2)
   ctx.font = `500 26px ${MONO}`
-  ctx.fillText('sujeff.com/fantasy', PAD, fy)
+  ctx.fillText('ff.sujeff.com', PAD, fy)
   ctx.textAlign = 'right'
   ctx.fillStyle = rgb(p.muted)
   ctx.font = `400 21px ${MONO}`
@@ -385,7 +385,7 @@ const poop = (ctx: CanvasRenderingContext2D, size: number, p: Palette) => {
 const ogFonts = async (extra: string) => {
   try {
     const words = `Power Rank Week 0123456789 ${extra}`
-    const digits = '0123456789.–·▲▼+ PWR WEEK BIGGEST CLIMB DROP LAST PLACE YOU sujeff.com/fantasy chance to beat an average team'
+    const digits = '0123456789.–·▲▼+ PWR WEEK BIGGEST CLIMB DROP LAST PLACE YOU ff.sujeff.com chance to beat an average team'
     await Promise.all([
       ...['500', '600'].map((w) => document.fonts.load(`${w} 40px "IBM Plex Sans"`, words)),
       ...['400', '500', '600'].map((w) => document.fonts.load(`${w} 40px "Chivo Mono"`, digits + extra.toUpperCase())),
@@ -567,7 +567,7 @@ export const renderOgCard = async ({ league, week, teams, mine }: OgInput, palet
   ctx.textAlign = 'left'
   ctx.fillStyle = rgb(p.text2)
   ctx.font = `500 22px ${MONO}`
-  ctx.fillText('sujeff.com/fantasy', PAD, fy)
+  ctx.fillText('ff.sujeff.com', PAD, fy)
   const me = mine != null ? teams.find((t) => t.rosterId === mine) : null
   ctx.textAlign = 'right'
   if (me && me.rank > OG_ROWS) {

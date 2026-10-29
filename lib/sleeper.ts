@@ -56,7 +56,7 @@ const readCache = <T>(key: string, ttl: number): T | null => {
 const writeCache = <T>(key: string, data: T, persist = true) => {
   const entry: CacheEntry<T> = { t: Date.now(), data }
   memory.set(key, entry)
-  // Within the cache's budget (lib/fantasy/storage); one that is not kept still serves this visit from memory.
+  // Within the cache's budget (lib/storage); one that is not kept still serves this visit from memory.
   if (persist) writeCached(CACHE_PREFIX + key, JSON.stringify(entry))
 }
 
@@ -256,7 +256,7 @@ export const getScoredProjections = (
     `/projections/nfl/regular/${season}/${week}`,
     near ? 3 * HOUR : 12 * HOUR,
     {
-      // v2: lines are derived to the league's keys before scoring (lib/fantasy/scoring deriveProjectionLine).
+      // v2: lines are derived to the league's keys before scoring (lib/scoring deriveProjectionLine).
       key: `scored-proj2:${leagueId}:${season}:${week}`,
       transform: (raw) => {
         const out: Record<string, number> = {}
@@ -375,7 +375,7 @@ export type WeekActuals = { pts: Record<string, number>; lines: WeekStats }
  * defenses are kept whatever they did, since their points allowed are the game's score.
  *
  * A week still being played is a snapshot: it lives under the live poll's gap, in memory only. Once the week is
- * settled (lib/fantasy/liveWeek weekSettled) it is read again under its own key and kept for a day, so a mid-game copy
+ * settled (lib/liveWeek weekSettled) it is read again under its own key and kept for a day, so a mid-game copy
  * can never stand in for the result.
  */
 export const getWeekActuals = (leagueId: string, season: string, week: number, scoring: Record<string, number>, isPast: boolean) =>

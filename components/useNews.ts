@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { loadNews, type NewsItem } from '../../lib/fantasy/news'
-import type { PlayerMap } from '../../lib/fantasy/types'
+import { loadNews, type NewsItem } from '../lib/news'
+import type { PlayerMap } from '../lib/types'
 
 const NONE: Record<string, NewsItem[]> = {}
 

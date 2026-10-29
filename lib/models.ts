@@ -17,7 +17,7 @@ export type Models = {
   elo: EloRun
   /**
    * Elo as read today: the results-based rating plus the Elo credit for each team's projected lineup ahead, against
-   * the league's average lineup (lib/fantasy/forecast lineupEdge). What Power and the dashboard show as Elo.
+   * the league's average lineup (lib/forecast lineupEdge). What Power and the dashboard show as Elo.
    */
   eloRated: Record<number, number>
   /** Elo going into this season: last season's close, regressed, or flat. */

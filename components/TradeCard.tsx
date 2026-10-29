@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import type { Analysis } from '../../lib/fantasy/analysis'
-import type { AcceptRead } from '../../lib/fantasy/behavior'
-import { leverageOf, leverageRun, type Forecast, type ForecastInput, type Leverage, type TradeSides } from '../../lib/fantasy/forecast'
-import { runSim } from '../../lib/fantasy/simRunner'
-import { applyTrade, type TradeIdea } from '../../lib/fantasy/trades'
-import type { LeagueData } from '../../lib/fantasy/useLeagueData'
+import type { Analysis } from '../lib/analysis'
+import type { AcceptRead } from '../lib/behavior'
+import { leverageOf, leverageRun, type Forecast, type ForecastInput, type Leverage, type TradeSides } from '../lib/forecast'
+import { runSim } from '../lib/simRunner'
+import { applyTrade, type TradeIdea } from '../lib/trades'
+import type { LeagueData } from '../lib/useLeagueData'
 import { ContextNotes } from './ContextNotes'
 import { BuildIcon } from './icons'
 import { InsightMark } from './InsightMark'
 import { useFantasy, useTradeRead } from './FantasyContext'
-import { PRICING_VERSION } from '../../lib/fantasy/currency'
-import { GRADE_LABEL, WHY_LABEL, ideaKey, type Grade, type GradeWhy } from '../../lib/fantasy/grades'
+import { PRICING_VERSION } from '../lib/currency'
+import { GRADE_LABEL, WHY_LABEL, ideaKey, type Grade, type GradeWhy } from '../lib/grades'
 import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, Segmented, WeekBars, cx, fmtSigned, isOut, pct, simOdds } from './ui'
 
 export const SHAPE_LABEL: Record<TradeIdea['shape'], string> = {
@@ -72,7 +72,7 @@ const PlayerLine = ({ id, data, analysis, notes }: { id: string; data: LeagueDat
 }
 
 // Each trade's leverage, once per forecast and trade: run sliced in idle time on the shared simulation queue
-// (lib/fantasy/simRunner), one trade at a time, and kept for every card that shows the same trade.
+// (lib/simRunner), one trade at a time, and kept for every card that shows the same trade.
 const leverageCache = new WeakMap<Forecast, Map<string, Promise<Leverage | null>>>()
 const leverageFor = (input: ForecastInput, f: Forecast, trade: TradeSides) => {
   let byTrade = leverageCache.get(f)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deepLinkUrl, parseDeepLink } from '../../../components/fantasy/useDeepLink'
+import { deepLinkUrl, parseDeepLink } from '../../components/useDeepLink'
 
 describe('parseDeepLink', () => {
   it('reads a shared link: the league and the week', () => {
@@ -13,9 +13,9 @@ describe('parseDeepLink', () => {
     expect(parseDeepLink('?reveal=')).toEqual({ league: null, season: null, week: 'latest' })
     expect(parseDeepLink('?reveal=latest')).toEqual({ league: null, season: null, week: 'latest' })
     expect(parseDeepLink('?league=abc&reveal=01')).toEqual({ league: 'abc', season: null, week: 1 })
-    expect(deepLinkUrl('abc', 1)).toBe('https://sujeff.com/fantasy?league=abc&reveal=01#power')
-    expect(deepLinkUrl('abc', 7)).toBe('https://sujeff.com/fantasy?league=abc&reveal=7#power')
-    expect(deepLinkUrl('abc', 7, '2026')).toBe('https://sujeff.com/fantasy?league=abc&season=2026&reveal=7#power')
+    expect(deepLinkUrl('abc', 1)).toBe('https://ff.sujeff.com/?league=abc&reveal=01#power')
+    expect(deepLinkUrl('abc', 7)).toBe('https://ff.sujeff.com/?league=abc&reveal=7#power')
+    expect(deepLinkUrl('abc', 7, '2026')).toBe('https://ff.sujeff.com/?league=abc&season=2026&reveal=7#power')
   })
   it('takes a league alone, ignores a bad one, and finds nothing in other queries', () => {
     expect(parseDeepLink('?league=abc')).toEqual({ league: 'abc', season: null, week: null })

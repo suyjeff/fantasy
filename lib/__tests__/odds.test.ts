@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { odds, pct, simOdds } from '../../../components/fantasy/ui'
+import { odds, pct, simOdds } from '../../components/ui'
 import { chance, share } from '../format'
 import { clinchStatus, divisionsOf, seedOrder, simulateSeason } from '../forecast'
 

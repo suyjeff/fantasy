@@ -1,6 +1,6 @@
 // Live check of the playoff odds' consistency (npm run test:accuracy). Not part of the default suite: it loads the real
-// leagues in leagues.json through the app's own pipeline (lib/fantasy/useLeagueData loadLeagueData, analyze,
-// buildModels) and checks, on this week's real numbers, the invariants lib/fantasy/__tests__/oddsConsistency.test.ts
+// leagues in leagues.json through the app's own pipeline (lib/useLeagueData loadLeagueData, analyze,
+// buildModels) and checks, on this week's real numbers, the invariants lib/__tests__/oddsConsistency.test.ts
 // proves on made-up ones:
 //
 //   one source   the playoff simulator untouched, and the reveal's after-odds for the latest settled week, equal the
@@ -10,15 +10,15 @@
 //   inputs       the forecast's records are the matchups' (ties and points for included), the weeks it counts are
 //                the settled ones (Sleeper's last_scored_leg), and its schedule is exactly the weeks still to settle
 import { beforeAll, describe, expect, it } from 'vitest'
-import { analyze } from '../../lib/fantasy/analysis'
-import { clinchStatus, simulateSeason, weekStakes } from '../../lib/fantasy/forecast'
-import { buildModels, type Models } from '../../lib/fantasy/models'
-import { simInputFor } from '../../lib/fantasy/playoffSim'
-import { DEFAULT_POWER_WEIGHTS, buildTeamSeasons, buildTeamWeeks } from '../../lib/fantasy/power'
-import { recapOdds, type Recap } from '../../lib/fantasy/recap'
-import { loadLeagueData, type LeagueData } from '../../lib/fantasy/useLeagueData'
-import { DEFAULT_MODEL } from '../../lib/fantasy/war'
-import type { Analysis } from '../../lib/fantasy/analysis'
+import { analyze } from '../../lib/analysis'
+import { clinchStatus, simulateSeason, weekStakes } from '../../lib/forecast'
+import { buildModels, type Models } from '../../lib/models'
+import { simInputFor } from '../../lib/playoffSim'
+import { DEFAULT_POWER_WEIGHTS, buildTeamSeasons, buildTeamWeeks } from '../../lib/power'
+import { recapOdds, type Recap } from '../../lib/recap'
+import { loadLeagueData, type LeagueData } from '../../lib/useLeagueData'
+import { DEFAULT_MODEL } from '../../lib/war'
+import type { Analysis } from '../../lib/analysis'
 import config from './leagues.json'
 
 const USERNAME = 'thejeffanator'

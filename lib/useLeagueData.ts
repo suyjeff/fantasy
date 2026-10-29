@@ -225,7 +225,7 @@ const pointsFromMatchups = (ms: SleeperMatchup[]): Record<string, number> => {
 
 /**
  * The league's playoff rounds, each the weeks it is played over: one week unless the settings say the championship
- * (round type 1) or every round (type 2) runs two (lib/fantasy/forecast playoffRoundWeeks, the one rule).
+ * (round type 1) or every round (type 2) runs two (lib/forecast playoffRoundWeeks, the one rule).
  */
 export const fantasyPlayoffRounds = (league: SleeperLeague): number[][] => {
   const start = league.settings?.playoff_week_start

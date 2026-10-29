@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import type { NewsItem } from '../../lib/fantasy/news'
+import type { NewsItem } from '../lib/news'
 import { useFantasy } from './FantasyContext'
 import { SheetSection } from './Sheet'
 import { ago, cx } from './ui'

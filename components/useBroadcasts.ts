@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { GAME_SPAN } from '../../lib/fantasy/liveWeek'
-import { parseScoreboard, type Broadcast } from '../../lib/fantasy/nfl'
+import { GAME_SPAN } from '../lib/liveWeek'
+import { parseScoreboard, type Broadcast } from '../lib/nfl'
 
 // Short, so a score or clock shown mid-game is never far behind (the live poll below asks every minute); networks do
 // not change, but they come in the same payload.
@@ -69,7 +69,7 @@ export const useHourTick = () => {
 /**
  * Where to watch each NFL game of a week, from ESPN's public scoreboard, with the score and clock once it starts. It
  * is a nicety: if the request fails or is blocked, games simply show no network. Each reading carries when it was
- * fetched (`at`), so a reader can tell a feed that has gone quiet from one that is current (lib/fantasy/gameTime).
+ * fetched (`at`), so a reader can tell a feed that has gone quiet from one that is current (lib/gameTime).
  * Cached for 45 seconds in memory and this tab’s session storage, and read again each time a sheet opens or `tick`
  * (useLiveTick) moves.
  */

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Analysis } from '../../lib/fantasy/analysis'
-import { stakesOf, stakesRuns, type Forecast, type Stakes } from '../../lib/fantasy/forecast'
-import { runSim } from '../../lib/fantasy/simRunner'
-import { buildSlate, positionCV, type Slate } from '../../lib/fantasy/slate'
-import type { LeagueData } from '../../lib/fantasy/useLeagueData'
-import { impliedTotals, type TeamTotal } from '../../lib/fantasy/waivers'
-import { calendarSig, endsFrom, feedFrom, freshGames, freshMatchups, nextWindow, pendingSettle, shouldPoll, weekGames, weekOn, weekSettled } from '../../lib/fantasy/liveWeek'
+import type { Analysis } from '../lib/analysis'
+import { stakesOf, stakesRuns, type Forecast, type Stakes } from '../lib/forecast'
+import { runSim } from '../lib/simRunner'
+import { buildSlate, positionCV, type Slate } from '../lib/slate'
+import type { LeagueData } from '../lib/useLeagueData'
+import { impliedTotals, type TeamTotal } from '../lib/waivers'
+import { calendarSig, endsFrom, feedFrom, freshGames, freshMatchups, nextWindow, pendingSettle, shouldPoll, weekGames, weekOn, weekSettled } from '../lib/liveWeek'
 import { useFantasy } from './FantasyContext'
 import { useBroadcasts, useHourTick, useLiveTick } from './useBroadcasts'
 import { liveKey, recordEnds, stickySettled, useLiveWeekRefresh, useLiveWeekSnapshot } from './useLiveWeek'
@@ -19,7 +19,7 @@ const sameDeps = (a: unknown[], b: unknown[]) => a.length === b.length && a.ever
 
 // The stakes simulation runs once per forecast, whichever view asks first: both sides of every game this week, each
 // the forecast's own seasons with that result locked, so a win and a loss bracket the odds shown everywhere. They run
-// sliced on the shared simulation queue (lib/fantasy/simRunner), a few milliseconds at a time.
+// sliced on the shared simulation queue (lib/simRunner), a few milliseconds at a time.
 const stakesCache = new WeakMap<Forecast, Record<number, Stakes>>()
 const stakesRunning = new WeakMap<Forecast, Promise<Record<number, Stakes>>>()
 const stakesFor = (f: Forecast) => {
@@ -41,7 +41,7 @@ const stakesFor = (f: Forecast) => {
   return run
 }
 
-/** This week's slate for the league (lib/fantasy/slate), with what a win is worth simulated in the background. */
+/** This week's slate for the league (lib/slate), with what a win is worth simulated in the background. */
 export const useSlate = (data: LeagueData, analysis: Analysis) => {
   const { models } = useFantasy()
   const players = data.players
@@ -56,7 +56,7 @@ export const useSlate = (data: LeagueData, analysis: Analysis) => {
   const lines = useStatLines(data.league.season, live ? [week] : [])
   const statLines = lines[week] ?? null
   // The week as it is being played. The page's copy of the matchups and schedule is read again on the live poll, with
-  // ESPN's scoreboard for each game's state and clock; lib/fantasy/liveWeek says when to ask and what to believe.
+  // ESPN's scoreboard for each game's state and clock; lib/liveWeek says when to ask and what to believe.
   const now = Date.now()
   const hour = useHourTick()
   const leagueId = data.league.league_id

@@ -105,8 +105,8 @@ export const FantasyHead = ({ title }: { title: string }) => (
     <meta key="og:site_name" property="og:site_name" content="sujeff.com / Fantasy" />
     <meta key="og:title" property="og:title" content="Weekly Power Rank" />
     <meta key="og:description" property="og:description" content="Your fantasy league, ranked and explained. A new Power Rank every Tuesday at 6 AM ET." />
-    <meta key="og:url" property="og:url" content="https://sujeff.com/fantasy" />
-    <meta key="og:image" property="og:image" content="https://sujeff.com/fantasy/og.png" />
+    <meta key="og:url" property="og:url" content="https://ff.sujeff.com" />
+    <meta key="og:image" property="og:image" content="https://ff.sujeff.com/og.png" />
     <meta key="og:image:type" property="og:image:type" content="image/png" />
     <meta key="og:image:width" property="og:image:width" content="1200" />
     <meta key="og:image:height" property="og:image:height" content="630" />
@@ -114,7 +114,7 @@ export const FantasyHead = ({ title }: { title: string }) => (
     <meta key="twitter:card" name="twitter:card" content="summary_large_image" />
     <meta key="twitter:title" name="twitter:title" content="Weekly Power Rank" />
     <meta key="twitter:description" name="twitter:description" content="Your fantasy league, ranked and explained. A new Power Rank every Tuesday at 6 AM ET." />
-    <meta key="twitter:image" name="twitter:image" content="https://sujeff.com/fantasy/og.png" />
+    <meta key="twitter:image" name="twitter:image" content="https://ff.sujeff.com/og.png" />
   </Head>
 )
 

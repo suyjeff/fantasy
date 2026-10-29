@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { longPastByCalendar, readFeed } from '../../lib/fantasy/gameTime'
-import type { Broadcast } from '../../lib/fantasy/nfl'
-import type { Slate } from '../../lib/fantasy/slate'
-import { getWeekActuals, type WeekActuals } from '../../lib/fantasy/sleeper'
-import type { StatLine } from '../../lib/fantasy/types'
+import { longPastByCalendar, readFeed } from '../lib/gameTime'
+import type { Broadcast } from '../lib/nfl'
+import type { Slate } from '../lib/slate'
+import { getWeekActuals, type WeekActuals } from '../lib/sleeper'
+import type { StatLine } from '../lib/types'
 import { useFantasy } from './FantasyContext'
 import { useBroadcasts, useLiveTick } from './useBroadcasts'
 import { liveKey, useLiveWeekSnapshot } from './useLiveWeek'
@@ -21,7 +21,7 @@ export type PlayerWeek = WeekState & {
   game: { opp: string; home: boolean; us: number | null; them: number | null } | null
 }
 
-/** A scoreboard reading that is still current (lib/fantasy/gameTime): a feed gone quiet shows no clock or score. */
+/** A scoreboard reading that is still current (lib/gameTime): a feed gone quiet shows no clock or score. */
 const fresh = (c: Broadcast | undefined, now: number) => (c?.state && c.at != null && readFeed({ state: c.state, at: c.at }, now) ? c : undefined)
 
 // The week's stats when the live reads have none (a week outside the poll, another season's league): the cached load,
@@ -80,7 +80,7 @@ export const boxScore = (s: StatLine | null | undefined, pos: string): string[] 
   boxParts(s, pos).map((p) => (p.label === 'Allowed' ? `allowed ${p.text}` : p.label === 'Fumbles' ? `${p.text.replace(' lost', '')} fum lost` : pos === 'K' ? `${p.text.replace(/, long.*/, '')} ${p.label === 'Field goals' ? 'FG' : 'XP'}` : p.text))
 
 /**
- * The week as played, for a slate already built (lib/fantasy/slate). `of(id)` reads any player, rostered or not:
+ * The week as played, for a slate already built (lib/slate). `of(id)` reads any player, rostered or not:
  * a starter's points are his matchup's as the league scores them, anyone else's are his stat line in the league's
  * scoring. Null for a player with no game this week.
  */

@@ -1,10 +1,10 @@
 // A trade of any shape: two teams or several, players moving in every direction, FAAB moving with them. Each team
-// is priced the way the two-team scorer prices one (lib/fantasy/trades): its best lineup week by week before and
-// after, with the extra bodies cut; trade value as managers price players (lib/fantasy/currency); and FAAB at a
+// is priced the way the two-team scorer prices one (lib/trades): its best lineup week by week before and
+// after, with the extra bodies cut; trade value as managers price players (lib/currency); and FAAB at a
 // discounted, uncertain value.
 //
 // FAAB in a trade. Managers rarely price waiver money like players: it buys optionality, not points. So a dollar
-// counts at a fraction of what it buys on the wire (lib/fantasy/faab), lower still for a team flush with budget and
+// counts at a fraction of what it buys on the wire (lib/faab), lower still for a team flush with budget and
 // higher for one nearly out, which might actually need it. The fraction itself is a guess, so FAAB carries a
 // range, from half to one and a half times the middle estimate, and the totals carry it through.
 

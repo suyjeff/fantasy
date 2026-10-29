@@ -10,7 +10,7 @@ vi.mock('../sleeper', () => ({
 }))
 
 const { getLiveMatchups } = await import('../sleeper')
-const { liveKey, recordEnds, refreshLiveWeek, stickySettled } = await import('../../../components/fantasy/useLiveWeek')
+const { liveKey, recordEnds, refreshLiveWeek, stickySettled } = await import('../../components/useLiveWeek')
 
 const args = { leagueId: 'L', season: '2026', week: 8, scoring: {}, sleeper: true, settled: false }
 const flush = () => new Promise((r) => setTimeout(r, 0))

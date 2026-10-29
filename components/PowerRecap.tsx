@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { SIM } from '../../lib/fantasy/forecast'
-import { type Odds, type Part, type Reason, type Recap, type RecapGame, type RecapTeam } from '../../lib/fantasy/recap'
+import { SIM } from '../lib/forecast'
+import { type Odds, type Part, type Reason, type Recap, type RecapGame, type RecapTeam } from '../lib/recap'
 import { useFantasy } from './FantasyContext'
 import { Crown } from './RevealBanner'
 import { ShareButton } from './RevealShare'
@@ -8,7 +8,7 @@ import { Avatar, PlayerAvatar, PosTag, Segmented, cx, fmt, odds as chance, pct }
 
 // What the reveal settles into: the new ranking with each team's move, and the week that made it. On wide screens
 // the ranking holds the left column and the week reads down the right; on phones they are three pages under tabs.
-// Every figure comes from the recap (lib/fantasy/recap), which reads the league's own matchups.
+// Every figure comes from the recap (lib/recap), which reads the league's own matchups.
 
 const d = (ms: number) => ({ '--d': `${ms}ms` }) as CSSProperties
 const pad2 = (n: number) => String(n).padStart(2, '0')

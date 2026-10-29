@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import type { Analysis } from '../../lib/fantasy/analysis'
-import type { Models } from '../../lib/fantasy/models'
-import { joinOdds, mergeSims, RECAP_SLICE, recapOddsRuns, type Odds, type Recap } from '../../lib/fantasy/recap'
-import type { SimCounts } from '../../lib/fantasy/forecast'
-import type { LeagueData } from '../../lib/fantasy/useLeagueData'
+import type { Analysis } from '../lib/analysis'
+import type { Models } from '../lib/models'
+import { joinOdds, mergeSims, RECAP_SLICE, recapOddsRuns, type Odds, type Recap } from '../lib/recap'
+import type { SimCounts } from '../lib/forecast'
+import type { LeagueData } from '../lib/useLeagueData'
 import type { RevealSource } from './useReveal'
 
 // The reveal's playoff odds, before and after the week: thousands of simulated seasons, run a slice at a time in the

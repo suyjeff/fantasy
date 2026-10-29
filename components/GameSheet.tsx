@@ -1,5 +1,5 @@
 import React from 'react'
-import type { SlateGame, SlatePlayer } from '../../lib/fantasy/slate'
+import type { SlateGame, SlatePlayer } from '../lib/slate'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
 import { SheetBody, SheetClose, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
@@ -8,7 +8,7 @@ import { BOX_LINE, Badge, ScoreState, WeekScore, cx, fmt } from './ui'
 import { useSlate } from './useSlate'
 import { boxScore, type WeekNow, useWeekNow } from './useWeekNow'
 import { useBroadcasts } from './useBroadcasts'
-import { teamColor, teamLogo } from '../../lib/fantasy/nfl'
+import { teamColor, teamLogo } from '../lib/nfl'
 import { Callout } from './Callout'
 
 /** One league starter in the game: who has him, what he projects or scored, his range and what rides on him. */

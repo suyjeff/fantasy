@@ -1,30 +1,30 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FantasyProvider } from '../../components/fantasy/FantasyContext'
-import SheetHost, { sheetKey, type SheetRef } from '../../components/fantasy/SheetHost'
-import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../../components/fantasy/Shell'
-import { Label, Segmented, Select, cx, simOdds } from '../../components/fantasy/ui'
-import DashboardView from '../../components/fantasy/views/DashboardView'
-import Onboarding, { type OnboardResult } from '../../components/fantasy/Onboarding'
-import MeView from '../../components/fantasy/views/MeView'
-import ModelView, { READOUT } from '../../components/fantasy/views/ModelView'
-import MatchupsView from '../../components/fantasy/views/MatchupsView'
-import PlayoffsView from '../../components/fantasy/views/PlayoffsView'
-import SlateView from '../../components/fantasy/views/SlateView'
-import PlayersView from '../../components/fantasy/views/PlayersView'
-import PowerView from '../../components/fantasy/views/PowerView'
-import TeamsView from '../../components/fantasy/views/TeamsView'
-import WaiversView from '../../components/fantasy/views/WaiversView'
-import TradesView from '../../components/fantasy/views/TradesView'
-import type { AcceptRead } from '../../lib/fantasy/behavior'
-import { applyLessons, ideaKey, learn, loadGrades, saveGrades, type GradeRecord, type Grades } from '../../lib/fantasy/grades'
-import { useSharedPrior } from '../../lib/fantasy/sharedGrades'
-import type { TradeIdea } from '../../lib/fantasy/trades'
-import { applyAdjustments, liveAdjustments, loadAdjustments, saveAdjustments, type Adjustment, type Adjustments } from '../../lib/fantasy/adjust'
-import { analyze, withWeights } from '../../lib/fantasy/analysis'
-import { buildHistory, buildModels } from '../../lib/fantasy/models'
-import { DEFAULT_POWER_WEIGHTS, type PowerWeights } from '../../lib/fantasy/power'
-import { purgeStaleCache } from '../../lib/fantasy/sleeper'
-import { writeStored } from '../../lib/fantasy/storage'
+import { FantasyProvider } from '../components/FantasyContext'
+import SheetHost, { sheetKey, type SheetRef } from '../components/SheetHost'
+import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../components/Shell'
+import { Label, Segmented, Select, cx, simOdds } from '../components/ui'
+import DashboardView from '../components/views/DashboardView'
+import Onboarding, { type OnboardResult } from '../components/Onboarding'
+import MeView from '../components/views/MeView'
+import ModelView, { READOUT } from '../components/views/ModelView'
+import MatchupsView from '../components/views/MatchupsView'
+import PlayoffsView from '../components/views/PlayoffsView'
+import SlateView from '../components/views/SlateView'
+import PlayersView from '../components/views/PlayersView'
+import PowerView from '../components/views/PowerView'
+import TeamsView from '../components/views/TeamsView'
+import WaiversView from '../components/views/WaiversView'
+import TradesView from '../components/views/TradesView'
+import type { AcceptRead } from '../lib/behavior'
+import { applyLessons, ideaKey, learn, loadGrades, saveGrades, type GradeRecord, type Grades } from '../lib/grades'
+import { useSharedPrior } from '../lib/sharedGrades'
+import type { TradeIdea } from '../lib/trades'
+import { applyAdjustments, liveAdjustments, loadAdjustments, saveAdjustments, type Adjustment, type Adjustments } from '../lib/adjust'
+import { analyze, withWeights } from '../lib/analysis'
+import { buildHistory, buildModels } from '../lib/models'
+import { DEFAULT_POWER_WEIGHTS, type PowerWeights } from '../lib/power'
+import { purgeStaleCache } from '../lib/sleeper'
+import { writeStored } from '../lib/storage'
 import {
   DEFAULT_HORIZON_MODE,
   DEFAULT_PLAYOFF_WEIGHT,
@@ -33,19 +33,19 @@ import {
   type HorizonMode,
   type LoadOptions,
   type Provider,
-} from '../../lib/fantasy/useLeagueData'
-import { useRoute } from '../../lib/fantasy/useRoute'
-import { DEFAULT_MODEL, type ModelConfig } from '../../lib/fantasy/war'
-import { DEFAULT_THEME, themeById, type Scheme } from '../../lib/fantasy/themes'
-import UserMenu from '../../components/fantasy/UserMenu'
-import DisplayMenu, { type Density } from '../../components/fantasy/ThemePicker'
-import CommandPalette from '../../components/fantasy/CommandPalette'
-import { useTheme } from '../../lib/fantasy/useTheme'
-import { RevealHost } from '../../components/fantasy/PowerReveal'
-import { NavBanner } from '../../components/fantasy/RevealBanner'
-import { useReveal } from '../../components/fantasy/useReveal'
-import { useDeepLink } from '../../components/fantasy/useDeepLink'
-import DeepLinkNote from '../../components/fantasy/DeepLinkNote'
+} from '../lib/useLeagueData'
+import { useRoute } from '../lib/useRoute'
+import { DEFAULT_MODEL, type ModelConfig } from '../lib/war'
+import { DEFAULT_THEME, themeById, type Scheme } from '../lib/themes'
+import UserMenu from '../components/UserMenu'
+import DisplayMenu, { type Density } from '../components/ThemePicker'
+import CommandPalette from '../components/CommandPalette'
+import { useTheme } from '../lib/useTheme'
+import { RevealHost } from '../components/PowerReveal'
+import { NavBanner } from '../components/RevealBanner'
+import { useReveal } from '../components/useReveal'
+import { useDeepLink } from '../components/useDeepLink'
+import DeepLinkNote from '../components/DeepLinkNote'
 
 const PREFS_KEY = 'ff:prefs'
 
@@ -65,7 +65,7 @@ export type Prefs = {
   playoffWeight: number
   model: ModelConfig
   weights: PowerWeights
-  /** Colour theme id (lib/fantasy/themes.ts) and, for themes with both, light, dark or the system's. */
+  /** Colour theme id (lib/themes.ts) and, for themes with both, light, dark or the system's. */
   theme: string
   scheme: Scheme
   /** Compact (the default) or comfortable: type size and row height across the app. */

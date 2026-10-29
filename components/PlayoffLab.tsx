@@ -1,7 +1,7 @@
 // Pieces of the playoff simulator (views/PlayoffsView): the season played out as a story feed, a bracket and
 // final standings, and the small marks the race table uses.
 import React from 'react'
-import type { BracketGame, Story, Trace } from '../../lib/fantasy/playoffSim'
+import type { BracketGame, Story, Trace } from '../lib/playoffSim'
 import { useFantasy } from './FantasyContext'
 import TeamName from './TeamName'
 import { Avatar, cx, fmt } from './ui'

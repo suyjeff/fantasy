@@ -1,6 +1,6 @@
 import React from 'react'
-import { BASE_AVAILABILITY, type ContextNote, type PlayerContext } from '../../lib/fantasy/context'
-import type { PlayerMap } from '../../lib/fantasy/types'
+import { BASE_AVAILABILITY, type ContextNote, type PlayerContext } from '../lib/context'
+import type { PlayerMap } from '../lib/types'
 import { pct, type Reason } from './ui'
 
 const last = (name: string | undefined, id: string) => (name ? name.split(' ').slice(-1)[0] : id)

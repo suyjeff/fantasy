@@ -157,7 +157,7 @@ export type AcceptRead = {
   reasons: string[]
   /** The same reasons, each marked as helping (pos) or hurting (neg) the chance they say yes. */
   signals: { text: string; tone: 'pos' | 'neg' | 'neutral' }[]
-  /** The log-odds behind `index`, so your grades can move it (lib/fantasy/grades). */
+  /** The log-odds behind `index`, so your grades can move it (lib/grades). */
   logit: number
   /** Your own grade of this deal, once applied. */
   graded?: 'yes' | 'maybe' | 'no' | null

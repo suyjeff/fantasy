@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
-import type { Slate, SlateGame, SlateMatchup, SlatePlayer, SlateSide } from '../../lib/fantasy/slate'
-import { benchIds } from '../../lib/fantasy/roster'
+import type { Slate, SlateGame, SlateMatchup, SlatePlayer, SlateSide } from '../lib/slate'
+import { benchIds } from '../lib/roster'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'

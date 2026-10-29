@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import { THEMES, themeById, type Scheme } from '../../lib/fantasy/themes'
+import { THEMES, themeById, type Scheme } from '../lib/themes'
 import { useFantasy } from './FantasyContext'
 import { SECTIONS, sectionCode, type SectionKey } from './Shell'
 import { Swatch, type Density } from './ThemePicker'

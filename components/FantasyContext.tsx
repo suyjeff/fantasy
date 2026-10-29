@@ -1,19 +1,19 @@
 import { createContext, useCallback, useContext } from 'react'
-import type { Adjustment, Adjustments } from '../../lib/fantasy/adjust'
-import type { Analysis } from '../../lib/fantasy/analysis'
-import type { Models } from '../../lib/fantasy/models'
-import type { LeagueData } from '../../lib/fantasy/useLeagueData'
+import type { Adjustment, Adjustments } from '../lib/adjust'
+import type { Analysis } from '../lib/analysis'
+import type { Models } from '../lib/models'
+import type { LeagueData } from '../lib/useLeagueData'
 import type { SectionKey } from './Shell'
-import { acceptRead, type AcceptRead } from '../../lib/fantasy/behavior'
-import type { GradeRecord, Grades, Lessons } from '../../lib/fantasy/grades'
-import type { TradeIdea } from '../../lib/fantasy/trades'
+import { acceptRead, type AcceptRead } from '../lib/behavior'
+import type { GradeRecord, Grades, Lessons } from '../lib/grades'
+import type { TradeIdea } from '../lib/trades'
 
 /** What every view reads: the raw league, the core analysis, and the models built on it. */
 export type FantasyCtx = {
   data: LeagueData
   analysis: Analysis
   models: Models
-  /** Your nudges to player projections (see lib/fantasy/adjust). */
+  /** Your nudges to player projections (see lib/adjust). */
   adjust: { all: Adjustments; week: number | null; set: (id: string, a: Adjustment | null) => void }
   go: (section: SectionKey, sub?: string | null) => void
   /** Open a player's detail sheet. */
@@ -24,7 +24,7 @@ export type FantasyCtx = {
   openGame: (key: string) => void
   /** Open a fantasy matchup's sheet. */
   openMatchup: (week: number, a: number, b: number) => void
-  /** Your grades of suggested trades and what they teach the trade read (see lib/fantasy/grades). */
+  /** Your grades of suggested trades and what they teach the trade read (see lib/grades). */
   grades: {
     all: Grades
     lessons: Lessons

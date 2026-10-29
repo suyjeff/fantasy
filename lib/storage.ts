@@ -1,6 +1,6 @@
 // localStorage, kept inside its quota.
 //
-// A browser gives a site about five million characters of localStorage, and the API cache (lib/fantasy/sleeper) is
+// A browser gives a site about five million characters of localStorage, and the API cache (lib/sleeper) is
 // nearly all of what this page keeps: the player database alone is a million and a half, and every week of stats
 // half a million more. Unchecked, by week 7 the cache had filled the quota, and every later write failed without a
 // word: settings went unsaved and a reveal never stayed seen, so it opened again on every load. So the cache keeps to

@@ -1,6 +1,6 @@
 import React, { type CSSProperties } from 'react'
-import type { Analysis } from '../../lib/fantasy/analysis'
-import { countdown, dropsLabel, type Recap } from '../../lib/fantasy/recap'
+import type { Analysis } from '../lib/analysis'
+import { countdown, dropsLabel, type Recap } from '../lib/recap'
 import { cx } from './ui'
 import { useNow } from './useReveal'
 

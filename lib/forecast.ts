@@ -545,7 +545,7 @@ export const persistMean = (mean: (t: number, w: number) => number, teams: numbe
  * The weeks each playoff round is played over, from the league's settings: one week a round unless the league plays a
  * two-week final (round type 1) or two weeks every round (type 2); a two-week round is decided on the two weeks'
  * total. Weeks past `lastWeek` (the NFL's last) are dropped, so a round can come back empty. The one rule: the league
- * loader (lib/fantasy/useLeagueData fantasyPlayoffRounds) builds the rounds with it and the weeks from the rounds.
+ * loader (lib/useLeagueData fantasyPlayoffRounds) builds the rounds with it and the weeks from the rounds.
  */
 export const playoffRoundWeeks = (start: number, playoffTeams: number, roundType = 0, lastWeek = Infinity): number[][] => {
   const n = playoffTeams > 1 ? Math.ceil(Math.log2(playoffTeams)) : 0
@@ -907,7 +907,7 @@ export const weekStakes = (_input: ForecastInput, base: Forecast): Record<number
   return out
 }
 
-/** The two runs behind each of this week's games' stakes, for a caller that runs them itself (lib/fantasy/simRunner). */
+/** The two runs behind each of this week's games' stakes, for a caller that runs them itself (lib/simRunner). */
 export const stakesRuns = (base: Forecast) =>
   base.nextWeek.map((game) => {
     const k = lockKey(game)

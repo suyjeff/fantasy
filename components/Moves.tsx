@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
-import { findMoves, type Move, type MoveKind } from '../../lib/fantasy/moves'
+import { findMoves, type Move, type MoveKind } from '../lib/moves'
 import { useFantasy } from './FantasyContext'
-import { providerName } from '../../lib/fantasy/useLeagueData'
+import { providerName } from '../lib/useLeagueData'
 import { useNews } from './useNews'
 import { Badge, Empty, Panel, PlayerAvatar, ago, cx, fmt, fmtSigned, pct } from './ui'
 

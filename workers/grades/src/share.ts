@@ -277,7 +277,7 @@ export async function serve(req: Request, env: ShareEnv): Promise<Response> {
   const bot = BOTS.test(req.headers.get('user-agent') ?? '')
   if (!meta || typeof meta === 'string') {
     // A link that has lapsed still lands people in the app.
-    return bot ? text('Not found', 404) : redirect(`${SITE}/fantasy#power`)
+    return bot ? text('Not found', 404) : redirect(`${SITE}/#power`)
   }
   if (bot) return text(previewPage(meta, id, url.origin), 200, { 'cache-control': 'public, max-age=300', vary: 'User-Agent' })
   return redirect(appUrl(meta))

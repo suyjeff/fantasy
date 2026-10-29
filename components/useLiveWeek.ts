@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useRef } from 'react'
-import type { ScheduleGame } from '../../lib/fantasy/context'
-import { getLiveMatchups, getLiveSchedule, getWeekActuals, type WeekActuals } from '../../lib/fantasy/sleeper'
-import type { SleeperMatchup } from '../../lib/fantasy/types'
+import type { ScheduleGame } from '../lib/context'
+import { getLiveMatchups, getLiveSchedule, getWeekActuals, type WeekActuals } from '../lib/sleeper'
+import type { SleeperMatchup } from '../lib/types'
 
 // The page loads Sleeper's matchups and schedule once. While the week's games are on, this reads them again (with
 // the week's stats) on the live poll, so points and statuses move with the games and nothing settles on what was
@@ -22,7 +22,7 @@ export type LiveWeekArgs = {
   scoring: Record<string, number>
   /** Sleeper's league endpoints answer only for a Sleeper league; an ESPN league reads its schedule and stats alone. */
   sleeper: boolean
-  /** The week is over and its stats can be kept for a day (lib/fantasy/liveWeek weekSettled). */
+  /** The week is over and its stats can be kept for a day (lib/liveWeek weekSettled). */
   settled: boolean
 }
 

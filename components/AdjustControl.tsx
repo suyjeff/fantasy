@@ -1,5 +1,5 @@
 import React from 'react'
-import { appliesTo } from '../../lib/fantasy/adjust'
+import { appliesTo } from '../lib/adjust'
 import { useFantasy } from './FantasyContext'
 import { Segmented, cx, fmt, signedPct } from './ui'
 

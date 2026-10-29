@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { LeagueData } from '../../lib/fantasy/useLeagueData'
-import { appUrl, LEAGUE_ID } from '../../workers/grades/src/links'
+import type { LeagueData } from '../lib/useLeagueData'
+import { appUrl, LEAGUE_ID } from '../workers/grades/src/links'
 
 /**
  * A shared Power Rank link: `?league=<id>&season=<year>&reveal=<week>`. It is read once on arrival and kept in memory

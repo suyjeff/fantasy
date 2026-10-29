@@ -8,7 +8,7 @@
  */
 .ff {
   color-scheme: light;
-  /* Zinc, the default theme (lib/fantasy/themes.ts); a chosen theme overrides these inline. */
+  /* Zinc, the default theme (lib/themes.ts); a chosen theme overrides these inline. */
   --ff-bg: 246 246 247;
   --ff-panel: 255 255 255;
   --ff-raised: 250 250 250;
@@ -84,7 +84,7 @@ html:has(body .ff) body {
 
 /* The page only scrolls up and down. Anything wider than the screen (a strip, a table) scrolls inside its own
    ff-scroll-x box; nothing may widen or pan the page itself. iOS Safari lets the whole page rubber-band sideways when
-   any box pokes past the edge, so the lock is on html and body (the class is set by pages/fantasy), not left to main.
+   any box pokes past the edge, so the lock is on html and body (the class is set by pages/index.tsx), not left to main.
    html is the one that matters: a hidden/clip overflow there propagates to the viewport. body gets clip only (never
    hidden, which would make it a scroll container and break the sticky page headers). */
 html.ff-page {
@@ -1036,10 +1036,10 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 
 /* ---------- Power-rank reveal (weekly) ----------
- * The Tuesday reveal (components/fantasy/PowerReveal.tsx) and its banners (RevealBanner.tsx). The reveal is an
+ * The Tuesday reveal (components/PowerReveal.tsx) and its banners (RevealBanner.tsx). The reveal is an
  * event, so it is allowed more colour than the rest of the app: the theme's accent running into the crown's gold for the
  * banners' edge, and gold for the No. 1 crown. Gold is an RGB triplet like every token, set per mode here
- * for before a theme loads; a chosen theme sets its own (lib/fantasy/themes.ts). Every motion here is a transform, an
+ * for before a theme loads; a chosen theme sets its own (lib/themes.ts). Every motion here is a transform, an
  * opacity or a clip, and each one is switched off under reduced motion. */
 .ff {
   --ff-gold: 182 128 4;
@@ -1462,7 +1462,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
 }
 
-/* ---- Reveal acts (components/fantasy/RevealActs.tsx) ----
+/* ---- Reveal acts (components/RevealActs.tsx) ----
  * An act arrives with a short rise and leaves the same way, a little quicker, under the next one: opacity and
  * transform only, since these layers fill the stage and blurring them costs every frame on a weak phone. The
  * presenter's small block, swapped at each step of the ranking, can afford the blur that bridges the swap. */

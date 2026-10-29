@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import type { Analysis } from '../../../lib/fantasy/analysis'
-import type { LeagueData } from '../../../lib/fantasy/useLeagueData'
+import type { Analysis } from '../../lib/analysis'
+import type { LeagueData } from '../../lib/useLeagueData'
 import { ProjectionChart } from '../charts'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
@@ -8,7 +8,7 @@ import FreeAgentPick from '../FreeAgentPick'
 import ScoutReport, { scoutPlayers, useScout } from '../ScoutReport'
 import MovesPanel from '../Moves'
 import TeamName from '../TeamName'
-import type { TeamInfo } from '../../../lib/fantasy/analysis'
+import type { TeamInfo } from '../../lib/analysis'
 import {
   Avatar,
   Badge,

@@ -1,6 +1,6 @@
 import React from 'react'
-import { ELO, EFFICIENCY_PRIOR_GAMES, SIM } from '../../lib/fantasy/forecast'
-import { RESULTS_PRIOR_GAMES } from '../../lib/fantasy/power'
+import { ELO, EFFICIENCY_PRIOR_GAMES, SIM } from '../lib/forecast'
+import { RESULTS_PRIOR_GAMES } from '../lib/power'
 import { Disclosure } from './Disclosure'
 import { N } from './ui'
 

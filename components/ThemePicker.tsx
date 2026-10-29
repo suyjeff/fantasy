@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
-import { THEMES, themeById, type Scheme, type Theme } from '../../lib/fantasy/themes'
+import { THEMES, themeById, type Scheme, type Theme } from '../lib/themes'
 import { Segmented, cx } from './ui'
 
 export type Density = 'compact' | 'comfortable'

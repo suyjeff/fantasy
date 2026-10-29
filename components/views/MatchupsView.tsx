@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useFantasy } from '../FantasyContext'
-import { providerName } from '../../../lib/fantasy/useLeagueData'
+import { providerName } from '../../lib/useLeagueData'
 import { Disclosure } from '../Disclosure'
 import { Benches, LineupDuel, OddsBar, decidedBy, useMatchups, winText, type MatchupRead } from '../matchup'
 import TeamName from '../TeamName'

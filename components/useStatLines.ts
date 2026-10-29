@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { getWeekStatLines } from '../../lib/fantasy/sleeper'
-import type { WeekStats } from '../../lib/fantasy/types'
+import { getWeekStatLines } from '../lib/sleeper'
+import type { WeekStats } from '../lib/types'
 
 /** Sleeper's projected stat lines for each of `weeks`, loaded once per week and kept; null where a week failed. */
 export const useStatLines = (season: string, weeks: number[]) => {

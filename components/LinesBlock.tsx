@@ -1,5 +1,5 @@
 import React from 'react'
-import { PROP_LABEL } from '../../lib/fantasy/lines'
+import { PROP_LABEL } from '../lib/lines'
 import { useFantasy } from './FantasyContext'
 import { fmt, pct } from './ui'
 

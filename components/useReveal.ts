@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Analysis } from '../../lib/fantasy/analysis'
-import type { Models } from '../../lib/fantasy/models'
-import type { PowerWeights } from '../../lib/fantasy/power'
-import { buildRecap, dropsLabel, revealSeenKey, revealStale, revealState, weeksBefore, type Recap } from '../../lib/fantasy/recap'
-import type { SleeperMatchup } from '../../lib/fantasy/types'
-import type { LeagueData } from '../../lib/fantasy/useLeagueData'
+import type { Analysis } from '../lib/analysis'
+import type { Models } from '../lib/models'
+import type { PowerWeights } from '../lib/power'
+import { buildRecap, dropsLabel, revealSeenKey, revealStale, revealState, weeksBefore, type Recap } from '../lib/recap'
+import type { SleeperMatchup } from '../lib/types'
+import type { LeagueData } from '../lib/useLeagueData'
 import { revealOdds } from './revealOdds'
-import { writeStored } from '../../lib/fantasy/storage'
-import { playerValues, replacementLevels, rosterStrength, type ModelConfig } from '../../lib/fantasy/war'
+import { writeStored } from '../lib/storage'
+import { playerValues, replacementLevels, rosterStrength, type ModelConfig } from '../lib/war'
 
 /** What the reveal reads: the recap, and the weeks it was built from (the playoff odds rerun on them). */
 export type RevealSource = {
@@ -111,7 +111,7 @@ export const useNow = (ms = 30000, on = true) => {
 
 /**
  * The weekly reveal: which week it shows, which is on its way, and opening it. A week unlocks at 6:00 AM Eastern on
- * the Tuesday after its last game (lib/fantasy/recap revealGate), for everyone at once. From then it opens by itself
+ * the Tuesday after its last game (lib/recap revealGate), for everyone at once. From then it opens by itself
  * once per league per week, on the first load, whatever page is open, unless something else (onboarding, the tour) has
  * the screen or the next week has already kicked off. Before then nothing about that week is built: the banners only
  * say when it drops. `?reveal=1` in the address replays the latest unlocked week.

@@ -70,7 +70,7 @@ run the app with `NEXT_PUBLIC_FF_GRADES_URL=http://localhost:8787 npm run dev`.
 
 The app uploads a 1200x630 preview card and a few facts about a ranking, and gets back a short link,
 `https://<worker>/s/<id>`. Pasted into a message, the link unfurls to the card; opened by a person, it
-sends them to `https://sujeff.com/fantasy?league=<id>&season=<year>&reveal=<week>#power`, where the app asks for their
+sends them to `https://ff.sujeff.com/?league=<id>&season=<year>&reveal=<week>#power`, where the app asks for their
 fantasy name (as any visit does) and then opens that week.
 
 - `POST /share` with `multipart/form-data` (`meta` as JSON, `png` as the file) or JSON
@@ -91,7 +91,7 @@ These two GET routes are open to any site; everything else keeps the CORS rule b
 ranking costs two KV writes, so the free tier's 1,000 writes a day is roughly 500 shares (the app
 remembers the link it made for an unchanged ranking, so a repeat share costs nothing).
 
-CORS allows only https://sujeff.com and http://localhost (any port). The per-IP rate limit lives in
+CORS allows https://ff.sujeff.com, https://sujeff.com (until the old /fantasy page is gone) and http://localhost (any port). The per-IP rate limit lives in
 the isolate's memory, so it is a speed bump and not a hard cap. To get a hard cap, add a Cloudflare
 rate limiting rule on the worker's route in the dashboard.
 

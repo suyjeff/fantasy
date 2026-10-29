@@ -1,6 +1,6 @@
 import React, { Children, createContext, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { TrimmedPlayer } from '../../lib/fantasy/types'
-import { chance, share } from '../../lib/fantasy/format'
+import type { TrimmedPlayer } from '../lib/types'
+import { chance, share } from '../lib/format'
 import { ShowMore } from './views/ShowMore'
 
 // ---------- Formatting ----------
@@ -14,7 +14,7 @@ export const fmtSigned = (n: number | null | undefined, digits = 1) => {
   return `${n > 0 ? '+' : '−'}${Math.abs(n).toFixed(digits)}`
 }
 
-/** A share as a whole percent; only an exact 1 or 0 reads 100% or 0% (see lib/fantasy/format). */
+/** A share as a whole percent; only an exact 1 or 0 reads 100% or 0% (see lib/format). */
 export const pct = share
 
 /**
@@ -27,7 +27,7 @@ export const simOdds = (s: { playoffs: number; bye: number; final: number; title
 /** A read on a player as a signed percent: −25%, +10%. */
 export const signedPct = (p: number) => `${fmtSigned(p * 100, 0)}%`
 
-/** A simulated probability as a whole percent, 100% or 0% only when `settled` says it is decided (see lib/fantasy/format). */
+/** A simulated probability as a whole percent, 100% or 0% only when `settled` says it is decided (see lib/format). */
 export const odds = chance
 
 /** How long ago a timestamp (ms) was, compactly: "40m", "5h", "3d". */

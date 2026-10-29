@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { scoutTeam, type ScoutFact, type Scouting } from '../../lib/fantasy/scout'
+import { scoutTeam, type ScoutFact, type Scouting } from '../lib/scout'
 import { Callout } from './Callout'
 import { useFantasy } from './FantasyContext'
 import { InsightMark } from './InsightMark'

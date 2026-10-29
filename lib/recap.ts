@@ -442,7 +442,7 @@ const hasScores = (ms: SleeperMatchup[] | undefined) => !!ms && ms.some((m) => (
 /**
  * Whether every NFL game of a week is final (canceled games aside), strictly, since the reveal must never open with a
  * game unplayed: Sleeper calls it complete, or its status has sat at in-game a full day past the calendar's close
- * (lib/fantasy/gameTime: a stuck status, not a game). A game still 'pre_game' is never taken as played, whatever its
+ * (lib/gameTime: a stuck status, not a game). A game still 'pre_game' is never taken as played, whatever its
  * date: that is how a postponed game sits under its old one.
  */
 export const weekFinal = (games: ScheduleGame[] | undefined, week: number, now = Date.now()) => {

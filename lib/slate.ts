@@ -174,7 +174,7 @@ export const buildSlate = (input: SlateInput): Slate => {
   const games = input.games.filter((g) => g.week === input.week && g.status !== 'canceled')
   const gameOf: Record<string, ScheduleGame> = {}
   for (const g of games) gameOf[g.home] = gameOf[g.away] = g
-  // Final by ESPN's feed, then Sleeper's status, then the calendar in Eastern time (lib/fantasy/gameTime): never while
+  // Final by ESPN's feed, then Sleeper's status, then the calendar in Eastern time (lib/gameTime): never while
   // either feed says the game is on.
   const now = input.now ?? Date.now()
   // Points from whichever source was read last: the stats feed when it is newer than the matchups.
@@ -182,7 +182,7 @@ export const buildSlate = (input: SlateInput): Slate => {
   // A player the stats feed has a line for scores what it says, zero included; anyone else, what the matchup posted.
   const postedOf = (m: SleeperMatchup, id: string) => (actuals && id in actuals.pts ? actuals.pts[id] : m.players_points?.[id])
   // A game ESPN calls over is final, whenever its points were read: the live reader reads again until a copy newer
-  // than the end lands (lib/fantasy/liveWeek pendingSettle), so a finished game never reads as live.
+  // than the end lands (lib/liveWeek pendingSettle), so a finished game never reads as live.
   const feedOf = (g: ScheduleGame | undefined) => (g ? input.feed?.[`${g.away}@${g.home}`] : undefined)
   const isFinal = (g: ScheduleGame | undefined) => gameIsFinal(g, feedOf(g), now)
   // Under way: ESPN or Sleeper says so (points already on the board count too, below).

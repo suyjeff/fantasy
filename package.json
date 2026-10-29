@@ -1,0 +1,33 @@
+{
+  "name": "fantasy",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "test": "vitest run --passWithNoTests",
+    "test:accuracy": "vitest run --config vitest.accuracy.config.ts"
+  },
+  "dependencies": {
+    "@fontsource/chivo-mono": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@types/node": "^22.5.4",
+    "@types/react": "^18.3.5",
+    "next": "^16.1.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "typescript": "^5.5.4"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "autoprefixer": "^10.4.20",
+    "jsdom": "^27.0.1",
+    "postcss": "^8.4.45",
+    "tailwindcss": "^3.4.19",
+    "vitest": "^4.0.0"
+  },
+  "overrides": {
+    "picomatch@<2.3.2": "^2.3.2"
+  }
+}

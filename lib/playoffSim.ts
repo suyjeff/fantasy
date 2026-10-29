@@ -1,4 +1,4 @@
-// One season played out, game by game, for the playoff simulator: the same model as the odds (lib/fantasy/forecast's
+// One season played out, game by game, for the playoff simulator: the same model as the odds (lib/forecast's
 // simulateSeason), and literally one of its seasons: season k of a stream is played by the same code with the same
 // draws, kept whole so it can be shown as standings, a bracket and the stories in it.
 //
@@ -8,7 +8,7 @@
 import { isPlaceholderWeek, playOne, type Forecast, type ForecastInput, type SimInput } from './forecast'
 
 /**
- * The simulation's input for the simulator: the forecast's own (lib/fantasy/forecast Forecast.simInput: same model,
+ * The simulation's input for the simulator: the forecast's own (lib/forecast Forecast.simInput: same model,
  * seasons and draws), with locked results and a chaos factor on the noise. Untouched, it reproduces the forecast's
  * odds exactly.
  */

@@ -262,7 +262,7 @@ export const marketWeek = (input: { rows: LineRow[]; gameWeek: Record<string, nu
     // Nothing here the market priced (only team-level or unread props): not a market projection.
     if (!reads.length) continue
     const merged: StatLine = { ...base, ...stats }
-    // Sleeper's line in this league's scoring, derived to the league's keys as everywhere (lib/fantasy/scoring).
+    // Sleeper's line in this league's scoring, derived to the league's keys as everywhere (lib/scoring).
     const sleeper = scoreProjectionLine(base, scoring)
     // A kicking-points line counts 3 a field goal and 1 an extra point. League scoring may pay by distance,
     // so the line scales Sleeper's league-scored kicker projection rather than replacing it.

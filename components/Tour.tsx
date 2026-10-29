@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { sharingOn } from '../../lib/fantasy/sharedGrades'
+import { sharingOn } from '../lib/sharedGrades'
 import { MONKE } from './brand'
 import { DIAGRAMS, type DiagramKey } from './TourDiagrams'
 import { cx, shortcutLabel } from './ui'

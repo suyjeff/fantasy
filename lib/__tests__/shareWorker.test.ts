@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
-import { limited } from '../../../workers/grades/src/common'
-import worker from '../../../workers/grades/src/index'
-import { appUrl, checkPng, MAX_PNG, newId, parseMeta, TTL_SECONDS } from '../../../workers/grades/src/share'
+import { limited } from '../../workers/grades/src/common'
+import worker from '../../workers/grades/src/index'
+import { appUrl, checkPng, MAX_PNG, newId, parseMeta, TTL_SECONDS } from '../../workers/grades/src/share'
 
 // A fake of the one KV namespace, keeping what was put and how long it was told to live.
 const fakeKV = () => {
@@ -61,7 +61,7 @@ const post = (env: { GRADES: ReturnType<typeof fakeKV> }, body: unknown, init: {
     new Request('https://ff-grades.example.workers.dev/share', {
       method: 'POST',
       // A length is required up front, as the worker reads nothing without one.
-      headers: { 'content-type': 'application/json', 'content-length': String(new TextEncoder().encode(text).length), origin: init.origin === undefined ? 'https://sujeff.com' : (init.origin ?? ''), 'cf-connecting-ip': init.ip ?? `10.0.0.${++n}`, ...(init.headers ?? {}) },
+      headers: { 'content-type': 'application/json', 'content-length': String(new TextEncoder().encode(text).length), origin: init.origin === undefined ? 'https://ff.sujeff.com' : (init.origin ?? ''), 'cf-connecting-ip': init.ip ?? `10.0.0.${++n}`, ...(init.headers ?? {}) },
       body: text,
     }),
     env as never,
@@ -122,7 +122,7 @@ describe('POST /share', () => {
     const env = { GRADES: fakeKV() }
     const r = await post(env, { meta: meta(), png: b64(png()) })
     expect(r.status).toBe(200)
-    expect(r.headers.get('access-control-allow-origin')).toBe('https://sujeff.com')
+    expect(r.headers.get('access-control-allow-origin')).toBe('https://ff.sujeff.com')
     const { id, url } = (await r.json()) as { id: string; url: string }
     expect(id).toMatch(/^[A-Za-z0-9]{10,}$/)
     expect(url).toBe(`https://ff-grades.example.workers.dev/s/${id}`)
@@ -161,7 +161,7 @@ describe('POST /share', () => {
   it('wants a declared length within the cap, and holds to the cap if the length lied', async () => {
     const env = { GRADES: fakeKV() }
     const body = JSON.stringify({ meta: meta(), png: b64(png()) })
-    const bare = await worker.fetch(new Request('https://x.workers.dev/share', { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://sujeff.com', 'cf-connecting-ip': '8.8.1.1' }, body }), env as never)
+    const bare = await worker.fetch(new Request('https://x.workers.dev/share', { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://ff.sujeff.com', 'cf-connecting-ip': '8.8.1.1' }, body }), env as never)
     expect(bare.status).toBe(411)
     expect((await post(env, body, { headers: { 'content-length': '99999999' } })).status).toBe(413)
     // Says 100 bytes, sends a megabyte: the read stops at the cap and nothing is stored.
@@ -229,13 +229,13 @@ describe('GET /s/:id', () => {
     const r = await get(env, `/s/${id}`)
     expect(r.status).toBe(302)
     // The season rides along, so a past season's league can be found.
-    expect(r.headers.get('location')).toBe('https://sujeff.com/fantasy?league=1234567890&season=2026&reveal=5#power')
+    expect(r.headers.get('location')).toBe('https://ff.sujeff.com/?league=1234567890&season=2026&reveal=5#power')
     // What it says about itself: for this visitor, and kept by nobody.
     expect(r.headers.get('vary')).toBe('User-Agent')
     expect(r.headers.get('cache-control')).toBe('private, no-store')
     // Week 1 is written 01: a bare 1 already means "the latest week".
-    expect(appUrl({ leagueId: 'abc', week: 1 })).toBe('https://sujeff.com/fantasy?league=abc&reveal=01#power')
-    expect(appUrl({ leagueId: 'abc', week: 1, season: '2025' })).toBe('https://sujeff.com/fantasy?league=abc&season=2025&reveal=01#power')
+    expect(appUrl({ leagueId: 'abc', week: 1 })).toBe('https://ff.sujeff.com/?league=abc&reveal=01#power')
+    expect(appUrl({ leagueId: 'abc', week: 1, season: '2025' })).toBe('https://ff.sujeff.com/?league=abc&season=2025&reveal=01#power')
   })
   it('escapes everything it prints', async () => {
     const { env, id } = await stored({ league: '<script>alert(1)</script>', title: '"><img src=x onerror=alert(1)>', description: "a & b </script><script>x('1')", top: [{ rank: 1, name: '<b>x</b>', score: 1, move: 0 }] })
@@ -260,7 +260,7 @@ describe('GET /s/:id', () => {
     expect((await get(env, '/s/abcdefghij1234', 'Slackbot')).status).toBe(404)
     const r = await get(env, '/s/abcdefghij1234')
     expect(r.status).toBe(302)
-    expect(r.headers.get('location')).toBe('https://sujeff.com/fantasy#power')
+    expect(r.headers.get('location')).toBe('https://ff.sujeff.com/#power')
     expect((await get(env, '/s/abcdefghij1234.png')).status).toBe(404)
     expect((await get(env, '/s/short')).status).toBe(404)
   })
@@ -269,11 +269,11 @@ describe('GET /s/:id', () => {
 describe('the other endpoints', () => {
   it('keep their origin gate and answer an unknown path with 404', async () => {
     const env = { GRADES: fakeKV() }
-    const r = await worker.fetch(new Request('https://x.workers.dev/nope', { headers: { origin: 'https://sujeff.com' } }), env as never)
+    const r = await worker.fetch(new Request('https://x.workers.dev/nope', { headers: { origin: 'https://ff.sujeff.com' } }), env as never)
     expect(r.status).toBe(404)
     const bad = await worker.fetch(new Request('https://x.workers.dev/prior?league=a', { headers: { origin: 'https://evil.example' } }), env as never)
     expect(bad.status).toBe(403)
-    const pre = await worker.fetch(new Request('https://x.workers.dev/share', { method: 'OPTIONS', headers: { origin: 'https://sujeff.com' } }), env as never)
+    const pre = await worker.fetch(new Request('https://x.workers.dev/share', { method: 'OPTIONS', headers: { origin: 'https://ff.sujeff.com' } }), env as never)
     expect(pre.status).toBe(204)
   })
 })

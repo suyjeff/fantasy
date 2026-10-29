@@ -1,5 +1,5 @@
 import React from 'react'
-import type { TrimmedPlayer } from '../../lib/fantasy/types'
+import type { TrimmedPlayer } from '../lib/types'
 import { useFantasyMaybe } from './FantasyContext'
 import { PlayerAvatar, PosTag, cx, isOut, signedPct } from './ui'
 

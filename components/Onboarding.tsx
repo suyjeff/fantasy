@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { EspnError, ESPN_PRIVATE_HELP, espnTeamChoices, findEspnLeague, nflSeasons, type EspnLeague } from '../../lib/fantasy/espn'
-import { getUser, SleeperError } from '../../lib/fantasy/sleeper'
-import type { Provider } from '../../lib/fantasy/useLeagueData'
+import { EspnError, ESPN_PRIVATE_HELP, espnTeamChoices, findEspnLeague, nflSeasons, type EspnLeague } from '../lib/espn'
+import { getUser, SleeperError } from '../lib/sleeper'
+import type { Provider } from '../lib/useLeagueData'
 import { Brand, FantasyHead } from './Shell'
 import { DIAGRAMS } from './TourDiagrams'
-import { sharingOn } from '../../lib/fantasy/sharedGrades'
+import { sharingOn } from '../lib/sharedGrades'
 import { Avatar, Button, Segmented, cx } from './ui'
 
 export type OnboardResult = { provider: 'sleeper'; username: string } | { provider: 'espn'; leagueId: string; teamId: number }

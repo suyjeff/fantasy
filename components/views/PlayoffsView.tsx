@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { lockKey, winProb, type SimTeam } from '../../../lib/fantasy/forecast'
-import { runSim } from '../../../lib/fantasy/simRunner'
-import { seasonStories, simInputFor, simulateOnce, type Story, type Trace } from '../../../lib/fantasy/playoffSim'
+import { lockKey, winProb, type SimTeam } from '../../lib/forecast'
+import { runSim } from '../../lib/simRunner'
+import { seasonStories, simInputFor, simulateOnce, type Story, type Trace } from '../../lib/playoffSim'
 import { useFantasy } from '../FantasyContext'
 import { Bracket, CHAOS, Delta, Feed, Headline, Standings, setupKey, type Chaos } from '../PlayoffLab'
 import TeamName from '../TeamName'
@@ -33,7 +33,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
   const [locks, setLocks] = useState<Record<string, number>>({})
   const [chaos, setChaos] = useState<Chaos>('normal')
   // Picks land at once. The simulations behind them start once the taps pause (a quick run of taps is one rerun), run
-  // sliced on the shared queue (lib/fantasy/simRunner) so a tap never waits on them, and a newer pick cancels an older
+  // sliced on the shared queue (lib/simRunner) so a tap never waits on them, and a newer pick cancels an older
   // run. Until a run lands, the last result stays on screen.
   const setup = setupKey(locks, chaos)
   const [asked, setAsked] = useState<{ locks: Record<string, number>; chaos: Chaos; key: string }>({ locks, chaos, key: setup })

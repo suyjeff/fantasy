@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { PowerWeights } from '../../lib/fantasy/power'
-import { sortPasses, type Recap } from '../../lib/fantasy/recap'
+import type { PowerWeights } from '../lib/power'
+import { sortPasses, type Recap } from '../lib/recap'
 import { MONKE } from './brand'
 import { useFantasy } from './FantasyContext'
 import { Phrase, RowBody, TeamLabel } from './PowerRecap'

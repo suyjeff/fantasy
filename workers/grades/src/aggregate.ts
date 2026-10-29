@@ -52,7 +52,7 @@ export type Prior = {
   clients: number
 }
 
-// Same targets as the app (lib/fantasy/grades.ts): a grade is a point on the odds scale.
+// Same targets as the app (lib/grades.ts): a grade is a point on the odds scale.
 export const TARGET: Record<Grade, number> = { yes: 0.75, maybe: 0.4, no: 0.07 }
 const logit = (p: number) => Math.log(p / (1 - p))
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Recap } from '../../lib/fantasy/recap'
-import { sharedUrl } from '../../lib/fantasy/sharedGrades'
+import type { Recap } from '../lib/recap'
+import { sharedUrl } from '../lib/sharedGrades'
 import { useFantasy } from './FantasyContext'
 import { ogText, readPalette, renderOgCard, renderRankCard, toBlob, type CardInput, type OgInput } from './shareCards'
 import { deepLinkUrl } from './useDeepLink'

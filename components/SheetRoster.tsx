@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import { useFantasy } from './FantasyContext'
 import PlayerName from './PlayerName'
-import { blankEmpty, rosterRows, type RosterRow as Row } from '../../lib/fantasy/roster'
+import { blankEmpty, rosterRows, type RosterRow as Row } from '../lib/roster'
 import { InsightMark } from './InsightMark'
 import { Table, cx, fmt, pct, type Column } from './ui'
 

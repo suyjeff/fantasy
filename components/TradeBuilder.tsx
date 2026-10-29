@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { readDeal, rostersOf, tidyDeal, type Deal, type DealSide } from '../../lib/fantasy/deal'
-import type { TradeIdea } from '../../lib/fantasy/trades'
+import { readDeal, rostersOf, tidyDeal, type Deal, type DealSide } from '../lib/deal'
+import type { TradeIdea } from '../lib/trades'
 import { useFantasy, useTradeRead } from './FantasyContext'
 import { AddIcon, TradeIcon } from './icons'
 import { Callout } from './Callout'
