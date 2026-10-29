@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { AcceptRead } from '../lib/behavior'
-import { bestOf, slotLetter, staleMoves, verdictText, type CompareItem } from '../lib/compare'
-import { rostersOf, type Deal, type DealMove, type DealRead, type DealSide } from '../lib/deal'
+import { bestOf, slotLetter, staleFaab, staleMoves, verdictText, type CompareItem } from '../lib/compare'
+import { rostersOf, type Deal, type DealFaab, type DealMove, type DealRead, type DealSide } from '../lib/deal'
 import type { Leverage, TradeSides } from '../lib/forecast'
 import { isWaiverFill, makeLineupEval } from '../lib/trades'
 import { formText } from '../lib/momentum'
@@ -25,8 +25,12 @@ type Col = {
   letter: string
   /** The other teams in the deal. */
   partners: number[]
-  /** Moves it can no longer make: out of date. */
+  /** Moves it can no longer make. */
   stale: DealMove[]
+  /** FAAB payments it can no longer make (more than the payer has left). */
+  broke: DealFaab[]
+  /** Either of those: out of date, and left out of every figure. */
+  out: boolean
   read: DealRead | null
   mine: DealSide | null
   accept: Record<number, AcceptRead>
@@ -66,25 +70,30 @@ type StarterChange = {
   slot: string
   /** Leaves his slot to a waiver pickup. */ wire?: boolean
 }
+/**
+ * Kept against the points per week the lineups are set on, which are rebuilt with the rosters and slots behind them
+ * (new league data) but kept across power-weight changes (withWeights), which move no starter.
+ */
 const startersCache = new WeakMap<object, WeakMap<Deal, StarterChange[]>>()
 
 /** Which of your starters change, on the average week: who comes into the lineup and who leaves it. */
 const useStarterChanges = () => {
   const { data, analysis } = useFantasy()
+  const { slots, horizon, horizonReplacement, teamById } = analysis
   return useMemo(() => {
-    const ev = makeLineupEval(analysis.slots, data.players, analysis.horizon.perWeek, analysis.horizonReplacement)
-    let byDeal = startersCache.get(analysis)
-    if (!byDeal) startersCache.set(analysis, (byDeal = new WeakMap()))
+    const ev = makeLineupEval(slots, data.players, horizon.perWeek, horizonReplacement)
+    let byDeal = startersCache.get(horizon.perWeek)
+    if (!byDeal) startersCache.set(horizon.perWeek, (byDeal = new WeakMap()))
     const cache = byDeal
     return (deal: Deal, side: DealSide): StarterChange[] => {
       const hit = cache.get(deal)
       if (hit) return hit
-      const roster = analysis.teamById[side.rosterId]?.players ?? []
+      const roster = teamById[side.rosterId]?.players ?? []
       const after = roster.filter((id) => !side.sends.includes(id) && !side.cuts.includes(id)).concat(side.receives.filter((id) => !roster.includes(id)))
       const lineup = (ids: string[]) =>
         ev.assign(ids).assignments.map((p, i) => ({
           id: p?.id ?? null,
-          slot: slotName(analysis.slots[i]?.name ?? ''),
+          slot: slotName(slots[i]?.name ?? ''),
         }))
       const before = lineup(roster)
       const next = lineup(after)
@@ -108,7 +117,7 @@ const useStarterChanges = () => {
       cache.set(deal, out)
       return out
     }
-  }, [analysis, data.players])
+  }, [slots, horizon, horizonReplacement, teamById, data.players])
 }
 
 // ---- Small pieces ----
@@ -340,13 +349,16 @@ const LineupChart = ({ series, playoffWeeks }: { series: Series[]; playoffWeeks:
 // ---- The view ----
 
 const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
-  const { data, analysis } = useFantasy()
+  const { data, analysis, models } = useFantasy()
   const c = useCompare()
   const dock = useTradeDock()
   const phone = usePhone()
   const me = analysis.myRosterId ?? -1
   const items = c?.items ?? EMPTY
-  const rosters = useMemo(() => rostersOf(analysis), [analysis])
+  const teams = analysis.teams
+  const rosters = useMemo(() => rostersOf({ teams }), [teams])
+  // What each team has left to pay with, where trades carry FAAB.
+  const remaining = data.tradeFaab ? models.faab?.remaining : null
   const reader = useDealReader()
   const tradeRead = useTradeRead()
   const starters = useStarterChanges()
@@ -355,20 +367,22 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
     () =>
       items.map((item) => {
         const stale = staleMoves(item.deal, rosters)
+        const broke = staleFaab(item.deal, rosters, remaining)
+        const out = stale.length + broke.length > 0
         const partners = item.deal.teams.filter((t) => t !== me)
         const two = item.deal.teams.length === 2 && item.deal.teams.includes(me)
         const give = item.deal.moves.filter((m) => m.from === me).map((m) => m.player)
         const get = item.deal.moves.filter((m) => m.to === me).map((m) => m.player)
-        const sides: TradeSides | null = two && !stale.length ? sidesOf(partners[0], give, get) : null
-        return { item, stale, partners, two, sides }
+        const sides: TradeSides | null = two && !out ? sidesOf(partners[0], give, get) : null
+        return { item, stale, broke, out, partners, two, sides }
       }),
-    [items, rosters, me, sidesOf],
+    [items, rosters, remaining, me, sidesOf],
   )
   const levs = useLeverages(base.map((b) => b.sides))
   const cols: Col[] = useMemo(
     () =>
       base.map((b, i) => {
-        const priced = b.stale.length ? null : reader.read(b.item.deal)
+        const priced = b.out ? null : reader.read(b.item.deal)
         const mine = priced?.sides.find((s) => s.rosterId === me) ?? null
         const { accept, odds } = priced ? acceptOf(priced, me, tradeRead) : { accept: {}, odds: null }
         return {
@@ -376,6 +390,8 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
           letter: slotLetter(b.item.slot),
           partners: b.partners,
           stale: b.stale,
+          broke: b.broke,
+          out: b.out,
           read: priced,
           mine,
           accept,
@@ -388,7 +404,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
   )
 
   // Each row's figures, for the marks: a trade out of date (or not yet priced) takes no part.
-  const usable = (col: Col) => !col.stale.length && !!col.mine
+  const usable = (col: Col) => !col.out && !!col.mine
   const lineupOf = (col: Col) => (usable(col) ? headline(col.mine!) : null)
   const consensusOf = (col: Col) => {
     const xs = Object.values(col.accept).map((a) => a.perceivedAsk)
@@ -424,7 +440,9 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
       lineup: lineupOf(col),
       odds: usable(col) ? col.odds : null,
       playoffs: usable(col) && col.lev ? col.lev.me.playoffs : null,
-      out: !!col.stale.length,
+      out: col.out,
+      // Priced at once when it can be: a trade with no figure has none to come.
+      unpriced: col.out || col.mine ? undefined : !data.horizon.length ? 'season' : 'yours',
     })),
   )
   const anyMany = cols.some((col) => !col.two)
@@ -502,7 +520,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
     cell: (col: Col, i: number) => ReactNode
     best?: number[]
   }
-  const cellWait = (col: Col) => (col.stale.length ? <Dash sub="out of date" /> : !col.mine ? <Dash sub="not priced" /> : null)
+  const cellWait = (col: Col) => (col.out ? <Dash sub="out of date" /> : !col.mine ? <Dash sub="not priced" /> : null)
 
   const playerLine = (id: string, moved: boolean) => {
     const p = data.players[id]
@@ -540,16 +558,18 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
     if (!moves.length && !dollars) return <span className="text-[12px] text-ff-muted">Nothing</span>
     return (
       <ul className="min-w-0">
-        {moves.map((m) => playerLine(m.player, col.stale.includes(m)))}
+        {moves.map((m) => playerLine(m.player, col.stale.includes(m) && !(rosters[m.from] ?? []).includes(m.player)))}
         {faabLine(dollars, dir === 'send' ? 'out' : 'in')}
       </ul>
     )
   }
   const flags = (col: Col) => {
-    if (col.stale.length)
+    if (col.out)
       return (
         <p className="text-[12px] leading-snug text-ff-warn">
-          {col.stale.length === 1 ? `${data.players[col.stale[0].player]?.name ?? 'A player'} has moved` : `${col.stale.length} players have moved`} since you added it.
+          {!col.stale.length
+            ? 'It pays more FAAB than is left to pay with.'
+            : `${col.stale.length === 1 ? `${data.players[col.stale[0].player]?.name ?? 'A player'} has moved` : `${col.stale.length} players have moved`} since you added it.`}
         </p>
       )
     const mine = col.mine
@@ -643,7 +663,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
       hint: 'Change in your playoff odds: the same simulated seasons, before and after',
       best: best.playoffs,
       cell: (col, i) => {
-        if (col.stale.length) return <Dash sub="out of date" />
+        if (col.out) return <Dash sub="out of date" />
         if (!col.two) return <Dash sub="two-team trades only" />
         if (col.lev === undefined) return <Wait sub="simulating" />
         if (!col.lev) return <Dash sub="no projections" />
@@ -703,7 +723,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
       label: 'Your starters',
       hint: 'Who comes into and leaves your best lineup on an average week',
       cell: (col) => {
-        if (col.stale.length) return <span className="text-[12px] text-ff-muted">–</span>
+        if (col.out) return <span className="text-[12px] text-ff-muted">–</span>
         if (!col.mine) return <span className="text-[12px] text-ff-muted">–</span>
         const ch = starters(col.item.deal, col.mine)
         if (!ch.length) return <span className="text-[12px] text-ff-muted">No change</span>
@@ -760,7 +780,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-1.5 font-mono text-[10.5px] text-ff-muted">
           <span>{many ? `${col.item.deal.teams.length}-team · ${moves.length} players` : `${out}-for-${back}`}</span>
-          {col.stale.length > 0 && <span className="border border-ff-warn/40 bg-ff-warn/10 px-1 leading-[16px] text-ff-warn">out of date</span>}
+          {col.out && <span className="border border-ff-warn/40 bg-ff-warn/10 px-1 leading-[16px] text-ff-warn">out of date</span>}
           {best.lineup.includes(i) && best.odds.includes(i) && <span className="text-ff-pos">· top pick</span>}
         </div>
       </div>
@@ -770,13 +790,13 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
     <div className="flex flex-col gap-1.5">
       <Button
         size="sm"
-        variant={col.stale.length ? 'aqua' : 'outline'}
-        className={cx('w-full', col.stale.length > 0 && 'ff-aqua-soft')}
+        variant={col.out ? 'aqua' : 'outline'}
+        className={cx('w-full', col.out && 'ff-aqua-soft')}
         onClick={() => openIn(col.item.deal)}
-        title={col.stale.length ? 'Open it in the builder to take out who has moved' : 'Open this trade in the builder'}
+        title={col.out ? 'Open it in the builder to change what can no longer be done' : 'Open this trade in the builder'}
       >
         <BuildIcon size={12} />
-        {col.stale.length ? 'Open to fix' : 'Open in builder'}
+        {col.out ? 'Open to fix' : 'Open in builder'}
       </Button>
       <div className="flex gap-1">
         <IconBtn label={`Move trade ${col.letter} left`} onClick={() => c.move(col.item.id, -1)} disabled={i === 0}>
@@ -832,12 +852,21 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
       <ul className="mt-1.5 space-y-1 text-[12.5px] leading-snug text-ff-text">
         {col.stale.map((m) => {
           const owner = analysis.rosteredBy[m.player]
+          const who = data.players[m.player]?.name ?? 'A player'
+          // Still where he was: it is the team he was going to that has gone.
+          if ((rosters[m.from] ?? []).includes(m.player)) return <li key={m.player}>The team getting {who} is no longer in the league.</li>
           return (
             <li key={m.player}>
-              {data.players[m.player]?.name ?? 'A player'} is {owner == null ? 'no longer on a roster' : `now on ${owner === me ? 'your team' : nameOf(owner)}`}.
+              {who} is {owner == null ? 'no longer on a roster' : `now on ${owner === me ? 'your team' : nameOf(owner)}`}.
             </li>
           )
         })}
+        {col.broke.some((x) => !(x.from in rosters) || !(x.to in rosters)) && <li>A team in its FAAB payments is no longer in the league.</li>}
+        {[...new Set(col.broke.filter((x) => x.from in rosters && x.to in rosters).map((x) => x.from))].map((from) => (
+          <li key={`faab-${from}`}>
+            {`${from === me ? 'You have' : `${nameOf(from)} has`} $${remaining?.[from] ?? 0} of FAAB left, not the $${col.item.deal.faab.reduce((a, x) => a + (x.from === from ? x.dollars : 0), 0)} this pays.`}
+          </li>
+        ))}
       </ul>
       <p className="mt-2 text-[12px] leading-snug text-ff-muted">Its figures are left out until it is fixed: open it in the builder to change it, or remove it.</p>
     </div>
@@ -930,7 +959,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
                 {labelCell(r.key, r.label, r.hint)}
                 {cols.map((col, i) =>
                   // An out-of-date trade has no figures to show: one note in their place, down its column.
-                  col.stale.length > 0 && k >= figuresFrom ? (k === figuresFrom ? staleNote(col, i, k) : null) : cell(r.key, col, r.cell(col, i), r.best?.includes(i)),
+                  col.out && k >= figuresFrom ? (k === figuresFrom ? staleNote(col, i, k) : null) : cell(r.key, col, r.cell(col, i), r.best?.includes(i)),
                 )}
               </div>
             ))}
@@ -1017,7 +1046,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
       <Disclosure from="md" summary="How trades are compared" className="text-[11.5px] leading-relaxed text-ff-muted">
         Each trade is priced afresh from today&apos;s projections, as the builder prices it: your best lineup week by week before and after, value as managers price players, and how likely the other
         side is to say yes. Playoff odds come from the same simulated seasons before and after, for two-team trades. <span className="text-ff-pos">▲</span> marks the best in each row. A trade whose
-        players have since moved is out of date: open it to fix it.
+        players have since moved, or whose FAAB is more than is left to pay with, is out of date: open it to fix it.
         {/* What each row measures: the row names carry it as a tooltip too, which a finger or a keyboard never sees. */}
         <dl className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-[max-content_minmax(0,1fr)]">
           {rows

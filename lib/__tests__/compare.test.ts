@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   addCompare,
   bestOf,
-  dealKey,
   findDeal,
   MAX_COMPARE,
   moveCompare,
@@ -11,11 +10,12 @@ import {
   replaceCompare,
   serializeCompare,
   slotLetter,
+  staleFaab,
   staleMoves,
   verdictText,
   type CompareSet,
 } from '../compare'
-import { dealFromIdea, emptyDeal, type Deal } from '../deal'
+import { dealFromIdea, dealKey, emptyDeal, type Deal } from '../deal'
 
 const ME = 1
 const deal = (partner: number, give = 'a1', get = `p${partner}`): Deal => dealFromIdea(ME, partner, [give], [get])
@@ -83,6 +83,9 @@ describe('the comparison set', () => {
     s = replaceCompare(s, s[0].id, changed)
     expect(s[0].slot).toBe(0)
     expect(dealKey(s[0].deal)).toBe(dealKey(changed))
+    // The same deal again (in another order) changes nothing.
+    const reordered = { ...changed, teams: [...changed.teams].reverse(), moves: [...changed.moves].reverse() }
+    expect(replaceCompare(s, s[0].id, reordered)).toBe(s)
     s = replaceCompare(s, s[0].id, s[1].deal)
     expect(s).toHaveLength(1)
     expect(s[0].slot).toBe(1)
@@ -121,7 +124,27 @@ describe('the comparison set', () => {
     }
     expect(staleMoves(d, { [ME]: ['x'], 2: ['y'] })).toEqual([])
     expect(staleMoves(d, { [ME]: ['x'], 2: ['z'] }).map((m) => m.player)).toEqual(['y'])
-    expect(staleMoves(d, { [ME]: ['x'] }).map((m) => m.player)).toEqual(['y'])
+    // Team 2 has left the league: nothing comes from it, and nothing can go to it (though x has not moved).
+    expect(staleMoves(d, { [ME]: ['x'] }).map((m) => m.player)).toEqual(['x', 'y'])
+  })
+
+  it('finds FAAB that can no longer be paid: more than the payer has left, or a team gone', () => {
+    const rosters = { [ME]: ['x'], 2: ['y'], 3: [] }
+    const d: Deal = {
+      teams: [ME, 2, 3],
+      moves: [{ player: 'x', from: ME, to: 2 }],
+      faab: [
+        { from: ME, to: 2, dollars: 20 },
+        { from: ME, to: 3, dollars: 15 },
+        { from: 2, to: ME, dollars: 0 },
+      ],
+    }
+    // $35 in all from a team with $40 left: fine. With $30: both payments.
+    expect(staleFaab(d, rosters, { [ME]: 40, 2: 0 })).toEqual([])
+    expect(staleFaab(d, rosters, { [ME]: 30, 2: 0 }).map((x) => x.to)).toEqual([2, 3])
+    // Budgets unknown: only the teams are checked.
+    expect(staleFaab(d, rosters)).toEqual([])
+    expect(staleFaab(d, { [ME]: ['x'], 2: ['y'] }, null).map((x) => x.to)).toEqual([3])
   })
 })
 
@@ -165,6 +188,21 @@ describe('the verdict', () => {
   it('leaves out a trade that is out of date, and says what to do when they all are', () => {
     expect(verdictText([col('A', 9, 0.9, null, true), col('B', 1, 0.2), col('C', 2, 0.1)])).toBe('Trade C adds the most this season (+2.0/wk); Trade B is likeliest to be accepted (20%).')
     expect(verdictText([col('A', null, null, null, true)])).toMatch(/out of date/)
+  })
+
+  it('says "Pricing…" only while a figure is still to come', () => {
+    const wait = (label: string, unpriced?: 'season' | 'yours') => ({ ...col(label, null, null), unpriced })
+    expect(verdictText([wait('A'), wait('B', 'yours')])).toBe('Pricing…')
+    // No weeks left to project: it never will be priced.
+    expect(verdictText([wait('A', 'season'), wait('B', 'season')])).toMatch(/^There are no weeks left to project, so these trades cannot be priced/)
+    expect(verdictText([wait('A', 'season')])).toMatch(/so this trade cannot be priced/)
+    // Deals that leave your team out.
+    expect(verdictText([wait('A', 'yours')])).toBe('Trade A leaves your team out, so there is no lineup of yours to price it on.')
+    expect(verdictText([wait('A', 'yours'), wait('B', 'yours')])).toMatch(/^None of these trades includes your team/)
+    // One that cannot be priced takes no part beside those that can.
+    expect(verdictText([col('A', 1, 0.2), { ...col('B', null, 0.9), unpriced: 'yours' as const }, col('C', 2, 0.1)])).toBe(
+      'Trade C adds the most this season (+2.0/wk); Trade A is likeliest to be accepted (20%).',
+    )
   })
 
   it('reads one trade on its own, and asks for another', () => {

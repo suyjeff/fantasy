@@ -16,7 +16,7 @@
 
 import type { PlayerContext, Usage } from './context'
 import { ROLE_SWING } from './context'
-import type { TeamSeason } from './power'
+import { streakOf, type TeamSeason } from './power'
 import type { PlayerMap } from './types'
 import type { WeekPoints } from './war'
 
@@ -246,16 +246,6 @@ export const playerForms = (input: {
 }
 
 // ---------- Team urgency ----------
-
-/** The current run of results: +3 for three straight wins, −2 for two straight losses, 0 after a tie or none. */
-export const streakOf = (results: (string | null | undefined)[]): number => {
-  const played = results.filter((r): r is string => r === 'W' || r === 'L' || r === 'T')
-  const last = played[played.length - 1]
-  if (!last || last === 'T') return 0
-  let n = 0
-  for (let i = played.length - 1; i >= 0 && played[i] === last; i--) n++
-  return last === 'W' ? n : -n
-}
 
 export type TeamMood = {
   rosterId: number

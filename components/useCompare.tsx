@@ -45,52 +45,74 @@ export const CompareProvider = ({ children }: { children: ReactNode }) => {
   const key = cmp.compareKey(data.league.league_id)
   // Read after mounting (the page is prerendered without storage), then kept in step with it.
   const [state, setState] = useState<{ key: string; items: CompareSet } | null>(null)
-  useEffect(() => setState({ key, items: read(key) }), [key])
+  // The latest set, ahead of the render that shows it: a change builds on the one before it in the same tick (or on
+  // another tab's, not yet rendered), and says what it did rather than what the last render expected.
+  const latest = useRef(state)
+  const commit = useCallback((next: { key: string; items: CompareSet }) => {
+    latest.current = next
+    setState(next)
+  }, [])
+  const links = useRef(new Map<string, string>())
+  useEffect(() => {
+    // The dock's trade ids start again in another league; its links mean nothing there.
+    links.current.clear()
+    commit({ key, items: read(key) })
+  }, [key, commit])
   // Another tab changed it: take its version.
   useEffect(() => {
-    const on = (e: StorageEvent) => e.key === key && setState({ key, items: cmp.parseCompare(e.newValue) })
+    const on = (e: StorageEvent) => e.key === key && commit({ key, items: cmp.parseCompare(e.newValue) })
     window.addEventListener('storage', on)
     return () => window.removeEventListener('storage', on)
-  }, [key])
+  }, [key, commit])
   const items = state && state.key === key ? state.items : NONE
   const [said, setSaid] = useState('')
-  const links = useRef(new Map<string, string>())
 
-  const set = useCallback(
-    (fn: (s: CompareSet) => CompareSet) =>
-      setState((cur) => {
-        const base = cur && cur.key === key ? cur.items : read(key)
-        const next = fn(base)
-        if (next === base) return cur
-        writeStored(key, cmp.serializeCompare(next))
-        return { key, items: next }
-      }),
-    [key],
+  /**
+   * Change this league's set, and say what it was before and after. Never from the empty stand-in shown before this
+   * league's set is read (on mounting, or just after a league switch), which would overwrite the one saved: it is read
+   * first.
+   */
+  const change = useCallback(
+    (fn: (s: CompareSet) => CompareSet) => {
+      const cur = latest.current
+      const before = cur && cur.key === key ? cur.items : read(key)
+      const after = fn(before)
+      if (after !== before) {
+        writeStored(key, cmp.serializeCompare(after))
+        commit({ key, items: after })
+      } else if (cur?.key !== key) commit({ key, items: before })
+      return { before, after }
+    },
+    [key, commit],
   )
 
   const api = useMemo<CompareApi>(() => {
     const find = (deal: Deal) => cmp.findDeal(items, deal)
+    const letter = (it: CompareItem) => cmp.slotLetter(it.slot)
     return {
       items,
       full: items.length >= MAX_COMPARE,
       find,
       add: (deal) => {
-        const r = cmp.addCompare(items, deal)
-        if (r.status === 'added') {
-          set(() => r.set)
-          setSaid(`Added to compare as trade ${cmp.slotLetter(r.item!.slot)}.`)
-        } else if (r.status === 'full') setSaid(`Compare holds ${MAX_COMPARE} trades at most. Remove one to add this.`)
-        return r.item
+        const { before, after } = change((s) => cmp.addCompare(s, deal).set)
+        const item = cmp.findDeal(after, deal)
+        if (item && after !== before) setSaid(`Added to compare as trade ${letter(item)}.`)
+        else if (!item && dealActive(deal) && before.length >= MAX_COMPARE) setSaid(`Compare holds ${MAX_COMPARE} trades at most. Remove one to add this.`)
+        return item
       },
       remove: (id) => {
-        const it = items.find((i) => i.id === id)
-        set((s) => cmp.removeCompare(s, id))
-        if (it) setSaid(`Trade ${cmp.slotLetter(it.slot)} removed from compare.`)
+        const { before, after } = change((s) => cmp.removeCompare(s, id))
+        const it = before.find((i) => i.id === id)
+        if (it && after !== before) setSaid(`Trade ${letter(it)} removed from compare.`)
       },
-      move: (id, by) => set((s) => cmp.moveCompare(s, id, by)),
+      move: (id, by) => void change((s) => cmp.moveCompare(s, id, by)),
       replace: (id, deal) => {
-        set((s) => cmp.replaceCompare(s, id, deal))
-        setSaid('Compare updated.')
+        const { before, after } = change((s) => cmp.replaceCompare(s, id, deal))
+        const was = before.find((i) => i.id === id)
+        if (!was || after === before) return
+        const now = after.find((i) => i.id === id)
+        const same = now ? null : cmp.findDeal(after, deal)
+        setSaid(now ? `Trade ${letter(now)} updated in compare.` : same ? `Trade ${letter(was)} is now the same as trade ${letter(same)}, so it was taken out of compare.` : '')
       },
       link: (tradeId, itemId) => void links.current.set(tradeId, itemId),
       linkOf: (tradeId) => {
@@ -98,7 +120,7 @@ export const CompareProvider = ({ children }: { children: ReactNode }) => {
         return (id && items.find((i) => i.id === id)) || null
       },
     }
-  }, [items, set])
+  }, [items, change])
 
   return (
     <Ctx.Provider value={api}>
@@ -137,8 +159,9 @@ export const CompareToggle = ({ deal, tradeId, size = 'md', className }: { deal:
     if (c && item && tradeId) c.link(tradeId, item.id)
   }, [c, item, tradeId])
   if (!c) return null
-  const linked = !item && tradeId ? c.linkOf(tradeId) : null
   const ready = dealActive(deal) && deal.teams.length > 1
+  // An empty trade has nothing to put in a column's place.
+  const linked = !item && tradeId && ready ? c.linkOf(tradeId) : null
   const h = size === 'sm' ? 'h-7 px-2 text-[11.5px] max-md:h-10 max-[359px]:min-w-10' : 'h-10 px-3 text-[12.5px] md:h-8'
   const base = cx('ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border', h, className)
   if (item)

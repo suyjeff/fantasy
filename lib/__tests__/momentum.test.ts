@@ -3,7 +3,8 @@ import { acceptRead } from '../behavior'
 import { starValue } from '../currency'
 import type { Usage } from '../context'
 import { startingSlots } from '../lineup'
-import { classifyForm, DEFAULT_RESIDUAL_SD, FORM, lastName, playerForms, residualSd, streakOf, teamMood, teamMoods, type FormInput, type Momentum, type PlayerForm } from '../momentum'
+import { classifyForm, DEFAULT_RESIDUAL_SD, FORM, lastName, playerForms, residualSd, teamMood, teamMoods, type FormInput, type Momentum, type PlayerForm } from '../momentum'
+import { streakOf, streakText } from '../power'
 import type { TeamSeason } from '../power'
 import { findTrades, type Horizon, type TradeIdea } from '../trades'
 import type { PlayerMap } from '../types'
@@ -18,6 +19,18 @@ describe('streaks', () => {
     expect(streakOf([])).toBe(0)
     // Weeks without a result (not yet played) do not break a run.
     expect(streakOf(['L', 'L', null, undefined])).toBe(-2)
+  })
+
+  it('reads ties the same way the standings do: a tie ends a run and starts none', () => {
+    expect(streakOf(['W', 'W', 'T'])).toBe(0)
+    expect(streakOf(['T', 'T'])).toBe(0)
+    expect(streakOf(['W', 'T', 'L', 'L'])).toBe(-2)
+    expect(streakText(streakOf(['L', 'W', 'W', 'W']))).toBe('W3')
+    expect(streakText(streakOf(['W', 'L']))).toBe('L1')
+    expect(streakText(streakOf(['W', 'T']))).toBe('')
+    // The standings' streak and the mood's run come from the same results the same way.
+    const season = { rosterId: 1, streak: 'W2', weeks: ['L', 'W', 'W'].map((result, i) => ({ week: i + 1, result })) } as unknown as TeamSeason
+    expect(teamMoods([season], null, 4)[1].streak).toBe(2)
   })
 
   it('makes a losing team hungrier, most of all on the bubble, and a winning one complacent', () => {

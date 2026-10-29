@@ -5,14 +5,17 @@
 // Throwaway actions act at once and offer the way back, rather than asking first: discarding a trade, clearing its
 // players, or starting a fourth trade, which replaces the one least recently touched.
 
-import { dealActive, emptyDeal, type Deal } from './deal'
+import { dealActive, dealKey, emptyDeal, type Deal } from './deal'
 
 export const MAX_TRADES = 3
 
 export type DockStep = 'pick' | 'review'
 
 export type DockTrade = {
-  /** Stable for the trade's life: keys, focus and undo find it by this. */
+  /**
+   * Stable for the trade's life: keys, focus and undo find it by this. A trade given a new deal in place (an empty one
+   * filled, one replaced at the limit) takes a new id: it is another trade.
+   */
   id: string
   deal: Deal
   step: DockStep
@@ -59,8 +62,6 @@ export const openTrade = (s: DockState): DockTrade | null => s.trades.find((t) =
 /** The roster tab to start on: the first other team, or yours. */
 const firstView = (deal: Deal, me: number) => deal.teams.find((t) => t !== me) ?? me
 
-const sameDeal = (a: Deal, b: Deal) => JSON.stringify(a) === JSON.stringify(b)
-
 /** The lowest trade number no open trade has (`except` freed first: the trade being replaced). */
 export const freeLabel = (trades: DockTrade[], except?: string) => {
   const used = new Set(trades.filter((t) => t.id !== except).map((t) => t.label))
@@ -82,7 +83,8 @@ export const startTrade = (s: DockState, me: number, deal?: Deal, step?: DockSte
   const d = deal ?? emptyDeal([me])
   const st: DockStep = step ?? (dealActive(d) ? 'review' : 'pick')
   if (deal) {
-    const same = s.trades.find((t) => sameDeal(t.deal, deal))
+    const k = dealKey(deal)
+    const same = s.trades.find((t) => dealKey(t.deal) === k)
     if (same) return expand({ ...s, trades: s.trades.map((t) => (t.id === same.id ? { ...t, step: st } : t)) }, same.id)
   }
   const seq = s.seq + 1
@@ -90,9 +92,14 @@ export const startTrade = (s: DockState, me: number, deal?: Deal, step?: DockSte
   // A spent replace or clear goes with the next start; a discarded trade stays restorable.
   const undo = s.undo?.kind === 'discarded' ? s.undo : null
   const base = { ...s, seq, focus: null, toast: 0, undo }
-  // A blank start brings up an empty trade as it stands (its partner kept); a deal fills it.
+  // A blank start brings up an empty trade as it stands (its partner kept). A deal fills it as a new trade, under a
+  // new id in the same place and number: whatever was tied to the old one (the comparison's link) is not carried
+  // over to an unrelated deal.
   const idle = s.trades.find((t) => !dealActive(t.deal))
-  if (idle) return { ...base, open: idle.id, trades: s.trades.map((t) => (t.id === idle.id ? (deal ? fresh(t.id, t.label) : { ...t, touched: seq }) : t)) }
+  if (idle) {
+    const t = deal ? fresh(`t${seq}`, idle.label) : { ...idle, touched: seq }
+    return { ...base, open: t.id, trades: s.trades.map((x) => (x.id === idle.id ? t : x)) }
+  }
   if (s.trades.length < MAX_TRADES) {
     const t = fresh(`t${seq}`, freeLabel(s.trades))
     return { ...base, open: t.id, trades: [...s.trades, t] }

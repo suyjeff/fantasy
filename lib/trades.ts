@@ -882,9 +882,12 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   }
   // Variety: no more than a handful per partner, and no near-copies — a deal
   // sharing most of its players with one already chosen has to be clearly better.
+  // Each idea's rank worked out once, not on every comparison.
   const ranked = ideas
     .filter((i) => !padded(i))
-    .sort((a, b) => b.myGain + 0.25 * edgeOf(b.give, b.get) - (a.myGain + 0.25 * edgeOf(a.give, a.get)) || b.mutual - a.mutual)
+    .map((idea) => ({ idea, rank: idea.myGain + 0.25 * edgeOf(idea.give, idea.get) }))
+    .sort((a, b) => b.rank - a.rank || b.idea.mutual - a.idea.mutual)
+    .map((x) => x.idea)
   const chosen: TradeIdea[] = []
   const perPartner = new Map<number, number>()
   const overlap = (a: TradeIdea, b: TradeIdea) => {

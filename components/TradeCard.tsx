@@ -13,6 +13,7 @@ import { InsightMark } from './InsightMark'
 import { useFantasy, useTradeRead } from './FantasyContext'
 import { PRICING_VERSION } from '../lib/currency'
 import { formText } from '../lib/momentum'
+import { streakText } from '../lib/power'
 import { GRADE_LABEL, WHY_LABEL, ideaKey, type Grade, type GradeWhy } from '../lib/grades'
 import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, Segmented, WeekBars, cx, fmtSigned, isOut, pct, simOdds } from './ui'
 
@@ -153,7 +154,7 @@ export const useLeverages = (trades: (TradeSides | null)[]): (Leverage | null | 
   const keys = trades.map((t) => (t ? leverageKey(t) : null))
   const sig = keys.join('~')
   // Bumped as runs land, to show them; what to show is read from the cache, never held in state that could lag it.
-  const [, setTick] = useState(0)
+  const [tick, setTick] = useState(0)
   useEffect(() => {
     if (!f) return
     let live = true
@@ -167,7 +168,8 @@ export const useLeverages = (trades: (TradeSides | null)[]): (Leverage | null | 
       live = false
     }
   }, [sig, f, models.forecastInput]) // eslint-disable-line react-hooks/exhaustive-deps
-  return keys.map((k) => (!f || !k ? null : cacheOf(f).done.get(k)))
+  // One array for as long as nothing in it changes, so a memo that takes it holds.
+  return useMemo(() => keys.map((k) => (!f || !k ? null : cacheOf(f).done.get(k))), [sig, f, tick]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /** One suggested trade's leverage (see useLeverages). */
@@ -320,7 +322,7 @@ const TradeCard = ({
               )}
               {mood && mood.urgency !== 0 && (
                 <span className={mood.streak > 0 ? 'text-ff-pos' : 'text-ff-neg'} title={mood.text ?? undefined}>
-                  · {mood.streak > 0 ? `W${mood.streak}` : `L${-mood.streak}`}
+                  · {streakText(mood.streak)}
                 </span>
               )}
               {odds && <span>· PO {simOdds(odds, 'playoffs')}</span>}

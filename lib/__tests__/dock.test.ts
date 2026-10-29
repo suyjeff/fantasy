@@ -48,8 +48,29 @@ describe('the trade dock', () => {
     expect(openTrade(blank)?.deal.teams).toEqual([ME, 5])
     const filled = startTrade(s, ME, deal(2))
     expect(filled.trades).toHaveLength(1)
-    expect(filled.open).toBe(id)
     expect(openTrade(filled)?.deal).toEqual(deal(2))
+    // Filled with a deal, it is another trade: same place and number, a new id (so nothing tied to the empty one,
+    // such as a link to a compare column, follows it to an unrelated deal).
+    expect(filled.open).not.toBe(id)
+    expect(openTrade(filled)?.label).toBe(s.trades[0].label)
+  })
+
+  it('knows the same deal however it was put together', () => {
+    const a: Deal = {
+      teams: [ME, 2],
+      moves: [
+        { player: 'x', from: ME, to: 2 },
+        { player: 'y', from: 2, to: ME },
+      ],
+      faab: [],
+    }
+    const b: Deal = { teams: [2, ME], moves: [...a.moves].reverse(), faab: [{ from: ME, to: 2, dollars: 0 }] }
+    const s = minimize(startTrade(emptyDock(), ME, a))
+    const again = startTrade(s, ME, b)
+    expect(again.trades).toHaveLength(1)
+    expect(again.open).toBe(s.trades[0].id)
+    // Money that moves makes it another deal.
+    expect(startTrade(s, ME, { ...b, faab: [{ from: ME, to: 2, dollars: 5 }] }).trades).toHaveLength(2)
   })
 
   it('past the limit, replaces the trade least recently touched, and undo puts it back', () => {

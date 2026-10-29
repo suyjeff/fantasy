@@ -44,7 +44,7 @@ export type DealPricing = {
 
 /** Prices already worked out, per deal, for the league data they were priced on: reopening a trade, or a minimized
  * one showing its figure, never prices the same deal twice. */
-const priced = new WeakMap<Deal, { on: object; read: DealRead | null }>()
+const priced = new WeakMap<Deal, { on: object; faab: object | null; read: DealRead | null }>()
 
 /** Your side's figure, read first everywhere: lineup plus FAAB when FAAB moves, else the lineup alone. */
 export const headline = (side: DealSide | undefined) => (side ? (side.faab ? side.net.mid : side.lineup) : null)
@@ -55,32 +55,24 @@ export const headline = (side: DealSide | undefined) => (side ? (side.faab ? sid
  */
 export const useDealReader = () => {
   const { data, analysis, models } = useFantasy()
-  const rosters = useMemo(() => rostersOf(analysis), [analysis])
+  const { slots, horizonReplacement: floor, capacity, horizon, tradeMarket, currency, teams } = analysis
+  const rosters = useMemo(() => rostersOf({ teams }), [teams])
   // Only where trades can carry FAAB (not ESPN): otherwise the money is never priced.
   const faab = data.tradeFaab ? models.faab : null
   return useMemo(() => {
     const read = (deal: Deal): DealRead | null => {
       if (!data.horizon.length || !dealActive(deal)) return null
+      // Kept against the trade-value table, as the trade search is (lib/search): built with everything a deal is
+      // priced on, so new with new league data, but kept across power-weight changes (withWeights), which move no
+      // price. The FAAB read is its own model.
       const hit = priced.get(deal)
-      if (hit && hit.on === analysis) return hit.read
-      const out = readDeal(deal, {
-        slots: analysis.slots,
-        players: data.players,
-        horizon: data.horizon,
-        floor: analysis.horizonReplacement,
-        capacity: analysis.capacity,
-        pts: analysis.horizon.perWeek,
-        tradeMarket: analysis.tradeMarket,
-        rosters,
-        currency: analysis.currency,
-        faab,
-      })
-      // Kept against the analysis (shared by every caller, and new with new league data, which prices afresh).
-      priced.set(deal, { on: analysis, read: out })
+      if (hit && hit.on === tradeMarket && hit.faab === faab) return hit.read
+      const out = readDeal(deal, { slots, players: data.players, horizon: data.horizon, floor, capacity, pts: horizon.perWeek, tradeMarket, rosters, currency, faab })
+      priced.set(deal, { on: tradeMarket, faab, read: out })
       return out
     }
     return { read }
-  }, [data.horizon, data.players, analysis, rosters, faab])
+  }, [data.horizon, data.players, slots, floor, capacity, horizon, tradeMarket, rosters, currency, faab])
 }
 
 /** A deal priced for every side, or null when there is nothing to price (no weeks left, nothing moving). */

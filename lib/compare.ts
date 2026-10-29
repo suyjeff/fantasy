@@ -5,7 +5,7 @@
 // deal whose players have since moved (a trade, a cut) is out of date, and says so, rather than being priced as if
 // they had not.
 
-import { dealActive, type Deal, type DealMove } from './deal'
+import { dealActive, dealKey, type Deal, type DealFaab, type DealMove } from './deal'
 
 export const MAX_COMPARE = 4
 
@@ -29,20 +29,6 @@ export const slotLetter = (slot: number) => SLOT_LETTERS[slot] ?? '?'
 
 /** The storage key, per league: another league's comparison means nothing here. */
 export const compareKey = (league: string) => `ff:compare:${league}`
-
-/**
- * One spelling per deal, whatever order its teams, players and payments went in, so the same trade built twice is
- * recognised as the same. A $0 payment (a destination picked before the amount) moves nothing and is left out.
- */
-export const dealKey = (d: Deal): string => {
-  const teams = [...d.teams].sort((a, b) => a - b)
-  const moves = d.moves.map((m) => `${m.player}:${m.from}>${m.to}`).sort()
-  const faab = d.faab
-    .filter((x) => x.dollars > 0)
-    .map((x) => `${x.from}>${x.to}:${x.dollars}`)
-    .sort()
-  return `${teams.join(',')}|${moves.join(',')}|${faab.join(',')}`
-}
 
 export const findDeal = (set: CompareSet, deal: Deal): CompareItem | null => {
   const k = dealKey(deal)
@@ -93,17 +79,33 @@ export const moveCompare = (set: CompareSet, id: string, by: -1 | 1): CompareSet
  * a deal another item already holds, the two are one: this item goes, the other stays.
  */
 export const replaceCompare = (set: CompareSet, id: string, deal: Deal): CompareSet => {
-  if (!set.some((i) => i.id === id) || !dealActive(deal)) return set
+  const it = set.find((i) => i.id === id)
+  if (!it || !dealActive(deal)) return set
   const k = dealKey(deal)
+  if (dealKey(it.deal) === k) return set
   if (set.some((i) => i.id !== id && dealKey(i.deal) === k)) return removeCompare(set, id)
   return set.map((i) => (i.id === id ? { ...i, deal } : i))
 }
 
 /**
- * The moves a deal can no longer make: a player who is not on the team sending him any more (traded, cut), or a team
- * that has left the league. Empty for a deal that still stands.
+ * The moves a deal can no longer make: a player who is not on the team sending him any more (traded, cut), or a move
+ * to or from a team that has left the league. Empty for a deal that still stands.
  */
-export const staleMoves = (deal: Deal, rosters: Record<number, string[]>): DealMove[] => deal.moves.filter((m) => !(rosters[m.from] ?? []).includes(m.player))
+export const staleMoves = (deal: Deal, rosters: Record<number, string[]>): DealMove[] =>
+  deal.moves.filter((m) => !(m.to in rosters) || !(rosters[m.from] ?? []).includes(m.player))
+
+/**
+ * The payments a deal can no longer make: every one from a team now paying more in all than it has left (its budget
+ * spent on waivers since), or to or from a team that has left the league. Budgets unknown (no FAAB in this league, or
+ * not read): only the teams are checked.
+ */
+export const staleFaab = (deal: Deal, rosters: Record<number, string[]>, remaining?: Record<number, number> | null): DealFaab[] => {
+  const pays = deal.faab.filter((x) => x.dollars > 0)
+  const owed = new Map<number, number>()
+  for (const x of pays) owed.set(x.from, (owed.get(x.from) ?? 0) + x.dollars)
+  const short = (team: number) => remaining?.[team] != null && owed.get(team)! > remaining[team]
+  return pays.filter((x) => !(x.from in rosters) || !(x.to in rosters) || short(x.from))
+}
 
 // ---- Storage ----
 
@@ -170,6 +172,11 @@ export type VerdictCol = {
   playoffs?: number | null
   /** Out of date or otherwise not a trade that can be made: left out of the verdict. */
   out?: boolean
+  /**
+   * Why `lineup` will never come, where it will not (rather than not yet): 'season', no weeks left to project;
+   * 'yours', the deal leaves your team out. Left out of the verdict's comparisons.
+   */
+  unpriced?: 'season' | 'yours'
 }
 
 const names = (cols: VerdictCol[], idx: number[]) => {
@@ -193,7 +200,13 @@ export const verdictText = (cols: VerdictCol[]): string => {
   if (!cols.length) return ''
   if (!live.length) return cols.length === 1 ? `${cols[0].label} is out of date: open it to fix it, or remove it.` : 'Every trade here is out of date: open one to fix it, or remove them.'
   const priced = live.filter(([c]) => c.lineup != null)
-  if (!priced.length) return 'Pricing…'
+  if (!priced.length) {
+    // Still coming for one at least: say so. Otherwise none of them can be priced, and saying "Pricing…" would never end.
+    if (live.some(([c]) => !c.unpriced)) return 'Pricing…'
+    const one = live.length === 1
+    if (live.some(([c]) => c.unpriced === 'season')) return `There are no weeks left to project, so ${one ? 'this trade' : 'these trades'} cannot be priced for your lineup.`
+    return one ? `${live[0][0].label} leaves your team out, so there is no lineup of yours to price it on.` : 'None of these trades includes your team, so there is no lineup of yours to price them on.'
+  }
   if (cols.length === 1) {
     const c = cols[0]
     const odds = c.odds != null ? `, ${pctOf(c.odds)} to be accepted` : ''
@@ -201,7 +214,7 @@ export const verdictText = (cols: VerdictCol[]): string => {
   }
   // Best by each measure, among the trades that can be made. Ties within 0.1/wk (or 2 points of odds) share it.
   const pick = (get: (c: VerdictCol) => number | null | undefined, tie: number) => {
-    const vals = cols.map((c) => (c.out ? null : get(c)))
+    const vals = cols.map((c) => (c.out || c.unpriced ? null : get(c)))
     const known = vals.filter(isNum)
     if (!known.length) return { idx: [] as number[], top: null as number | null }
     const top = Math.max(...known)
@@ -214,7 +227,8 @@ export const verdictText = (cols: VerdictCol[]): string => {
   const yes = pick((c) => c.odds, 0.02)
   const po = pick((c) => c.playoffs, 0.0025)
   const parts: string[] = []
-  const all = live.length
+  // The trades the measures compare: those that can be made and priced.
+  const all = live.filter(([c]) => !c.unpriced).length
   if (gain.top != null && gain.top <= 0.05) parts.push(`None of these makes your lineup better; ${names(cols, gain.idx)} ${verb(gain.idx, 'costs', 'cost')} it least (${signed(gain.top)}/wk)`)
   else if (gain.top != null)
     parts.push(
