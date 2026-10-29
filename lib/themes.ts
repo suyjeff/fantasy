@@ -33,6 +33,12 @@ export type Tokens = {
   s: [string, string, string, string, string]
   /** Dashboard link channels. */
   c: [string, string, string, string]
+  /**
+   * Chart series, for four lines read against each other (the trade comparison): the theme's own hues, stepped into
+   * the chart lightness band and ordered so neighbours stay apart, colour-blind vision included. Checked with the
+   * dataviz palette validator, not by eye; the editor themes' pastels sit too light and too close for this.
+   */
+  k: [string, string, string, string]
 }
 
 export type Theme = { id: string; label: string; family: 'Tailwind' | 'Editor'; light?: Tokens; dark?: Tokens }
@@ -59,6 +65,7 @@ const LIGHT_INKS = {
   warn: '#8a5800',
   s: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'] as Tokens['s'],
   c: ['#2a78d6', '#eb6834', '#1baf7a', '#a060dc'] as Tokens['c'],
+  k: ['#035eb9', '#be4403', '#09a974', '#ab6be8'] as Tokens['k'],
 }
 const DARK_INKS = {
   accent: '#5298f0',
@@ -69,6 +76,7 @@ const DARK_INKS = {
   warn: '#e8ac3c',
   s: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181'] as Tokens['s'],
   c: ['#4892ee', '#e8703c', '#28b280', '#aa78ec'] as Tokens['c'],
+  k: ['#4993ef', '#bf4a0b', '#0eac79', '#8855c6'] as Tokens['k'],
 }
 
 type Steps = Record<50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 950, string>
@@ -155,6 +163,7 @@ export const THEMES: Theme[] = [
       warn: '#7d4705',
       s: ['#1e66f5', '#ec5d0a', '#179299', '#df8e1d', '#ea76cb'],
       c: ['#1e66f5', '#ec5d0a', '#40a02b', '#8839ef'],
+      k: ['#2a71fe', '#973803', '#3b9b25', '#700ad1'],
     },
     // Mocha: base #1e1e2e, mantle #181825, crust #11111b, surface0 #313244, surface1 #45475a.
     dark: {
@@ -175,6 +184,7 @@ export const THEMES: Theme[] = [
       warn: '#fab387',
       s: ['#89b4fa', '#fab387', '#94e2d5', '#f9e2af', '#f5c2e7'],
       c: ['#89b4fa', '#fab387', '#a6e3a1', '#cba6f7'],
+      k: ['#5d91e7', '#aa5304', '#5aa755', '#8256af'],
     },
   },
   {
@@ -201,6 +211,7 @@ export const THEMES: Theme[] = [
       warn: '#774708',
       s: ['#076678', '#d65d0e', '#427b58', '#b57614', '#8f3f71'],
       c: ['#076678', '#d65d0e', '#79740e', '#8f3f71'],
+      k: ['#0193ac', '#a54502', '#948d03', '#872d68'],
     },
     // Dark: bg0_h #1d2021, bg0 #282828, bg1 #3c3836, bg2 #504945; bright inks.
     dark: {
@@ -221,6 +232,7 @@ export const THEMES: Theme[] = [
       warn: '#fabd2f',
       s: ['#83a598', '#fe8019', '#8ec07c', '#fabd2f', '#d3869b'],
       c: ['#83a598', '#fe8019', '#b8bb26', '#d3869b'],
+      k: ['#07ab86', '#e06d02', '#bb5173', '#787a03'],
     },
   },
   {
@@ -246,6 +258,7 @@ export const THEMES: Theme[] = [
       warn: '#e6db74',
       s: ['#66d9ef', '#f92672', '#a6e22e', '#fd971f', '#ae81ff'],
       c: ['#66d9ef', '#f92672', '#a6e22e', '#ae81ff'],
+      k: ['#07a4bb', '#df0161', '#75a402', '#9567e3'],
     },
   },
   {
@@ -271,6 +284,7 @@ export const THEMES: Theme[] = [
       // Series 1 is pine, not foam: foam is the gain colour here, and your side of a matchup is not a gain.
       s: ['#3e8fb0', '#eb6f92', '#9ccfd8', '#f6c177', '#c4a7e7'],
       c: ['#3e8fb0', '#eb6f92', '#f6c177', '#c4a7e7'],
+      k: ['#05a0cf', '#de6387', '#c38407', '#885cb5'],
     },
   },
   {
@@ -295,6 +309,7 @@ export const THEMES: Theme[] = [
       warn: '#f6c177',
       s: ['#9ccfd8', '#ea9a97', '#3e8fb0', '#f6c177', '#c4a7e7'],
       c: ['#9ccfd8', '#ea9a97', '#f6c177', '#c4a7e7'],
+      k: ['#00a5b8', '#db6b6b', '#9c6801', '#8e62bc'],
     },
   },
   {
@@ -319,6 +334,7 @@ export const THEMES: Theme[] = [
       warn: '#80530b',
       s: ['#286983', '#b4637a', '#56949f', '#ea9d34', '#907aa9'],
       c: ['#286983', '#b4637a', '#ea9d34', '#907aa9'],
+      k: ['#059dcb', '#c55a7c', '#c57d05', '#8053ab'],
     },
   },
   {
@@ -343,6 +359,7 @@ export const THEMES: Theme[] = [
       warn: '#ffd23f',
       s: ['#39ff14', '#ffb000', '#00e5ff', '#ff4fd8', '#ffd23f'],
       c: ['#39ff14', '#ffb000', '#00e5ff', '#ff4fd8'],
+      k: ['#22b006', '#936403', '#02a5b8', '#bc039c'],
     },
   },
   {
@@ -367,6 +384,7 @@ export const THEMES: Theme[] = [
       warn: '#ffb86c',
       s: ['#8be9fd', '#ff79c6', '#50fa7b', '#ffb86c', '#bd93f9'],
       c: ['#8be9fd', '#ff79c6', '#50fa7b', '#bd93f9'],
+      k: ['#ac6802', '#c2418f', '#06b047', '#a37add'],
     },
   },
   {
@@ -391,6 +409,7 @@ export const THEMES: Theme[] = [
       warn: '#ebcb8b',
       s: ['#88c0d0', '#d08770', '#a3be8c', '#ebcb8b', '#b48ead'],
       c: ['#88c0d0', '#d08770', '#a3be8c', '#b48ead'],
+      k: ['#0796b2', '#d9704f', '#c46fb7', '#679732'],
     },
   },
   {
@@ -415,6 +434,7 @@ export const THEMES: Theme[] = [
       warn: '#e0af68',
       s: ['#7aa2f7', '#ff9e64', '#9ece6a', '#e0af68', '#bb9af7'],
       c: ['#7aa2f7', '#ff9e64', '#9ece6a', '#bb9af7'],
+      k: ['#3f64b9', '#ac5104', '#75a33e', '#9f7ddb'],
     },
   },
   {
@@ -439,6 +459,7 @@ export const THEMES: Theme[] = [
       warn: '#735700',
       s: ['#268bd2', '#cb4b16', '#2aa198', '#b58900', '#d33682'],
       c: ['#268bd2', '#cb4b16', '#2aa198', '#6c71c4'],
+      k: ['#016baa', '#ce4e1a', '#0d9e94', '#7e84e2'],
     },
   },
 ]
@@ -485,6 +506,7 @@ export const themeVars = (theme: Theme, mode: Mode): Record<string, string> => {
     '--ff-warn': rgb(t.warn),
     ...Object.fromEntries(t.s.map((c, i) => [`--ff-s${i + 1}`, rgb(c)])),
     ...Object.fromEntries(t.c.map((c, i) => [`--ff-c${i + 1}`, rgb(c)])),
+    ...Object.fromEntries(t.k.map((c, i) => [`--ff-k${i + 1}`, rgb(c)])),
     // The power-rank crown: one gold for every theme, per mode (fantasy.css has the same pair for before a theme loads).
     '--ff-gold': mode === 'dark' ? GOLD.dark : GOLD.light,
     '--ff-gold-ink': mode === 'dark' ? GOLD.darkInk : GOLD.lightInk,

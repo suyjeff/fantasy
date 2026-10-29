@@ -124,8 +124,23 @@ export const tidyDeal = (deal: Deal): Deal => ({
   faab: deal.faab.filter((x) => x.from !== x.to && deal.teams.includes(x.from) && deal.teams.includes(x.to)),
 })
 
-/** Rosters by team, from the analysis. */
-export const rostersOf = (analysis: Analysis) => Object.fromEntries(analysis.teams.map((t: TradeTeam) => [t.rosterId, t.players])) as Record<number, string[]>
+/**
+ * One spelling per deal, whatever order its teams, players and payments went in, so the same trade built twice is
+ * recognised as the same (the dock and the comparison both match deals by it). A $0 payment (a destination picked
+ * before the amount) moves nothing and is left out.
+ */
+export const dealKey = (d: Deal): string => {
+  const teams = [...d.teams].sort((a, b) => a - b)
+  const moves = d.moves.map((m) => `${m.player}:${m.from}>${m.to}`).sort()
+  const faab = d.faab
+    .filter((x) => x.dollars > 0)
+    .map((x) => `${x.from}>${x.to}:${x.dollars}`)
+    .sort()
+  return `${teams.join(',')}|${moves.join(',')}|${faab.join(',')}`
+}
+
+/** Rosters by team, from the analysis (only its teams, so a caller can key on those alone). */
+export const rostersOf = (analysis: Pick<Analysis, 'teams'>) => Object.fromEntries(analysis.teams.map((t: TradeTeam) => [t.rosterId, t.players])) as Record<number, string[]>
 
 // ---- Editing a deal ----
 // The builder's edits, kept pure so the dock, the inline pickers and the tests all move a deal the same way.

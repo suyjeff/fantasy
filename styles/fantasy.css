@@ -34,6 +34,10 @@
   --ff-c2: 235 104 52;
   --ff-c3: 27 175 122;
   --ff-c4: 160 96 220;
+  --ff-k1: 3 94 185;
+  --ff-k2: 190 68 3;
+  --ff-k3: 9 169 116;
+  --ff-k4: 171 107 232;
   /* Motion. One strong ease-out for anything entering, leaving or answering a press; the iOS sheet curve for
      panels that travel across the screen; ease-in-out only for things moving from one place to another. */
   --ff-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -154,6 +158,10 @@ html.ff-page body {
     --ff-c2: 232 112 60;
     --ff-c3: 40 178 128;
     --ff-c4: 170 120 236;
+    --ff-k1: 73 147 239;
+    --ff-k2: 191 74 11;
+    --ff-k3: 14 172 121;
+    --ff-k4: 136 85 198;
   }
 }
 
@@ -638,6 +646,12 @@ html.ff-page body {
   to {
     opacity: 0.7;
   }
+}
+/* One throb per view. The quieter copies (Open in builder, one on every trade card) hold still: ten of them breathing
+   out of step shimmered across the Trades page. Nothing throbs under an open dialog either. */
+.ff .ff-aqua.ff-aqua-soft::after,
+.ff:has(.tb-dialog-root) .ff-aqua::after {
+  animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .ff .ff-aqua::after {
@@ -1593,16 +1607,16 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
  * Everything here is short (under 200ms) and on the house curves. Switching rosters slides the list the way the tabs
  * went; what joins the deal fades or pops in; the wide-screen dialog rises in and, minimized, shrinks toward the
  * corner card it becomes. Reduced motion keeps only the fades. */
+/* Movement only: the new roster is painted whole from its first frame. Fading it in from nothing blanked the list
+   (two columns of it on a wide screen) for a frame on every switch, which read as a flicker. */
 @keyframes tb-slide-next {
   from {
-    opacity: 0;
-    transform: translateX(28px);
+    transform: translateX(16px);
   }
 }
 @keyframes tb-slide-prev {
   from {
-    opacity: 0;
-    transform: translateX(-28px);
+    transform: translateX(-16px);
   }
 }
 @keyframes tb-pop {
@@ -1664,8 +1678,38 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   transform: scale(0.98);
   transition-duration: 140ms;
 }
+/* The minimized trades: an ink strip, darker than anything on the page in either mode, so they read as the dock's
+   and not the page's. Light themes take the theme's own text colour, deepened, as the surface (an inverse); dark
+   themes go below their page colour toward black, with a brighter rim and a heavier shadow. Inks on it are mixed
+   per mode to hold 4.5:1 in every theme (accent 3:1, as an icon). */
+.ff .tb-ink {
+  --ink-bg: light-dark(color-mix(in oklab, rgb(var(--ff-text)) 72%, black), color-mix(in oklab, rgb(var(--ff-bg)) 55%, black));
+  --ink-hover: light-dark(color-mix(in oklab, rgb(var(--ff-text)) 90%, rgb(var(--ff-panel))), color-mix(in oklab, rgb(var(--ff-bg)) 82%, rgb(var(--ff-text))));
+  --ink-text: light-dark(rgb(var(--ff-panel)), rgb(var(--ff-text)));
+  --ink-muted: light-dark(color-mix(in oklab, rgb(var(--ff-panel)) 68%, rgb(var(--ff-text))), rgb(var(--ff-muted)));
+  --ink-line: light-dark(color-mix(in oklab, rgb(var(--ff-panel)) 20%, rgb(var(--ff-text))), rgb(var(--ff-text) / 0.36));
+  --ink-accent: light-dark(color-mix(in oklab, rgb(var(--ff-accent)) 50%, white), rgb(var(--ff-accent)));
+  --ink-pos: light-dark(color-mix(in oklab, rgb(var(--ff-pos)) 50%, white), rgb(var(--ff-pos)));
+  --ink-neg: light-dark(color-mix(in oklab, rgb(var(--ff-neg)) 50%, white), rgb(var(--ff-neg)));
+  background: var(--ink-bg);
+  color: var(--ink-text);
+  border-color: var(--ink-line);
+}
+/* Hover only where a pointer hovers: a tap would otherwise leave the bar under the finger lit. */
+@media (hover: hover) {
+  .ff .tb-ink-btn:hover {
+    background: var(--ink-hover);
+  }
+}
+.ff .tb-ink-btn:focus-visible {
+  outline: 2px solid var(--ink-accent);
+  outline-offset: -2px;
+}
 @media (prefers-reduced-motion: reduce) {
-  .ff :is(.tb-slide-next, .tb-slide-prev, .tb-pop, .tb-mini, .tb-dialog) {
+  .ff :is(.tb-slide-next, .tb-slide-prev) {
+    animation: none;
+  }
+  .ff :is(.tb-pop, .tb-mini, .tb-dialog) {
     animation: ff-fade-in 120ms ease-out;
   }
   .ff .tb-dialog-root[data-leaving] .tb-dialog {

@@ -47,6 +47,22 @@ export type TeamSeason = {
 const round2 = (x: number) => Math.round(x * 100) / 100
 
 /**
+ * The current run of results, latest last: +3 for three straight wins, −2 for two straight losses. A tie ends a run
+ * and starts none (0), as does no result yet; weeks without a result (not yet played) do not break one.
+ */
+export const streakOf = (results: (string | null | undefined)[]): number => {
+  const played = results.filter((r): r is string => r === 'W' || r === 'L' || r === 'T')
+  const last = played[played.length - 1]
+  if (!last || last === 'T') return 0
+  let n = 0
+  for (let i = played.length - 1; i >= 0 && played[i] === last; i--) n++
+  return last === 'W' ? n : -n
+}
+
+/** A run as the standings show it: "W3", "L2", or nothing. */
+export const streakText = (n: number) => (n > 0 ? `W${n}` : n < 0 ? `L${-n}` : '')
+
+/**
  * Turn raw weekly matchup payloads into per-team week records. A week counts
  * as played when any team posted points.
  */
@@ -137,12 +153,10 @@ export const buildTeamSeasons = (
     let allPlayWins = 0
     let allPlayLosses = 0
     let optimalSum = 0
-    const results: string[] = []
     for (const tw of weeks) {
       if (tw.result === 'W') wins++
       else if (tw.result === 'L') losses++
       else if (tw.result === 'T') ties++
-      if (tw.result) results.push(tw.result)
       optimalSum += tw.optimalPoints
       for (const other of teamWeeks[tw.week] ?? []) {
         if (other.rosterId === rosterId) continue
@@ -165,13 +179,7 @@ export const buildTeamSeasons = (
     const m = games ? pf / games : 0
     const sd = games > 1 ? Math.sqrt(scores.reduce((a, x) => a + (x - m) ** 2, 0) / (games - 1)) : 0
     const recent = scores.slice(-recentWindow)
-    let streak = ''
-    if (results.length) {
-      const last = results[results.length - 1]
-      let n = 0
-      for (let i = results.length - 1; i >= 0 && results[i] === last; i--) n++
-      streak = `${last}${n}`
-    }
+    const streak = streakText(streakOf(weeks.map((w) => w.result)))
     return {
       rosterId,
       games,

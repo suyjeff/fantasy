@@ -9,6 +9,8 @@ import PlayerName from '../PlayerName'
 import TeamName from '../TeamName'
 import TradeCard from '../TradeCard'
 import { useTradeDock } from '../TradeDock'
+import CompareView from '../TradeCompare'
+import { useCompare } from '../useCompare'
 import { TradeIcon } from '../icons'
 import { Callout } from '../Callout'
 import { ShowMore } from './ShowMore'
@@ -42,8 +44,8 @@ import {
 } from '../ui'
 
 // The builder was a tab here; it is now the trade dock (components/TradeDock), over every page.
-type Sub = 'suggested' | 'targets' | 'needs' | 'injuries'
-const SUBS: Sub[] = ['suggested', 'targets', 'needs', 'injuries']
+type Sub = 'suggested' | 'compare' | 'targets' | 'needs' | 'injuries'
+const SUBS: Sub[] = ['suggested', 'compare', 'targets', 'needs', 'injuries']
 type Sort = 'mine' | 'likely' | 'balanced'
 type Makeup = 'any' | TradeShape
 
@@ -62,6 +64,7 @@ const TradesView = ({
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'suggested'
   const dock = useTradeDock()
+  const compare = useCompare()
   // An old link to the builder tab opens the builder, over Suggested.
   useEffect(() => {
     if (sub !== 'builder') return
@@ -310,9 +313,10 @@ const TradesView = ({
   )
 
   // The floating build action, on every tab: the builder is a sheet over the page now, not a tab of its own. It steps
-  // aside while the builder is open or minimized (the docked bar is the way back in then), and while the notice
-  // after a discard sits in the same place.
-  const fab = phone && dock?.mode === 'closed' && !dock.toast
+  // aside while the builder is open or minimized (the docked bar is the way back in then), while the notice after a
+  // discard sits in the same place, and on Compare, whose dense columns it would sit on and which has a Build a trade
+  // button of its own.
+  const fab = phone && dock?.mode === 'closed' && !dock.toast && tab !== 'compare'
   const limitsChanged = minTheirGain !== DEFAULT_TRADE_CONFIG.minTheirGain || maxValueAsk !== DEFAULT_TRADE_CONFIG.maxValueAsk
   const activeFilters = Number(makeup !== 'any') + Number(partner !== 'all') + Number(limitsChanged)
 
@@ -383,6 +387,7 @@ const TradesView = ({
             stacked={phone}
             items={[
               { key: 'suggested', label: 'Suggested', count: search.ideas.length },
+              { key: 'compare', label: 'Compare', count: compare?.items.length || null, mark: 'BETA' },
               { key: 'targets', label: 'Targets', count: targets.length },
               { key: 'needs', label: 'League needs' },
               { key: 'injuries', label: 'Injuries & roles', count: situations.length },
@@ -471,6 +476,10 @@ const TradesView = ({
             <Disclosure from="md" summary="How deals are found" className="text-[11.5px] leading-relaxed text-ff-muted">
               Deals start from every one-for-one that helps you and grow only when a piece improves them. Numbers are points per week added to each best lineup, injuries priced in; the side taking more players cuts its weakest.
             </Disclosure>
+        </TabSection>
+
+        <TabSection id="compare" active={tab === 'compare'}>
+          <CompareView onSuggested={() => onSub('suggested')} />
         </TabSection>
 
         <TabSection id="targets" active={tab === 'targets'}>
