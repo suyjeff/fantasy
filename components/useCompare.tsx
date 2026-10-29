@@ -122,7 +122,7 @@ const Check = ({ size = 12, d = CHECK }: { size?: number; d?: string }) => (
 
 /** The colour of a comparison slot, as a small square: the same colour its column and line carry. */
 export const SlotKey = ({ slot, className }: { slot: number; className?: string }) => (
-  <span aria-hidden className={cx('inline-block h-2 w-2 shrink-0', className)} style={{ background: `rgb(var(--ff-c${slot + 1}))` }} />
+  <span aria-hidden className={cx('inline-block h-2 w-2 shrink-0', className)} style={{ background: `rgb(var(--ff-k${slot + 1}))` }} />
 )
 
 /**

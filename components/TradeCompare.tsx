@@ -43,8 +43,18 @@ const TEXT: Record<Tone, string> = {
   neg: 'text-ff-neg',
   neutral: 'text-ff-text',
 }
-// The four-colour categorical set each theme picks (--ff-c1..4), one per comparison slot: a trade keeps its colour.
-const ink = (slot: number) => `rgb(var(--ff-c${slot + 1}))`
+// The chart-series set each theme carries (--ff-k1..4, validated per theme in lib/themes), one per comparison slot: a
+// trade keeps its colour. Each slot has a dash of its own as well, so two lines are told apart without colour too.
+const ink = (slot: number) => `rgb(var(--ff-k${slot + 1}))`
+const DASH = ['', '7 4', '1.5 4', '10 3 1.5 3']
+const dashOf = (slot: number) => DASH[slot] || undefined
+
+/** A series' key: a short stretch of its line, colour and dash, for the legend and the crosshair's readout. */
+const LineKey = ({ slot }: { slot: number }) => (
+  <svg aria-hidden width="18" height="6" viewBox="0 0 18 6" className="block shrink-0">
+    <path d="M1 3h16" stroke={ink(slot)} strokeWidth={2} strokeLinecap="round" strokeDasharray={dashOf(slot)} />
+  </svg>
+)
 const EMPTY: CompareItem[] = []
 const slotName = (s: string) => s.replace('SUPER_FLEX', 'SF').replace('REC_FLEX', 'R-FLEX').replace('WRRB_FLEX', 'W/R')
 
@@ -132,7 +142,7 @@ const Figure = ({ value, unit, tone = 'neutral', sub, best }: { value: string; u
       {unit && <span className={cx('font-mono text-[10.5px] text-ff-muted', unit.startsWith('/') ? 'ml-0.5' : 'ml-1')}>{unit}</span>}
       {best && <Best word={best} />}
     </span>
-    {sub != null && <span className="block truncate font-mono text-[10.5px] text-ff-muted">{sub}</span>}
+    {sub != null && <span className="block font-mono text-[10.5px] text-ff-muted">{sub}</span>}
   </>
 )
 
@@ -202,16 +212,22 @@ const LineupChart = ({ series, playoffWeeks }: { series: Series[]; playoffWeeks:
   const at = (s: Series, wk: number) => s.values.find((v) => v.week === wk)?.delta
   const band = playoffWeeks.filter((wk) => weeks.includes(wk))
   const bandFrom = band.length ? x(weeks.indexOf(Math.min(...band))) - (weeks.length > 1 ? iw / (weeks.length - 1) / 2 : 0) : 0
-  // End letters, skipped where they would sit on another's.
-  const placed: number[] = []
-  const ends = series.map((s) => {
-    const v = s.values[s.values.length - 1]?.delta
-    if (v == null) return null
-    const yy = y(v)
-    if (placed.some((p) => Math.abs(p - yy) < 12)) return { yy, show: false }
-    placed.push(yy)
-    return { yy, show: true }
-  })
+  // End letters, every one of them: where two would sit on each other they are nudged apart (a line's dot stays on
+  // its line), so no line is left to its colour to be told by.
+  const ends: ({ yy: number } | null)[] = series.map(() => null)
+  const order = series
+    .map((s, i) => ({ i, v: s.values[s.values.length - 1]?.delta }))
+    .filter((e): e is { i: number; v: number } => e.v != null)
+    .sort((a, b) => y(a.v) - y(b.v))
+  let prev = -Infinity
+  for (const e of order) {
+    const yy = Math.max(y(e.v), prev + 11)
+    ends[e.i] = { yy }
+    prev = yy
+  }
+  // Pushed past the bottom: shift the run back up.
+  const over = prev - (pad.t + ih + 6)
+  if (over > 0) for (const e of ends) if (e) e.yy -= over
   const pick = (clientX: number) => {
     const r = box.current?.getBoundingClientRect()
     if (!r) return
@@ -277,11 +293,12 @@ const LineupChart = ({ series, playoffWeeks }: { series: Series[]; playoffWeeks:
                 fill="none"
                 stroke={ink(s.slot)}
                 strokeWidth={2}
+                strokeDasharray={dashOf(s.slot)}
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
               {last && <circle cx={last[0]} cy={y(last[1])} r={4} fill={ink(s.slot)} className="stroke-ff-panel" strokeWidth={2} />}
-              {last && end?.show && (
+              {last && end && (
                 <text x={last[0] + 8} y={end.yy + 3.5} className="fill-ff-text2 font-mono text-[10.5px] font-medium">
                   {s.letter}
                 </text>
@@ -308,7 +325,7 @@ const LineupChart = ({ series, playoffWeeks }: { series: Series[]; playoffWeeks:
             const v = at(s, hw)
             return (
               <div key={s.key} className="flex items-center gap-2 py-px">
-                <span aria-hidden className="h-[2px] w-3 shrink-0" style={{ background: ink(s.slot) }} />
+                <LineKey slot={s.slot} />
                 <span className={cx('num w-12 text-[12.5px] font-medium', v == null ? 'text-ff-muted' : TEXT[toneOf(v)])}>{v == null ? '–' : fmtSigned(v, 1)}</span>
                 <span className="font-mono text-[10.5px] text-ff-text2">Trade {s.letter}</span>
               </div>
@@ -676,7 +693,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
         return (
           <>
             <Figure value={pct(col.odds)} tone={col.odds >= 0.5 ? 'pos' : col.odds < 0.25 ? 'neg' : 'neutral'} best={best.odds.includes(i) ? 'likeliest' : null} sub={band} />
-            {why && <span className="mt-0.5 line-clamp-2 block text-[11px] leading-snug text-ff-text2">{why}</span>}
+            {why && <span className="mt-0.5 block text-[11px] leading-snug text-ff-text2">{why}</span>}
           </>
         )
       },
@@ -698,7 +715,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
                 <span aria-hidden className={cx('w-2.5 shrink-0 text-center font-mono', x.kind === 'in' || x.kind === 'filled' ? 'text-ff-pos' : x.kind === 'bench' ? 'text-ff-muted' : 'text-ff-neg')}>
                   {x.kind === 'in' || x.kind === 'filled' ? '+' : x.kind === 'bench' ? '·' : '−'}
                 </span>
-                <span className="min-w-0 truncate text-ff-text">
+                <span className="min-w-0 text-ff-text">
                   {x.kind === 'filled' ? `fills the hole at ${x.slot}` : x.kind === 'hole' ? `leaves ${x.slot} to the wire` : nm(x.id)}
                   <span className="sr-only">{x.kind === 'in' ? ' starts' : x.kind === 'out' ? ' leaves the lineup' : x.kind === 'bench' ? ' to your bench' : ''}</span>
                 </span>
@@ -726,19 +743,20 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
     const moves = col.item.deal.moves
     const out = moves.filter((m) => m.from === me).length
     const back = moves.filter((m) => m.to === me).length
+    // Named by what you get, as the legend and the stuck copy of this row name it (the partner is often the same in
+    // every column), with whom on the line under. Both wrap rather than cut a name short.
     return (
       <div className="flex min-w-0 flex-col gap-1.5">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-start gap-2">
           <span className="flex h-6 shrink-0 items-center gap-1.5 border border-ff-line2 px-1.5 font-mono text-[11.5px] font-medium text-ff-text">
             <SlotKey slot={col.item.slot} />
             {col.letter}
           </span>
-          <span className="flex min-w-0 items-center gap-1.5">
-            {!many && <Avatar src={analysis.teamById[col.partners[0]]?.avatar ?? null} name={nameOf(col.partners[0])} size={18} />}
-            <span className="truncate text-[13px] font-medium text-ff-text" title={col.partners.map(nameOf).join(' + ')}>
-              {col.partners.map(nameOf).join(' + ')}
-            </span>
-          </span>
+          <span className="min-w-0 pt-[3px] text-[13px] font-medium leading-snug text-ff-text">{getsOf(col)}</span>
+        </div>
+        <div className="flex min-w-0 items-center gap-1.5 text-[12px] leading-snug text-ff-text2">
+          {!many && <Avatar src={analysis.teamById[col.partners[0]]?.avatar ?? null} name={nameOf(col.partners[0])} size={16} />}
+          <span className="min-w-0 [overflow-wrap:anywhere]">with {col.partners.map(nameOf).join(' + ')}</span>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-1.5 font-mono text-[10.5px] text-ff-muted">
           <span>{many ? `${col.item.deal.teams.length}-team · ${moves.length} players` : `${out}-for-${back}`}</span>
@@ -786,7 +804,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
       key={`${key}-${col.item.id}`}
       role="cell"
       className={cx(
-        'relative min-w-0 bg-ff-panel px-2.5 py-2.5 md:px-3',
+        'relative min-w-0 bg-ff-panel px-2 py-2.5 md:px-3',
         mark && 'shadow-[inset_0_0_0_999px_rgb(var(--ff-pos)/0.06)]',
         extra,
       )}
@@ -800,14 +818,14 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
     const ids = col.item.deal.moves.filter((m) => m.to === me).map((m) => data.players[m.player]?.name.split(' ').slice(-1)[0] ?? m.player)
     const cash = col.item.deal.faab.reduce((a, x) => a + (x.to === me ? x.dollars : 0), 0)
     const what = [...ids, cash > 0 ? `$${cash}` : ''].filter(Boolean)
-    return what.length ? `for ${what.join(', ')}` : col.partners.map(nameOf).join(' + ')
+    return what.length ? `for ${what.join(', ')}` : 'for nothing back'
   }
   const figuresFrom = rows.findIndex((r) => r.key === 'lineup')
   const staleNote = (col: Col, i: number, k: number) => (
     <div
       key={`stale-${col.item.id}`}
       role="cell"
-      className="bg-ff-panel px-2.5 py-3 shadow-[inset_0_0_0_999px_rgb(var(--ff-warn)/0.05)] md:px-3"
+      className="bg-ff-panel px-2 py-3 shadow-[inset_0_0_0_999px_rgb(var(--ff-warn)/0.05)] md:px-3"
       style={{ gridColumn: i + 2, gridRow: `${k + 2} / span ${rows.length - k}` }}
     >
       <p className="ff-label !text-ff-warn">Out of date</p>
@@ -859,7 +877,9 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
                       <SlotKey slot={col.item.slot} />
                       {col.letter}
                     </span>
-                    <span className="min-w-0 truncate text-[12.5px] text-ff-text2">{getsOf(col)}</span>
+                    <span className="min-w-0 truncate text-[12.5px] text-ff-text2" title={getsOf(col)}>
+                      {getsOf(col)}
+                    </span>
                   </div>
                 ))}
                 {addCol && <div className="bg-ff-panel" />}
@@ -874,7 +894,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
                 <span className="font-mono text-[10px] text-ff-muted">{n} of 4</span>
               </div>
               {cols.map((col, i) => (
-                <div key={`h-${col.item.id}`} role="columnheader" className="relative min-w-0 snap-start bg-ff-panel px-2.5 py-2.5 md:px-3">
+                <div key={`h-${col.item.id}`} role="columnheader" className="relative min-w-0 snap-start bg-ff-panel px-2 py-2.5 md:px-3">
                   <span aria-hidden className="absolute inset-x-0 top-0 h-[2px]" style={{ background: ink(col.item.slot) }} />
                   {head(col, i)}
                 </div>
@@ -947,9 +967,9 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
             <ul className="flex flex-wrap gap-x-3 gap-y-1" aria-label="Legend">
               {series.map((s) => (
                 <li key={s.key} className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ff-text2">
-                  <span aria-hidden className="h-[2px] w-3.5 shrink-0" style={{ background: ink(s.slot) }} />
+                  <LineKey slot={s.slot} />
                   <span className="font-mono font-medium text-ff-text">{s.letter}</span>
-                  <span className="max-w-[160px] truncate">{s.name}</span>
+                  <span className="min-w-0">{s.name}</span>
                 </li>
               ))}
             </ul>
@@ -998,6 +1018,17 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
         Each trade is priced afresh from today&apos;s projections, as the builder prices it: your best lineup week by week before and after, value as managers price players, and how likely the other
         side is to say yes. Playoff odds come from the same simulated seasons before and after, for two-team trades. <span className="text-ff-pos">▲</span> marks the best in each row. A trade whose
         players have since moved is out of date: open it to fix it.
+        {/* What each row measures: the row names carry it as a tooltip too, which a finger or a keyboard never sees. */}
+        <dl className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-[max-content_minmax(0,1fr)]">
+          {rows
+            .filter((r) => r.hint)
+            .map((r) => (
+              <React.Fragment key={r.key}>
+                <dt className="text-ff-text2">{r.label}</dt>
+                <dd className="max-sm:mb-1">{r.hint}</dd>
+              </React.Fragment>
+            ))}
+        </dl>
       </Disclosure>
     </div>
   )

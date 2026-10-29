@@ -196,13 +196,13 @@ const CommandPalette = ({
     // The builder is a panel over any page now, not a Trades tab, so it opens straight from here.
     if (dock)
       items.push({ id: 'build', group: 'Actions', label: 'Build a trade', keywords: 'trade builder deal offer new', icon: <TradeIcon size={14} />, weight: 2, run: () => dock.open() })
-    // Each trade already open in the dock, to go straight back to.
+    // Each trade already open in the dock, to go straight back to, by the number its bar and the switcher show.
     if (dock && analysis.myRosterId != null)
-      trades.forEach((t, i) =>
+      [...trades].sort((a, b) => a.label - b.label).forEach((t) =>
         items.push({
           id: `trade:${t.id}`,
           group: 'Actions',
-          label: `Open trade ${i + 1}: ${dealSummary(t.deal, analysis.myRosterId!, (r) => analysis.teamById[r]?.name ?? `#${r}`)}`,
+          label: `Open trade ${t.label}: ${dealSummary(t.deal, analysis.myRosterId!, (r) => analysis.teamById[r]?.name ?? `#${r}`)}`,
           keywords: 'trade builder deal minimized',
           icon: <TradeIcon size={14} />,
           weight: 2,

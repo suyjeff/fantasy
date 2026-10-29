@@ -31,6 +31,8 @@ export type OpenTrade = {
   id: string
   deal: Deal
   step: DockStep
+  /** Its number ("Trade 2"), kept for its life, as the minimized bars and the header's switcher show it. */
+  label: number
   /** The one expanded; the rest are minimized. */
   open: boolean
 }
@@ -101,7 +103,7 @@ export const TradeDockProvider = ({ children }: { children: ReactNode }) => {
           },
     [mode, count, toast, me, set],
   )
-  const trades = useMemo<readonly OpenTrade[]>(() => d.trades.map((t) => ({ id: t.id, deal: t.deal, step: t.step, open: t.id === d.open })), [d.trades, d.open])
+  const trades = useMemo<readonly OpenTrade[]>(() => d.trades.map((t) => ({ id: t.id, deal: t.deal, step: t.step, label: t.label, open: t.id === d.open })), [d.trades, d.open])
 
   // The provider and the page under it keep their place whether or not you have a roster here, so a roster coming
   // or going never remounts the page.
@@ -134,13 +136,15 @@ const DockHost = ({ state, set, api }: HostProps) => {
   const undo = useCallback(() => set(dock.undoDock), [set])
   const dismiss = useCallback(() => set(dock.dismissUndo), [set])
   const more = phone && !open && state.trades.length < MAX_TRADES
+  // Named by its number while others are open, so the notice says which went even where its line is cut short.
+  const gone = toast ? (state.trades.length > 0 ? `Trade ${toast.trade.label} discarded` : 'Trade discarded') : ''
 
   // What a discard, replace or clear just did, said once to screen readers from a region that is always there.
   const said = !u
     ? ''
     : u.kind === 'discarded'
       ? toast
-        ? 'Trade discarded.'
+        ? `${gone}.`
         : ''
       : open && (u.kind === 'replaced' ? u.by === open.id : u.trade.id === open.id)
         ? u.kind === 'replaced'
@@ -163,7 +167,7 @@ const DockHost = ({ state, set, api }: HostProps) => {
     items.splice(
       minimized.filter((t) => t.label < toast.trade.label).length,
       0,
-      <Discarded key={`gone-${state.toast}`} line={dealSummary(toast.trade.deal, me, name)} phone={phone} onUndo={undo} onDismiss={dismiss} />,
+      <Discarded key={`gone-${state.toast}`} text={gone} line={dealSummary(toast.trade.deal, me, name)} phone={phone} onUndo={undo} onDismiss={dismiss} />,
     )
   return (
     <>
@@ -458,9 +462,9 @@ const Minimized = ({ trade, label, phone, onOpen, onClose, autoFocus }: { trade:
 
 /**
  * After a discard: a notice where the trade sat in the stack, with the way back. It stays 8 seconds, held while a
- * pointer is over it or someone has moved focus into it, and the trade stays restorable from an empty one after it goes.
+ * mouse is over it or someone has moved focus into it, and the trade stays restorable from an empty one after it goes.
  */
-const Discarded = ({ line, phone, onUndo, onDismiss }: { line: string; phone: boolean; onUndo: () => void; onDismiss: () => void }) => {
+const Discarded = ({ text, line, phone, onUndo, onDismiss }: { text: string; line: string; phone: boolean; onUndo: () => void; onDismiss: () => void }) => {
   const undoRef = useRef<HTMLButtonElement>(null)
   const [hover, setHover] = useState(false)
   const [focus, setFocus] = useState(false)
@@ -484,13 +488,14 @@ const Discarded = ({ line, phone, onUndo, onDismiss }: { line: string; phone: bo
   return (
     <div
       className={slot(phone)}
-      onPointerEnter={() => setHover(true)}
+      // Only a mouse holds it: a finger is never "over" it, and a tap that left it held would keep it up for good.
+      onPointerEnter={(e) => e.pointerType === 'mouse' && setHover(true)}
       onPointerLeave={() => setHover(false)}
       onFocus={() => !placing.current && setFocus(true)}
       onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFocus(false)}
     >
       <p className={cx('flex min-w-0 flex-1 justify-center pl-3 leading-tight', phone ? 'items-center gap-1.5 whitespace-nowrap' : 'flex-col')}>
-        <span className="shrink-0 text-[13px] font-medium">Trade discarded</span>
+        <span className="shrink-0 text-[13px] font-medium">{text}</span>
         <span className="truncate font-mono text-[10.5px] text-[color:var(--ink-muted)]">{line}</span>
       </p>
       <button ref={undoRef} type="button" onClick={onUndo} className="tb-ink-btn ff-press shrink-0 px-4 text-[13.5px] font-medium text-[color:var(--ink-accent)]">

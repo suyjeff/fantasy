@@ -313,9 +313,10 @@ const TradesView = ({
   )
 
   // The floating build action, on every tab: the builder is a sheet over the page now, not a tab of its own. It steps
-  // aside while the builder is open or minimized (the docked bar is the way back in then), and while the notice
-  // after a discard sits in the same place.
-  const fab = phone && dock?.mode === 'closed' && !dock.toast
+  // aside while the builder is open or minimized (the docked bar is the way back in then), while the notice after a
+  // discard sits in the same place, and on Compare, whose dense columns it would sit on and which has a Build a trade
+  // button of its own.
+  const fab = phone && dock?.mode === 'closed' && !dock.toast && tab !== 'compare'
   const limitsChanged = minTheirGain !== DEFAULT_TRADE_CONFIG.minTheirGain || maxValueAsk !== DEFAULT_TRADE_CONFIG.maxValueAsk
   const activeFilters = Number(makeup !== 'any') + Number(partner !== 'all') + Number(limitsChanged)
 

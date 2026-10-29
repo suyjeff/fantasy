@@ -34,6 +34,10 @@
   --ff-c2: 235 104 52;
   --ff-c3: 27 175 122;
   --ff-c4: 160 96 220;
+  --ff-k1: 3 94 185;
+  --ff-k2: 190 68 3;
+  --ff-k3: 9 169 116;
+  --ff-k4: 171 107 232;
   /* Motion. One strong ease-out for anything entering, leaving or answering a press; the iOS sheet curve for
      panels that travel across the screen; ease-in-out only for things moving from one place to another. */
   --ff-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -154,6 +158,10 @@ html.ff-page body {
     --ff-c2: 232 112 60;
     --ff-c3: 40 178 128;
     --ff-c4: 170 120 236;
+    --ff-k1: 73 147 239;
+    --ff-k2: 191 74 11;
+    --ff-k3: 14 172 121;
+    --ff-k4: 136 85 198;
   }
 }
 
@@ -1687,8 +1695,11 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   color: var(--ink-text);
   border-color: var(--ink-line);
 }
-.ff .tb-ink-btn:hover {
-  background: var(--ink-hover);
+/* Hover only where a pointer hovers: a tap would otherwise leave the bar under the finger lit. */
+@media (hover: hover) {
+  .ff .tb-ink-btn:hover {
+    background: var(--ink-hover);
+  }
 }
 .ff .tb-ink-btn:focus-visible {
   outline: 2px solid var(--ink-accent);

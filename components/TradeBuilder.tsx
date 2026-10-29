@@ -1098,7 +1098,7 @@ export const BuilderHeader = ({
         <button
           type="button"
           onClick={onNew}
-          aria-label="Start another trade"
+          aria-label="New trade"
           title="Start another trade (this one is kept, minimized)"
           className={cx('ff-press flex h-10 shrink-0 items-center justify-center gap-1.5 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text', many ? 'w-10 md:w-auto md:px-2.5' : 'px-2.5')}
         >
