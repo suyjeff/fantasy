@@ -14,6 +14,7 @@
 
 import { tradeValue, type Currency } from './currency'
 import { faabSweetener, faabTradeValue, type Faab } from './faab'
+import { formText, type Momentum } from './momentum'
 import type { LeagueHistory } from './useLeagueData'
 import type { TradeIdea } from './trades'
 import type { PlayerMap, SleeperTransaction } from './types'
@@ -150,7 +151,7 @@ export type AcceptRead = {
   /** 0–100. A ranking index for "who is likeliest to say yes", not a calibrated probability. */
   index: number
   band: 'long shot' | 'possible' | 'likely'
-  /** Value they give minus value they get, as the consensus rankings price it. */
+  /** Value they give minus value they get, as the consensus rankings price it, moved by recent form (momentum.ts). */
   perceivedAsk: number | null
   /** FAAB to add so the deal reads as fair to them, in dollars, when money can close the gap. */
   faab: number | null
@@ -177,6 +178,12 @@ const logistic = (x: number) => 1 / (1 + Math.exp(-x))
  *   engagement            ±0.4 from the least to the most active manager
  *   trade history         +0.25 per trade, capped; +0.3 if they have traded with you
  *   extra bodies          −0.15 per player past a 1-for-1
+ *   urgency               +0.4 at most for a long losing run on the playoff bubble, down to −0.24 for a
+ *                         long winning run with a safe spot (momentum.ts); an urgent team also discounts an
+ *                         overpay by up to 30% when the deal makes it better right away
+ *
+ * Recent form moves the price itself rather than adding a term: a player off a dud reads cheaper to the
+ * room, one off a spike dearer, by at most 15% of his value (momentum.ts FORM).
  */
 export const acceptRead = (
   idea: TradeIdea,
@@ -185,16 +192,46 @@ export const acceptRead = (
   perceived: Record<string, number> | null,
   currency?: Currency,
   faab?: Faab | null,
+  momentum?: Momentum | null,
 ): AcceptRead => {
   const signals: AcceptRead['signals'] = []
   const say = (text: string, tone: 'pos' | 'neg' | 'neutral') => signals.push({ text, tone })
+  // Recent form, as the room prices it this week: a player off a dud cheaper, one off a spike dearer. Applied to
+  // whichever price the read uses (consensus, or the trade market the deal was valued on), as a shift in the ask.
+  const form = momentum?.form ?? {}
+  const base = perceived ?? momentum?.market ?? null
+  const moved = (ids: string[]) => ids.filter((id) => form[id])
+  const shiftOf = (ids: string[], owned: boolean) => {
+    if (!base || !ids.length) return 0
+    const now: Record<string, number> = {}
+    for (const id of ids) now[id] = Math.max(0, base[id] ?? 0) * form[id].factor
+    return tradeValue(ids, now, currency, owned) - tradeValue(ids, base, currency, owned)
+  }
+  const shift = shiftOf(moved(idea.get), true) - shiftOf(moved(idea.give), false)
   // Consensus value, priced the way people price it: streamers cheap, their own drafted players dear.
-  const perceivedAsk = perceived ? tradeValue(idea.get, perceived, currency, true) - tradeValue(idea.give, perceived, currency, false) : null
-  const ask = perceivedAsk ?? idea.valueAsk
+  const perceivedAsk = perceived ? tradeValue(idea.get, perceived, currency, true) - tradeValue(idea.give, perceived, currency, false) + shift : null
+  const ask = perceivedAsk ?? idea.valueAsk + shift
   // A small overpay can be evened with FAAB; it counts for them at its (capped) trade value.
   const sweetener = faab ? faabSweetener(faab, me, ask) : null
   const askNet = sweetener ? ask - faabTradeValue(faab!, sweetener) : ask
-  let x = -0.1 + 0.9 * idea.theirGain - 0.45 * Math.max(0, askNet) + 0.1 * Math.min(2, Math.max(0, -askNet))
+  // A team on a losing run wants a move, and pays a little more for one that helps it now.
+  const mood = momentum?.teams[idea.partnerId]
+  const urgency = mood?.urgency ?? 0
+  const helpsNow = (idea.perWeek?.[0]?.theirs ?? idea.theirGain) > 0.25
+  const overpay = 0.45 * (1 - 0.3 * Math.max(0, urgency) * (helpsNow ? 1 : 0))
+  let x = -0.1 + 0.9 * idea.theirGain - overpay * Math.max(0, askNet) + 0.1 * Math.min(2, Math.max(0, -askNet)) + 0.4 * urgency
+  if (mood?.text) say(mood.text, urgency > 0 ? 'pos' : 'neg')
+  // The players whose form moves the price, strongest first, two at most: what you ask for off a dud (they let him
+  // go cheap) or off a spike (they hold him dear), and what you send off a spike (it reads well) or a dud.
+  const formSignals = [...moved(idea.get).map((id) => ({ id, mine: false })), ...moved(idea.give).map((id) => ({ id, mine: true }))]
+    .sort((a, b) => form[b.id].z - form[a.id].z)
+    .slice(0, 2)
+  for (const { id, mine } of formSignals) {
+    const f = form[id]
+    const good = mine === (f.kind === 'sell-high')
+    const note = good ? (mine ? 'sell high' : 'buy low') : mine ? 'reads low to them' : 'they price him high'
+    say(`${f.name} ${formText(f)}, ${note}`, good ? 'pos' : 'neg')
+  }
   if (perceivedAsk != null) {
     if (sweetener) say(`add $${sweetener} FAAB to even it by consensus`, 'pos')
     else if (perceivedAsk > 1.5) say('looks like an overpay to them by consensus', 'neg')

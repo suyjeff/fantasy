@@ -8,6 +8,7 @@ import { leagueBehavior, type LeagueBehavior } from './behavior'
 import { perceivedValues } from './consensus'
 import { backtest, buildForecast, divisionsOf, ELO, gamesFrom, lineupEdge, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
 import { faabState, type Faab } from './faab'
+import { teamMoods, type Momentum } from './momentum'
 import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS, type TeamWeek } from './power'
 import type { LeagueData } from './useLeagueData'
 
@@ -36,6 +37,8 @@ export type Models = {
   expectedPast: Record<number, Record<number, number>>
   /** The league's FAAB picture, when it bids for waivers. */
   faab: Faab | null
+  /** Who is on a run and who had a week off form: what the trade read reads this week (see momentum.ts). */
+  momentum: Momentum
 }
 
 /** Remaining regular-season pairings, one row per game. */
@@ -161,5 +164,7 @@ export const buildModels = (data: LeagueData, analysis: Analysis, history: Histo
   // model's own value rather than zero, so a miss never looks like a free player.
   const perceived = data.consensus ? { ...Object.fromEntries(Object.entries(analysis.market).map(([id, v]) => [id, Math.max(0, v)])), ...perceivedValues(data.consensus, analysis.market) } : null
 
-  return { ...history, eloRated, forecast, forecastInput, perceived, expectedPast, faab: faabState(data, analysis) }
+  const momentum: Momentum = { form: analysis.form, teams: teamMoods(analysis.seasons, forecast?.sim, data.futureWeeks.length), market: analysis.tradeMarket }
+
+  return { ...history, eloRated, forecast, forecastInput, perceived, expectedPast, faab: faabState(data, analysis), momentum }
 }

@@ -3,7 +3,8 @@ import { THEMES, themeById, type Scheme } from '../lib/themes'
 import { useFantasy } from './FantasyContext'
 import { SECTIONS, sectionCode, type SectionKey } from './Shell'
 import { Swatch, type Density } from './ThemePicker'
-import { useTradeDock } from './TradeDock'
+import { useOpenTrades, useTradeDock } from './TradeDock'
+import { dealSummary } from '../lib/deal'
 import { TradeIcon } from './icons'
 import { Avatar, PlayerAvatar, cx, fmt, ownerLabel, shortcutLabel } from './ui'
 
@@ -132,6 +133,7 @@ const CommandPalette = ({
 }) => {
   const { data, analysis, go, openPlayer } = useFantasy()
   const dock = useTradeDock()
+  const trades = useOpenTrades()
   const current = themeById(theme)
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
@@ -192,13 +194,26 @@ const CommandPalette = ({
     )
     // The builder is a panel over any page now, not a Trades tab, so it opens straight from here.
     if (dock)
-      items.push({ id: 'build', group: 'Actions', label: 'Build a trade', keywords: 'trade builder deal offer', icon: <TradeIcon size={14} />, weight: 2, run: () => dock.open() })
+      items.push({ id: 'build', group: 'Actions', label: 'Build a trade', keywords: 'trade builder deal offer new', icon: <TradeIcon size={14} />, weight: 2, run: () => dock.open() })
+    // Each trade already open in the dock, to go straight back to.
+    if (dock && analysis.myRosterId != null)
+      trades.forEach((t, i) =>
+        items.push({
+          id: `trade:${t.id}`,
+          group: 'Actions',
+          label: `Open trade ${i + 1}: ${dealSummary(t.deal, analysis.myRosterId!, (r) => analysis.teamById[r]?.name ?? `#${r}`)}`,
+          keywords: 'trade builder deal minimized',
+          icon: <TradeIcon size={14} />,
+          weight: 2,
+          run: () => dock.openTrade(t.id),
+        }),
+      )
     items.push({ id: 'tour', group: 'Actions', label: 'Replay the tour', keywords: 'help guide onboarding intro walkthrough', run: onTour })
     items.push({ id: 'reload', group: 'Actions', label: `Reload from ${source}`, keywords: 'refresh sync', hint: 'R', run: onReload })
     for (const l of leagues)
       if (l.id !== data.league.league_id) items.push({ id: `league:${l.id}`, group: 'Actions', label: `Switch league: ${l.name}`, keywords: 'league', run: () => onLeague(l.id) })
     return items
-  }, [analysis, go, onTheme, onScheme, current, scheme, density, onDensity, onReload, source, onTour, leagues, onLeague, data.league.league_id, dock])
+  }, [analysis, go, onTheme, onScheme, current, scheme, density, onDensity, onReload, source, onTour, leagues, onLeague, data.league.league_id, dock, trades])
 
   // Players worth finding: anyone rostered here or with a value or a projection ahead.
   const pool = useMemo(

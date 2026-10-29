@@ -56,7 +56,7 @@ export const useTradeRead = () => {
   const faab = data.tradeFaab ? models.faab : null
   return useCallback(
     (idea: TradeIdea, graded = true) => {
-      const base = acceptRead(idea, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, faab)
+      const base = acceptRead(idea, analysis.myRosterId ?? -1, models.behavior, models.perceived, analysis.currency, faab, models.momentum)
       return graded ? grades.apply(base, idea) : base
     },
     [analysis, models, grades, faab],

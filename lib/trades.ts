@@ -580,6 +580,12 @@ export type TradeSearchInput = {
   currency?: Currency
   /** Replacement level per position: the lineup floor any owner can reach via waivers. */
   floor?: WaiverFloor
+  /**
+   * How the room's price for a player moves off his last game or two (momentum.ts): below 1 off a dud, above 1
+   * off a spike. Deals that buy the first and sell the second climb the search and the list a little; prices
+   * and the value filters stay on `tradeMarket`, so a card's numbers match the builder's.
+   */
+  form?: Record<string, number>
   config?: Partial<TradeConfig>
   /** Optional hook for inspecting the search. */
   onFunnel?: (f: TradeFunnel) => void
@@ -761,8 +767,26 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
    * the fair band (either way), and a small charge per extra body so a piece
    * has to earn its place.
    */
-  const objective = (my: number, their: number, imbalance: number, size: number) =>
-    my + 0.3 * Math.min(their, my) - 2.5 * Math.max(0, cfg.minTheirGain - their) - 0.6 * imbalance - 0.15 * Math.max(0, size - 2)
+  const objective = (my: number, their: number, imbalance: number, size: number, edge = 0) =>
+    my + 0.3 * Math.min(their, my) - 2.5 * Math.max(0, cfg.minTheirGain - their) - 0.6 * imbalance - 0.15 * Math.max(0, size - 2) + 0.3 * edge
+
+  // Buying a player the room has marked down off a dud, or selling one it has marked up off a spike, is value
+  // the price does not show. Per player, in trade-value points: what you save getting him, or gain sending him.
+  // Bounded, so it breaks near-ties rather than making a deal.
+  const form = input.form ?? {}
+  const edgeGet: Record<string, number> = {}
+  const edgeGive: Record<string, number> = {}
+  for (const id of Object.keys(form)) {
+    const now = { [id]: Math.max(0, market[id] ?? 0) * form[id] }
+    edgeGet[id] = valueOf([id], true) - tradeValue([id], now, input.currency, true)
+    edgeGive[id] = tradeValue([id], now, input.currency, false) - valueOf([id], false)
+  }
+  const edgeOf = (give: string[], get: string[]) => {
+    let e = 0
+    for (const id of get) e += edgeGet[id] ?? 0
+    for (const id of give) e += edgeGive[id] ?? 0
+    return Math.max(-2, Math.min(2, e))
+  }
 
   const ideas: TradeIdea[] = []
 
@@ -782,7 +806,7 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
       const their = screen.total(applyTrade(them.players, get, give, capacity, pts)) - theirScreenBase
       const ask = valueOf(get, true) - valueOf(give, false)
       const imbalance = valueImbalance(valueOf(get, true), valueOf(give, false), cfg)
-      const state = { give, get, my, their, ask, imbalance, objective: objective(my, their, imbalance, give.length + get.length) }
+      const state = { give, get, my, their, ask, imbalance, objective: objective(my, their, imbalance, give.length + get.length, edgeOf(give, get)) }
       seen.set(key, state)
       // Anything within a point of the gain bars goes to the exact pass: the
       // screen misses in both directions by up to a point or so. The value
@@ -860,7 +884,7 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   // sharing most of its players with one already chosen has to be clearly better.
   const ranked = ideas
     .filter((i) => !padded(i))
-    .sort((a, b) => b.myGain - a.myGain || b.mutual - a.mutual)
+    .sort((a, b) => b.myGain + 0.25 * edgeOf(b.give, b.get) - (a.myGain + 0.25 * edgeOf(a.give, a.get)) || b.mutual - a.mutual)
   const chosen: TradeIdea[] = []
   const perPartner = new Map<number, number>()
   const overlap = (a: TradeIdea, b: TradeIdea) => {

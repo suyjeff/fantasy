@@ -10,6 +10,7 @@ import { BuildIcon } from './icons'
 import { InsightMark } from './InsightMark'
 import { useFantasy, useTradeRead } from './FantasyContext'
 import { PRICING_VERSION } from '../lib/currency'
+import { formText } from '../lib/momentum'
 import { GRADE_LABEL, WHY_LABEL, ideaKey, type Grade, type GradeWhy } from '../lib/grades'
 import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, Segmented, WeekBars, cx, fmtSigned, isOut, pct, simOdds } from './ui'
 
@@ -29,13 +30,16 @@ const WASH: Record<'pos' | 'neg' | 'warn' | 'none', string> = {
   none: 'bg-ff-panel',
 }
 
-const PlayerLine = ({ id, data, analysis, notes }: { id: string; data: LeagueData; analysis: Analysis; notes?: boolean }) => {
+const PlayerLine = ({ id, data, analysis, notes, side }: { id: string; data: LeagueData; analysis: Analysis; notes?: boolean; side: 'give' | 'get' }) => {
   const p = data.players[id]
   const ctx = data.context[id]
   const perWeek = analysis.horizon.perWeek[id]
   const play = ctx?.play
   const ecr = data.consensus?.byId[id]
   const out = isOut(p?.injury)
+  // Recent form, marked only where it favours you: a player you get off a dud, one you send off a spike.
+  const form = analysis.form[id]
+  const moment = form && (side === 'get' ? form.kind === 'buy-low' : form.kind === 'sell-high') ? form : null
   return (
     <div className="flex items-center gap-2.5 py-1.5">
       <PlayerAvatar id={id} player={p} size={34} />
@@ -43,6 +47,14 @@ const PlayerLine = ({ id, data, analysis, notes }: { id: string; data: LeagueDat
         <div className="flex items-center gap-1.5">
           <span className="truncate text-[13.5px] font-medium text-ff-text">{p?.name ?? id}</span>
           {p?.injury && <span className={cx('shrink-0 font-mono text-[9.5px] font-semibold uppercase', out ? 'text-ff-neg' : 'text-ff-warn')}>{p.injury.slice(0, 3)}</span>}
+          {moment && (
+            <span
+              className="shrink-0 cursor-help font-mono text-[9.5px] font-semibold uppercase text-ff-pos"
+              title={`${formText(moment)[0].toUpperCase()}${formText(moment).slice(1)}. ${moment.kind === 'buy-low' ? 'His outlook holds, but the room prices him off it' : 'His outlook has not moved, but the room prices him off it'}.`}
+            >
+              {moment.kind === 'buy-low' ? 'buy low' : 'sell high'}
+            </span>
+          )}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-mono text-[10.5px] text-ff-muted">
           <span className="font-semibold text-ff-text2">{p?.pos}</span>
@@ -232,6 +244,7 @@ const TradeCard = ({
   const read = useMemo(() => grades.apply(base, idea), [grades, base, idea])
   const lev = useLeverage(idea)
   const odds = models.forecast?.sim[idea.partnerId]
+  const mood = models.momentum.teams[idea.partnerId]
   const need = analysis.needs[idea.partnerId]?.worstPos
 
   // Why they would (or would not) say yes, strongest first: what the deal does for them, then who they are.
@@ -262,6 +275,11 @@ const TradeCard = ({
                   {season.ties ? `-${season.ties}` : ''}
                 </span>
               )}
+              {mood && mood.urgency !== 0 && (
+                <span className={mood.streak > 0 ? 'text-ff-pos' : 'text-ff-neg'} title={mood.text ?? undefined}>
+                  · {mood.streak > 0 ? `W${mood.streak}` : `L${-mood.streak}`}
+                </span>
+              )}
               {odds && <span>· PO {simOdds(odds, 'playoffs')}</span>}
               {need && <span>· needs {need}</span>}
             </div>
@@ -281,7 +299,7 @@ const TradeCard = ({
         <div className="min-w-0 border-b border-ff-line px-3 pb-1.5 pt-2 sm:border-b-0 sm:border-r">
           <div className="ff-label">You send</div>
           {idea.give.map((id) => (
-            <PlayerLine key={id} id={id} data={data} analysis={analysis} />
+            <PlayerLine key={id} id={id} data={data} analysis={analysis} side="give" />
           ))}
           {read.faab != null && models.faab && data.tradeFaab && (
             <div className="flex items-center gap-2.5 py-1.5" title="Sleeper trades can carry FAAB. This much makes the deal read as fair to them without giving up another player.">
@@ -298,7 +316,7 @@ const TradeCard = ({
         <div className="min-w-0 px-3 pb-1.5 pt-2">
           <div className="ff-label">You get</div>
           {idea.get.map((id) => (
-            <PlayerLine key={id} id={id} data={data} analysis={analysis} notes />
+            <PlayerLine key={id} id={id} data={data} analysis={analysis} notes side="get" />
           ))}
         </div>
       </div>

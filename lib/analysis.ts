@@ -1,5 +1,6 @@
 import { tradeCurrency, tradeMarket, type Currency } from './currency'
 import { startingSlots, type Slot } from './lineup'
+import { playerForms, type PlayerForm } from './momentum'
 import {
   buildTeamSeasons,
   buildTeamWeeks,
@@ -79,6 +80,11 @@ export type Analysis = {
   capacity: number
   /** How people price players in a trade: stars dear, streamers cheap, drafted players dearer (see currency.ts). */
   currency: Currency
+  /**
+   * Players whose last game or two sits well off what was expected of them while their outlook holds: buy-lows
+   * and sell-highs, with the price move the room makes on them (see momentum.ts).
+   */
+  form: Record<string, PlayerForm>
 }
 
 export const teamDisplayName = (user: SleeperUser | undefined, rosterId: number) =>
@@ -153,6 +159,17 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
     transactions: data.transactions,
     consensus: data.consensus,
   })
+  const form = playerForms({
+    players,
+    weeks: regularWeeks,
+    weekPoints,
+    projections: data.pastProjections,
+    forward: horizon.perActive,
+    context: data.context,
+    usage: data.usage,
+    // Only this season's own games say anything about how a player is being priced this week.
+    current: data.valueSeason === league.season && !data.pointsSource.startsWith('proxy') && data.horizonSource === 'projections',
+  })
 
   return {
     slots,
@@ -178,6 +195,7 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
     needs,
     capacity,
     currency,
+    form,
   }
 }
 

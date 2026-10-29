@@ -1,237 +1,239 @@
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import { dealActive, dealFromIdea, dealSummary, emptyDeal, type Deal } from '../lib/deal'
+import { dealActive, dealFromIdea, dealSummary, type Deal } from '../lib/deal'
+import * as dock from '../lib/dock'
+import { MAX_TRADES, type DockState, type DockStep, type DockTrade } from '../lib/dock'
 import type { TradeIdea } from '../lib/trades'
 import { useFantasy } from './FantasyContext'
 import { TradeIcon } from './icons'
 import { useModal } from './Sheet'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
-import TradeBuilder, { BuilderHeader, CLOSE, Glyph, useDealPricing, type BuilderStep, type DealUpdate } from './TradeBuilder'
+import TradeBuilder, { BuilderHeader, CLOSE, Glyph, headline, useDealPricing, useDealRead, type DealUpdate } from './TradeBuilder'
 import { cx, fmtSigned, reducedMotion, useMedia, usePhone } from './ui'
 
-// The trade builder's home: one deal for the whole app, kept above the pages so it survives being minimized and
-// moving between sections. Open, it is a sheet from the bottom on a phone and a large dialog on a wide screen;
-// minimized, a bar docked above the phone's tab bar or a card in the bottom-right corner. Anything that builds a
-// deal ("Open in builder" on a trade card, the Build a trade buttons, an old #trades/builder link) opens it here.
+// The trade builder's home: up to three trades for the whole app, kept above the pages so they survive being
+// minimized and moving between sections. One is open at a time: a sheet from the bottom on a phone, a large dialog
+// on a wide screen. The rest are minimized: bars stacked above the phone's tab bar, or cards side by side in the
+// bottom-right corner. Anything that builds a deal ("Open in builder" on a trade card, the Build a trade buttons, an
+// old #trades/builder link) opens it here, as a trade of its own. The list itself, and what each action does to it,
+// is lib/dock.
+//
+// Two hooks read it. useTradeDock: the actions and the dock's mode, steady while a trade is edited (so a page that
+// only opens trades does not re-render on every tap in one). useOpenTrades: the trades themselves, for anything
+// that shows or compares them.
 
-type Mode = 'closed' | 'open' | 'min'
+export type { Deal } from '../lib/deal'
+export { MAX_TRADES }
 
-/** A deal as the builder held it, to put back. */
-type Snapshot = { deal: Deal; step: BuilderStep; view: number; mode: Mode }
-/**
- * What the last throwaway action took, so it can be undone: closing the builder on a deal, opening a suggested
- * trade over a draft, or clearing the players. Acting at once and offering the way back beats asking first.
- */
-type Undo = { kind: 'discarded' | 'replaced' | 'cleared'; snap: Snapshot }
+/** A trade open in the dock, as the rest of the app sees it. */
+export type OpenTrade = {
+  id: string
+  deal: Deal
+  step: DockStep
+  /** The one expanded; the rest are minimized. */
+  open: boolean
+}
 
 export type TradeDockApi = {
-  mode: Mode
-  /** Open the builder: with this deal (replacing the one in it), or with whatever it holds. */
-  open: (deal?: Deal, step?: BuilderStep) => void
+  /** 'open': a trade is showing; 'min': trades are open, all minimized; 'closed': none. */
+  mode: 'open' | 'min' | 'closed'
+  /** How many trades are open (at most `limit`). */
+  count: number
+  limit: number
+  /**
+   * Start a trade: with this deal (at the review when it has something in it), or a blank one. The same deal
+   * already open is brought up instead; past the limit, the trade least recently touched gives way, with an undo.
+   */
+  open: (deal?: Deal, step?: DockStep) => void
   /** Open a suggested trade in the builder, priced, at the review. */
   openIdea: (idea: TradeIdea) => void
+  /** Bring up a trade already open (by `OpenTrade.id`); the one showing minimizes. */
+  openTrade: (id: string) => void
   minimize: () => void
-  /** Close and drop the deal; a deal with anything in it can be brought back from the notice that follows. */
-  close: () => void
+  /** Close a trade (the one showing, by default). One with anything in it can be brought back from the notice. */
+  close: (id?: string) => void
   /** The "Trade discarded · Undo" notice is up (the phone's build button steps aside for it). */
   toast: boolean
 }
 
 const DockCtx = createContext<TradeDockApi | null>(null)
+const TradesCtx = createContext<readonly OpenTrade[]>([])
 /** The builder's dock, or null where there is none (no roster of yours in this league). */
 export const useTradeDock = () => useContext(DockCtx)
+/** The trades open in the dock, in the order they were started. Changes with every edit to any of them. */
+export const useOpenTrades = () => useContext(TradesCtx)
 
-type State = {
-  league: string
-  deal: Deal
-  mode: Mode
-  step: BuilderStep
-  view: number
-  /** Focus the minimized form once it shows. */
-  focusMini: boolean
-  undo: Undo | null
-  /** The discard notice is showing (counted up, so a second discard restarts its timer). */
-  toast: number
-}
+type Set = (fn: (d: DockState) => DockState) => void
 
 export const TradeDockProvider = ({ children }: { children: ReactNode }) => {
   const { data, analysis } = useFantasy()
   const me = analysis.myRosterId
   const league = data.league.league_id
-  const fresh = useCallback((deal?: Deal): Pick<State, 'deal' | 'view'> => {
-    const d = deal ?? emptyDeal(me != null ? [me] : [])
-    return { deal: d, view: d.teams.find((t) => t !== me) ?? me ?? -1 }
-  }, [me])
-  const blank = (): State => ({ league, mode: 'closed', step: 'pick', focusMini: false, undo: null, toast: 0, ...fresh() })
-  const [state, setState] = useState<State>(blank)
-  // Another league's deal means nothing here: a switch starts over, closed.
-  const cur = state.league === league ? state : blank()
+  const [state, setState] = useState(() => ({ league, dock: dock.emptyDock() }))
+  // Another league's trades mean nothing here: a switch starts over, with none.
+  const cur = state.league === league ? state : { league, dock: dock.emptyDock() }
   if (cur !== state) setState(cur)
+  const d = cur.dock
+  const set: Set = useCallback((fn) => setState((s) => ({ ...s, dock: fn(s.dock) })), [])
 
-  const snap = (s: State): Snapshot => ({ deal: s.deal, step: s.step, view: s.view, mode: s.mode })
-  // An edit settles the last replace or clear (the notice goes with it); a discarded deal stays restorable until a
-  // new one has something in it.
-  const update: DealUpdate = useCallback(
-    (fn) =>
-      setState((s) => {
-        const deal = fn(s.deal)
-        const undo = s.undo?.kind === 'discarded' && !dealActive(deal) ? s.undo : null
-        return { ...s, deal, undo }
-      }),
-    [],
-  )
-  // Opening a deal over a draft with something in it replaces the draft, and says so with an undo.
-  const replace = (s: State, deal: Deal, step: BuilderStep): State => {
-    const over = s.mode !== 'closed' && dealActive(s.deal) && JSON.stringify(s.deal) !== JSON.stringify(deal)
-    // Otherwise the last undo is spent, except a discarded deal while the new one is still empty (as with an edit).
-    const kept = s.undo?.kind === 'discarded' && !dealActive(deal) ? s.undo : null
-    return { ...s, ...fresh(deal), mode: 'open', step, focusMini: false, toast: 0, undo: over ? { kind: 'replaced', snap: snap(s) } : kept }
-  }
-  const api = useMemo<TradeDockApi>(
-    () => ({
-      mode: cur.mode,
-      toast: cur.toast > 0 && cur.mode === 'closed',
-      open: (deal, step) =>
-        setState((s) =>
-          deal ? replace(s, deal, step ?? (dealActive(deal) ? 'review' : 'pick')) : { ...s, mode: 'open', step: step ?? s.step, focusMini: false, toast: 0 },
-        ),
-      openIdea: (idea) => {
-        if (me == null) return
-        setState((s) => replace(s, dealFromIdea(me, idea.partnerId, idea.give, idea.get), 'review'))
-      },
-      minimize: () => setState((s) => (s.mode === 'open' ? { ...s, mode: 'min', focusMini: true } : s)),
-      close: () =>
-        setState((s) => ({
-          ...s,
-          ...fresh(),
-          mode: 'closed',
-          step: 'pick',
-          focusMini: false,
-          // Closed on an empty deal, an earlier replace or clear has nothing left to put back into.
-          ...(dealActive(s.deal) ? { undo: { kind: 'discarded' as const, snap: snap(s) }, toast: s.toast + 1 } : { undo: s.undo?.kind === 'discarded' ? s.undo : null, toast: 0 }),
-        })),
-    }),
-    [cur.mode, cur.toast, fresh, me], // eslint-disable-line react-hooks/exhaustive-deps
-  )
-  const undo = useCallback(
+  const mode = dock.dockMode(d)
+  const toast = d.toast > 0 && mode !== 'open'
+  const count = d.trades.length
+  const api = useMemo<TradeDockApi | null>(
     () =>
-      setState((s) => {
-        if (!s.undo) return s
-        const { snap: back, kind } = s.undo
-        // From the notice after a discard, the deal comes back the way it was left (open or minimized); restored or
-        // undone inside the builder, it comes back in place and the builder stays open.
-        const mode = kind === 'discarded' && s.mode === 'closed' ? back.mode : s.mode
-        return { ...s, ...back, mode, focusMini: mode === 'min', undo: null, toast: 0 }
-      }),
-    [],
+      me == null
+        ? null
+        : {
+            mode,
+            count,
+            limit: MAX_TRADES,
+            toast,
+            open: (deal, step) => set((s) => dock.startTrade(s, me, deal, step)),
+            openIdea: (idea) => set((s) => dock.startTrade(s, me, dealFromIdea(me, idea.partnerId, idea.give, idea.get), 'review')),
+            openTrade: (id) => set((s) => dock.expand(s, id)),
+            minimize: () => set(dock.minimize),
+            close: (id) =>
+              set((s) => {
+                const t = id ?? s.open
+                return t ? dock.discard(s, t) : s
+              }),
+          },
+    [mode, count, toast, me, set],
   )
-  const dismiss = useCallback(() => setState((s) => ({ ...s, undo: s.undo?.kind === 'discarded' ? s.undo : null, toast: 0 })), [])
-  const clear = useCallback(() => setState((s) => (dealActive(s.deal) ? { ...s, deal: { ...s.deal, moves: [], faab: [] }, undo: { kind: 'cleared', snap: snap(s) } } : s)), [])
+  const trades = useMemo<readonly OpenTrade[]>(() => d.trades.map((t) => ({ id: t.id, deal: t.deal, step: t.step, open: t.id === d.open })), [d.trades, d.open])
 
-  const pricing = useDealPricing(cur.deal, me != null && cur.mode !== 'closed')
-  // What a discard, replace or clear just did, said once to screen readers from a region that is always there.
-  const u = cur.undo
-  const said = !u ? '' : u.kind === 'discarded' ? (cur.toast > 0 ? 'Trade discarded.' : '') : cur.mode !== 'closed' ? (u.kind === 'replaced' ? 'Replaced your draft.' : 'Players cleared.') : ''
   // The provider and the page under it keep their place whether or not you have a roster here, so a roster coming
   // or going never remounts the page.
   return (
-    <DockCtx.Provider value={me == null ? null : api}>
-      {children}
-      {me != null && (
-        <>
-          <p role="status" className="sr-only">
-            {said && `${said} Undo is available.`}
-          </p>
-          {cur.mode === 'min' && <div aria-hidden className="h-14 md:h-16" />}
-          <DockHost
-            state={cur}
-            api={api}
-            update={update}
-            pricing={pricing}
-            setStep={(step) => setState((s) => ({ ...s, step }))}
-            setView={(view) => setState((s) => ({ ...s, view }))}
-            undo={undo}
-            dismiss={dismiss}
-            clear={clear}
-          />
-        </>
-      )}
+    <DockCtx.Provider value={api}>
+      <TradesCtx.Provider value={me == null ? NONE : trades}>
+        {children}
+        {api && <DockHost state={d} set={set} api={api} />}
+      </TradesCtx.Provider>
     </DockCtx.Provider>
   )
 }
 
-type HostProps = {
-  state: State
-  api: TradeDockApi
-  update: DealUpdate
-  pricing: ReturnType<typeof useDealPricing>
-  setStep: (s: BuilderStep) => void
-  setView: (v: number) => void
-  undo: () => void
-  dismiss: () => void
-  clear: () => void
-}
+const NONE: readonly OpenTrade[] = []
 
-const DockHost = (props: HostProps) => {
-  const { state, api, pricing } = props
+type HostProps = { state: DockState; set: Set; api: TradeDockApi }
+
+const DockHost = ({ state, set, api }: HostProps) => {
   const { analysis } = useFantasy()
   const phone = usePhone()
   const me = analysis.myRosterId!
-  const mine = pricing.read?.sides.find((s) => s.rosterId === me)
-  const lineup = mine ? (mine.faab ? mine.net.mid : mine.lineup) : null
   const name = (t: number) => analysis.teamById[t]?.name ?? `#${t}`
-  // The lineup figure has places of its own (the tray, the verdict, the end of the minimized bar), so the line in
-  // the header and the bar leaves it out rather than have it cut off.
-  const line = dealSummary(state.deal, me, name)
-  const summary = dealSummary(state.deal, me, name, lineup)
-  if (state.mode === 'open') return phone ? <PhoneSheet {...props} summary={line} /> : <DesktopDialog {...props} summary={line} />
-  if (state.mode === 'closed' && state.toast > 0 && state.undo?.kind === 'discarded')
-    return <Discarded key={state.toast} line={dealSummary(state.undo.snap.deal, me, name)} phone={phone} onUndo={props.undo} onDismiss={props.dismiss} />
-  if (state.mode === 'min')
-    return (
-      <Minimized
-        summary={summary}
-        line={line}
-        lineup={lineup}
-        stale={pricing.stale}
-        phone={phone}
-        onOpen={() => api.open()}
-        onClose={api.close}
-        autoFocus={state.focusMini}
-      />
+  const open = dock.openTrade(state)
+  const u = state.undo
+  const minimized = state.trades.filter((t) => t.id !== state.open)
+  const toast = state.toast > 0 && !open && u?.kind === 'discarded' ? u : null
+  const undo = useCallback(() => set(dock.undoDock), [set])
+  const dismiss = useCallback(() => set(dock.dismissUndo), [set])
+
+  // What a discard, replace or clear just did, said once to screen readers from a region that is always there.
+  const said = !u
+    ? ''
+    : u.kind === 'discarded'
+      ? toast
+        ? 'Trade discarded.'
+        : ''
+      : open && (u.kind === 'replaced' ? u.by === open.id : u.trade.id === open.id)
+        ? u.kind === 'replaced'
+          ? `${MAX_TRADES} trades are open at most, so this one replaced your least recent.`
+          : 'Players cleared.'
+        : ''
+  // The minimized stack, and the notice after a discard in the place the trade had.
+  const items: ReactNode[] = minimized.map((t) => (
+    <Minimized
+      key={t.id}
+      trade={t}
+      label={state.trades.length > 1 ? `Trade ${state.trades.indexOf(t) + 1}` : 'Trade builder'}
+      phone={phone}
+      onOpen={() => api.openTrade(t.id)}
+      onClose={() => api.close(t.id)}
+      autoFocus={state.focus === t.id}
+    />
+  ))
+  if (toast)
+    items.splice(
+      Math.min(toast.index, items.length),
+      0,
+      <Discarded key={`gone-${state.toast}`} line={dealSummary(toast.trade.deal, me, name)} phone={phone} onUndo={undo} onDismiss={dismiss} />,
     )
-  return null
+  return (
+    <>
+      <p role="status" className="sr-only">
+        {said && `${said} Undo is available.`}
+      </p>
+      {/* Room at the end of the page for the stack, so it never covers the last of it. */}
+      {items.length > 0 && <div aria-hidden style={{ height: phone ? items.length * 56 : 76 }} />}
+      {items.length > 0 && (
+        <div
+          role="region"
+          aria-label={minimized.length > 1 ? 'Minimized trades' : 'Minimized trade'}
+          className={cx(
+            'fixed z-[31] flex',
+            phone
+              ? 'inset-x-0 bottom-[calc(48px+env(safe-area-inset-bottom))] flex-col shadow-[0_-10px_28px_-10px_rgba(0,0,0,0.5)]'
+              : 'bottom-4 right-4 max-w-[calc(100vw-32px)] items-end justify-end gap-2',
+          )}
+        >
+          {items}
+        </div>
+      )}
+      {open && (phone ? <PhoneSheet state={state} set={set} api={api} trade={open} /> : <DesktopDialog state={state} set={set} api={api} trade={open} />)}
+    </>
+  )
 }
 
-const Body = ({ state, update, pricing, setStep, setView, layout, summary, onMinimize, onClose, titleId, undo, dismiss, clear }: HostProps & { layout: 'steps' | 'split'; summary: string; onMinimize: () => void; onClose: () => void; titleId: string }) => {
+type OpenProps = HostProps & { trade: DockTrade }
+
+/** The trade showing, in the builder. Keyed by trade: switching trades starts its pricing and pickers afresh. */
+const Body = ({ state, set, api, trade, layout, titleId, onMinimize, onClose }: OpenProps & { layout: 'steps' | 'split'; titleId: string; onMinimize: () => void; onClose: () => void }) => {
   const { analysis } = useFantasy()
   const me = analysis.myRosterId!
   const name = (t: number) => analysis.teamById[t]?.name ?? `#${t}`
+  const id = trade.id
+  const update: DealUpdate = useCallback((fn) => set((s) => dock.editTrade(s, id, fn)), [set, id])
+  const setStep = useCallback((step: DockStep) => set((s) => dock.setTradeStep(s, id, step)), [set, id])
+  const setView = useCallback((view: number) => set((s) => dock.setTradeView(s, id, view)), [set, id])
+  const clear = useCallback(() => set((s) => dock.clearTrade(s, id)), [set, id])
+  const undo = () => set(dock.undoDock)
+  const dismiss = () => set(dock.dismissUndo)
+  const pricing = useDealPricing(trade.deal, true)
   const u = state.undo
-  // In the builder: undo the replace or the clear just made, or (opened empty) bring back the deal last discarded.
-  const notice =
-    u && (u.kind !== 'discarded' || !dealActive(state.deal)) ? (
-      <UndoNotice
-        text={u.kind === 'replaced' ? 'Replaced your draft' : u.kind === 'cleared' ? 'Players cleared' : 'Discarded trade'}
-        detail={u.kind === 'cleared' ? null : dealSummary(u.snap.deal, me, name)}
-        action={u.kind === 'discarded' ? 'Restore' : 'Undo'}
-        onAction={undo}
-        onDismiss={dismiss}
-      />
-    ) : null
+  // In the builder: undo the replace or the clear this trade just had, or (opened empty) bring back the trade last
+  // discarded.
+  const notice = !u ? null : u.kind === 'replaced' && u.by === id ? (
+    <UndoNotice text={`${MAX_TRADES} trades at most: replaced`} detail={dealSummary(u.trade.deal, me, name)} action="Undo" onAction={undo} onDismiss={dismiss} />
+  ) : u.kind === 'cleared' && u.trade.id === id ? (
+    <UndoNotice text="Players cleared" detail={null} action="Undo" onAction={undo} onDismiss={dismiss} />
+  ) : u.kind === 'discarded' && !dealActive(trade.deal) ? (
+    <UndoNotice text="Discarded trade" detail={dealSummary(u.trade.deal, me, name)} action="Restore" onAction={undo} onDismiss={dismiss} />
+  ) : null
+  const n = state.trades.length
+  // The lineup figure has places of its own (the tray, the verdict, the minimized card), so the header's line
+  // leaves it out rather than have it cut off.
   return (
     <TradeBuilder
-      deal={state.deal}
+      deal={trade.deal}
       update={update}
       pricing={pricing}
-      step={state.step}
+      step={trade.step}
       setStep={setStep}
-      view={state.view}
+      view={trade.view}
       setView={setView}
       layout={layout}
       onClear={clear}
       header={
         <>
-          <BuilderHeader titleId={titleId} summary={summary} onMinimize={onMinimize} onClose={onClose} />
+          <BuilderHeader
+            titleId={titleId}
+            summary={dealSummary(trade.deal, me, name)}
+            place={n > 1 ? [state.trades.indexOf(trade) + 1, n] : null}
+            onNew={() => api.open()}
+            onMinimize={onMinimize}
+            onClose={onClose}
+          />
           {notice}
         </>
       }
@@ -256,8 +258,8 @@ const UndoNotice = ({ text, detail, action, onAction, onDismiss }: { text: strin
 )
 
 /** Phones: a tall sheet from the bottom. Swiping it down (or tapping above it) minimizes; × closes. */
-const PhoneSheet = (props: HostProps & { summary: string }) => {
-  const { api } = props
+const PhoneSheet = (props: OpenProps) => {
+  const { api, trade } = props
   const swipe = useRef<SwipeSheetHandle>(null)
   const panel = useRef<HTMLDivElement>(null)
   // What the slide away is for: a swipe or a tap outside minimizes, × closes.
@@ -293,14 +295,14 @@ const PhoneSheet = (props: HostProps & { summary: string }) => {
       <div className="flex h-3 shrink-0 items-end justify-center" aria-hidden>
         <span className="h-1 w-10 bg-ff-line2" />
       </div>
-      <Body {...props} layout="steps" titleId={titleId} onMinimize={() => leave('min')} onClose={() => leave('close')} />
+      <Body key={trade.id} {...props} layout="steps" titleId={titleId} onMinimize={() => leave('min')} onClose={() => leave('close')} />
     </SwipeSheet>
   )
 }
 
-/** Wide screens: a large dialog over the page. Minimizing shrinks it into the corner card it becomes. */
-const DesktopDialog = (props: HostProps & { summary: string }) => {
-  const { api } = props
+/** Wide screens: a large dialog over the page. Minimizing shrinks it toward the corner cards it joins. */
+const DesktopDialog = (props: OpenProps) => {
+  const { api, trade } = props
   // Wide enough for Pick and Review side by side.
   const wide = useMedia('(min-width: 1024px)')
   const root = useRef<HTMLDivElement>(null)
@@ -330,76 +332,70 @@ const DesktopDialog = (props: HostProps & { summary: string }) => {
           wide ? 'max-w-[1240px]' : 'max-w-[680px]',
         )}
       >
-        <Body {...props} layout={wide ? 'split' : 'steps'} titleId={titleId} onMinimize={() => leave('min')} onClose={() => leave('close')} />
+        <Body key={trade.id} {...props} layout={wide ? 'split' : 'steps'} titleId={titleId} onMinimize={() => leave('min')} onClose={() => leave('close')} />
       </div>
     </div>
   )
 }
 
-/** Where the minimized builder and the discard notice sit: a bar above the phone's tab bar, or a card in the corner. */
+/** One place in the minimized stack: a bar above the phone's tab bar, or a card in the corner, on the dock's ink. */
 const slot = (phone: boolean) =>
   cx(
-    'tb-mini fixed z-[31] flex items-stretch border border-ff-line2 bg-ff-panel',
-    phone ? 'inset-x-0 bottom-[calc(48px+env(safe-area-inset-bottom))] h-14 border-x-0 border-b-0 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] shadow-[0_-8px_24px_-8px_rgba(0,0,0,0.35)]' : 'bottom-4 right-4 h-[60px] w-[380px] max-w-[calc(100vw-32px)] shadow-[0_8px_28px_-6px_rgba(0,0,0,0.45)]',
+    'tb-mini tb-ink relative flex items-stretch',
+    phone
+      ? 'h-14 w-full border-t pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]'
+      : 'h-[60px] w-[300px] min-w-0 shrink border shadow-[0_10px_30px_-6px_rgba(0,0,0,0.55),0_2px_6px_rgba(0,0,0,0.25)]',
   )
 
+const INK_TONE = (v: number | null) => (v == null ? 'text-[color:var(--ink-muted)]' : v > 0.25 ? 'text-[color:var(--ink-pos)]' : v < -0.25 ? 'text-[color:var(--ink-neg)]' : 'text-[color:var(--ink-text)]')
+
 /**
- * The builder minimized. Phones: a bar docked just above the tab bar. Wide screens: a card in the bottom-right
- * corner. Either shows the deal in a line and reopens on a tap; × discards it.
+ * A minimized trade. Shows the deal in a line and your lineup change, reopens on a tap; × discards it (undoable).
  */
-const Minimized = ({
-  summary,
-  line,
-  lineup,
-  stale,
-  phone,
-  onOpen,
-  onClose,
-  autoFocus,
-}: {
-  summary: string
-  line: string
-  lineup: number | null
-  stale: boolean
-  phone: boolean
-  onOpen: () => void
-  onClose: () => void
-  autoFocus: boolean
-}) => {
+const Minimized = ({ trade, label, phone, onOpen, onClose, autoFocus }: { trade: DockTrade; label: string; phone: boolean; onOpen: () => void; onClose: () => void; autoFocus: boolean }) => {
+  const { analysis } = useFantasy()
+  const me = analysis.myRosterId!
+  const name = (t: number) => analysis.teamById[t]?.name ?? `#${t}`
+  // Priced once per deal and kept (TradeBuilder's useDealRead), so minimizing never prices a deal again.
+  const read = useDealRead(trade.deal)
+  const lineup = headline(read?.sides.find((s) => s.rosterId === me))
+  const line = dealSummary(trade.deal, me, name)
+  const what = label === 'Trade builder' ? 'the trade' : label
   const open = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (autoFocus) open.current?.focus({ preventScroll: true })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  const tone = lineup == null ? 'text-ff-muted' : lineup > 0.25 ? 'text-ff-pos' : lineup < -0.25 ? 'text-ff-neg' : 'text-ff-text'
+  }, [autoFocus])
   return (
-    <div
-      role="region"
-      aria-label="Trade builder, minimized"
-      className={slot(phone)}
-    >
-      <span aria-hidden className="absolute inset-x-0 -top-px h-[2px] bg-ff-accent" />
-      <button ref={open} type="button" onClick={onOpen} className="ff-press flex min-w-0 flex-1 items-center gap-2.5 pl-2.5 pr-2 text-left outline-none hover:bg-ff-raised focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ff-accent" aria-label={`Open the trade builder: ${summary}`}>
-        <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center border border-ff-accent/40 bg-ff-accent/10 text-ff-accent">
+    <div className={slot(phone)}>
+      <span aria-hidden className="absolute inset-x-0 -top-px h-[2px] bg-[color:var(--ink-accent)]" />
+      <button ref={open} type="button" onClick={onOpen} className="tb-ink-btn ff-press flex min-w-0 flex-1 items-center gap-2.5 pl-2.5 pr-2 text-left outline-none" aria-label={`Open ${what}: ${dealSummary(trade.deal, me, name, lineup)}`}>
+        <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center border border-[color:var(--ink-line)] text-[color:var(--ink-accent)]">
           <TradeIcon size={15} />
         </span>
         <span className="min-w-0 flex-1 leading-tight">
           <span className="flex items-center gap-1.5 whitespace-nowrap">
-            <span className="ff-label">Trade builder</span>
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--ink-muted)]">{label}</span>
             {/* The hint goes first when the bar is narrow (320px), so the label never wraps. */}
-            <span aria-hidden className="font-mono text-[10px] text-ff-muted max-[359px]:hidden">
-              {phone ? 'tap to open' : '↗ open'}
+            <span aria-hidden className="font-mono text-[10px] text-[color:var(--ink-muted)] max-[359px]:hidden">
+              {phone ? '· tap to open' : '↗'}
             </span>
           </span>
-          <span className="mt-0.5 block truncate text-[13px] text-ff-text">{line}</span>
+          <span className="mt-0.5 block truncate text-[13px]">{line}</span>
         </span>
         {lineup != null && (
-          <span className={cx('num shrink-0 text-right text-[15px] font-medium leading-none transition-opacity duration-150', tone, stale && 'opacity-50')}>
+          <span className={cx('num shrink-0 text-right text-[15px] font-medium leading-none', INK_TONE(lineup))}>
             {fmtSigned(lineup, 1)}
-            <span className="block pt-0.5 font-mono text-[9.5px] font-normal text-ff-muted">/wk</span>
+            <span className="block pt-0.5 font-mono text-[9.5px] font-normal text-[color:var(--ink-muted)]">/wk</span>
           </span>
         )}
       </button>
-      <button type="button" onClick={onClose} aria-label="Discard the trade" title="Discard the trade (you can undo)" className="ff-press flex w-11 shrink-0 items-center justify-center border-l border-ff-line text-ff-muted hover:bg-ff-raised hover:text-ff-neg">
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label={`Discard ${what}`}
+        title="Discard the trade (you can undo)"
+        className="tb-ink-btn ff-press flex w-11 shrink-0 items-center justify-center border-l border-[color:var(--ink-line)] text-[color:var(--ink-muted)] hover:text-[color:var(--ink-neg)]"
+      >
         <Glyph d={CLOSE} />
       </button>
     </div>
@@ -407,8 +403,8 @@ const Minimized = ({
 }
 
 /**
- * After a discard: a notice where the minimized builder sits, with the way back. It stays 8 seconds, held while a
- * pointer is over it or someone has moved focus into it, and the deal stays restorable from the builder after it goes.
+ * After a discard: a notice where the trade sat in the stack, with the way back. It stays 8 seconds, held while a
+ * pointer is over it or someone has moved focus into it, and the trade stays restorable from an empty one after it goes.
  */
 const Discarded = ({ line, phone, onUndo, onDismiss }: { line: string; phone: boolean; onUndo: () => void; onDismiss: () => void }) => {
   const undoRef = useRef<HTMLButtonElement>(null)
@@ -440,13 +436,13 @@ const Discarded = ({ line, phone, onUndo, onDismiss }: { line: string; phone: bo
       onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFocus(false)}
     >
       <p className="flex min-w-0 flex-1 flex-col justify-center pl-3 leading-tight">
-        <span className="text-[13px] font-medium text-ff-text">Trade discarded</span>
-        <span className="truncate font-mono text-[10.5px] text-ff-muted">{line}</span>
+        <span className="text-[13px] font-medium">Trade discarded</span>
+        <span className="truncate font-mono text-[10.5px] text-[color:var(--ink-muted)]">{line}</span>
       </p>
-      <button ref={undoRef} type="button" onClick={onUndo} className="ff-press shrink-0 px-4 text-[13.5px] font-medium text-ff-accent hover:bg-ff-raised focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent">
+      <button ref={undoRef} type="button" onClick={onUndo} className="tb-ink-btn ff-press shrink-0 px-4 text-[13.5px] font-medium text-[color:var(--ink-accent)]">
         Undo
       </button>
-      <button type="button" onClick={onDismiss} aria-label="Dismiss" title="Dismiss" className="ff-press flex w-11 shrink-0 items-center justify-center border-l border-ff-line text-ff-muted hover:bg-ff-raised hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent">
+      <button type="button" onClick={onDismiss} aria-label="Dismiss" title="Dismiss" className="tb-ink-btn ff-press flex w-11 shrink-0 items-center justify-center border-l border-[color:var(--ink-line)] text-[color:var(--ink-muted)]">
         <Glyph d={CLOSE} />
       </button>
     </div>

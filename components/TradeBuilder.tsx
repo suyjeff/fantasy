@@ -19,7 +19,7 @@ import { AddIcon, TradeIcon } from './icons'
 import { Disclosure } from './Disclosure'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
-import { Avatar, Dropdown, PlayerAvatar, WeekBars, cx, fmt, fmtSigned, pct, playerImage, reducedMotion } from './ui'
+import { Avatar, Button, Dropdown, PlayerAvatar, WeekBars, cx, fmt, fmtSigned, pct, playerImage, reducedMotion } from './ui'
 
 // The trade builder's body: pick the teams and the players, then review the deal priced for every side. On a phone
 // the two are steps of one sheet; on a wide screen they sit side by side. It holds no deal of its own: the dock
@@ -42,36 +42,63 @@ export type DealPricing = {
   unpriced: boolean
 }
 
-/**
- * Price a deal for every side. The pricing trails the deal (a deferred value), so a tap shows at once and the
- * numbers catch up a beat later rather than holding the tap back.
- */
-export const useDealPricing = (deal: Deal, on: boolean): DealPricing => {
+/** Prices already worked out, per deal, for the league data they were priced on: reopening a trade, or a minimized
+ * one showing its figure, never prices the same deal twice. */
+const priced = new WeakMap<Deal, { on: object; read: DealRead | null }>()
+
+/** Your side's figure, read first everywhere: lineup plus FAAB when FAAB moves, else the lineup alone. */
+export const headline = (side: DealSide | undefined) => (side ? (side.faab ? side.net.mid : side.lineup) : null)
+
+/** A deal priced for every side, or null when there is nothing to price (no weeks left, nothing moving). */
+export const useDealRead = (deal: Deal, on = true): DealRead | null => {
   const { data, analysis, models } = useFantasy()
-  const tradeRead = useTradeRead()
-  const deferred = useDeferredValue(deal)
-  const me = analysis.myRosterId ?? -1
   const rosters = useMemo(() => rostersOf(analysis), [analysis])
   // Only where trades can carry FAAB (not ESPN): otherwise the money is never priced.
   const faab = data.tradeFaab ? models.faab : null
-  const read = useMemo(
-    () =>
-      on && data.horizon.length && dealActive(deferred)
-        ? readDeal(deferred, {
-            slots: analysis.slots,
-            players: data.players,
-            horizon: data.horizon,
-            floor: analysis.horizonReplacement,
-            capacity: analysis.capacity,
-            pts: analysis.horizon.perWeek,
-            tradeMarket: analysis.tradeMarket,
-            rosters,
-            currency: analysis.currency,
-            faab,
-          })
-        : null,
-    [on, deferred, data.horizon, data.players, analysis, rosters, faab],
-  )
+  return useMemo(() => {
+    if (!on || !data.horizon.length || !dealActive(deal)) return null
+    const hit = priced.get(deal)
+    if (hit && hit.on === analysis) return hit.read
+    const read = readDeal(deal, {
+      slots: analysis.slots,
+      players: data.players,
+      horizon: data.horizon,
+      floor: analysis.horizonReplacement,
+      capacity: analysis.capacity,
+      pts: analysis.horizon.perWeek,
+      tradeMarket: analysis.tradeMarket,
+      rosters,
+      currency: analysis.currency,
+      faab,
+    })
+    // Kept against the analysis (shared by every caller, and new with new league data, which prices afresh).
+    priced.set(deal, { on: analysis, read })
+    return read
+  }, [on, deal, data.horizon, data.players, analysis, rosters, faab])
+}
+
+/** How long the figures may trail an edit before they are marked as catching up. */
+const LAG_MS = 250
+
+/**
+ * Price a deal for every side. The pricing trails the deal (a deferred value), so a tap shows at once and the
+ * numbers catch up a beat later rather than holding the tap back. They are marked stale only when that beat runs
+ * long: marking every edit dimmed the figures for a frame or two and brought them straight back, a flicker on each tap.
+ */
+export const useDealPricing = (deal: Deal, on: boolean): DealPricing => {
+  const { data, analysis } = useFantasy()
+  const tradeRead = useTradeRead()
+  const deferred = useDeferredValue(deal)
+  const me = analysis.myRosterId ?? -1
+  // Nothing priced yet (the first player in): price this deal now rather than show "Pricing…" for a frame first.
+  const read = useDealRead(dealActive(deferred) ? deferred : deal, on)
+  const behind = dealActive(deferred) && deferred !== deal
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (!behind) return setSlow(false)
+    const t = window.setTimeout(() => setSlow(true), LAG_MS)
+    return () => window.clearTimeout(t)
+  }, [behind])
   // Each other manager's read of their side, from the same read the suggested trades use.
   const accept = useMemo(() => {
     const out: Record<number, AcceptRead> = {}
@@ -102,7 +129,7 @@ export const useDealPricing = (deal: Deal, on: boolean): DealPricing => {
   }, [read, me, tradeRead])
   const reads = Object.values(accept)
   const odds = reads.length ? reads.reduce((a, r) => a * (r.index / 100), 1) : null
-  return { read, accept, odds, stale: deferred !== deal, unpriced: !data.horizon.length }
+  return { read, accept, odds, stale: behind && slow, unpriced: !data.horizon.length }
 }
 
 // ---- Small pieces ----
@@ -379,8 +406,9 @@ const Rosters = ({ deal, update, view, onView, cols }: { deal: Deal; update: Dea
     for (const t of deal.teams)
       for (const id of rosters[t] ?? []) {
         const img = new Image()
-        img.decoding = 'async'
         img.src = playerImage(id, data.players[id])
+        // Decoded ahead too, not only fetched: a list switched in then paints its faces in the first frame.
+        img.decode().catch(() => {})
       }
   }, [teamsKey, rosters]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -579,7 +607,53 @@ const InlinePicker = ({ team, deal, update, onDone }: { team: number; deal: Deal
   )
 }
 
-/** One team's side of the deal, editable in place: what it sends (×, redirect, add), what it gets, its FAAB, its read. */
+/**
+ * One line of a side, sent or received, and every line has the same parts: a 28px face (or a $ tile), what it is,
+ * then where it goes or comes from, then ×. Sends and gets read alike, so a side reads as two lists, not a form.
+ */
+const SideRow = ({ lead, children, where, onRemove, removeLabel }: { lead: ReactNode; children: ReactNode; where?: ReactNode; onRemove?: () => void; removeLabel?: string }) => (
+  // Where it goes wraps under the name when both cannot fit, rather than cut the name short.
+  <li className="tb-fade flex min-h-[48px] flex-wrap items-center gap-x-2.5 md:min-h-[44px]">
+    <span className="flex min-w-0 flex-1 basis-[10rem] items-center gap-2.5">
+      {lead}
+      <span className="min-w-0 flex-1">{children}</span>
+    </span>
+    <span className="ms-auto flex shrink-0 items-center gap-1">
+      {where}
+      {onRemove ? <RemoveButton label={removeLabel ?? 'Take it out'} onClick={onRemove} /> : <span aria-hidden className="w-10 md:w-8" />}
+    </span>
+  </li>
+)
+
+/** The square tile money sits on, the size of a face, so a FAAB line lines up with the players. */
+const DollarTile = ({ dashed }: { dashed?: boolean }) => (
+  <span aria-hidden className={cx('flex h-7 w-7 shrink-0 items-center justify-center border font-mono text-[12px]', dashed ? 'border-dashed border-ff-line2 text-ff-muted' : 'border-ff-line2 bg-ff-sunken text-ff-text2')}>
+    $
+  </span>
+)
+
+/** "to Team X" or "from Team X" where nothing is to be chosen: the same place and type as the picker. */
+const Where = ({ dir, team }: { dir: 'to' | 'from'; team: string }) => (
+  <span className="flex h-10 max-w-[148px] items-center gap-1 px-2 font-mono text-[11px] text-ff-muted md:h-7 md:px-1.5 md:text-[10.5px]">
+    {dir} <span className="truncate text-ff-text2" title={team}>{team}</span>
+  </span>
+)
+
+/** One direction of a side: its heading and tally, then the lines. */
+const Flow = ({ title, tally, children, tint }: { title: string; tally: string; children: ReactNode; tint?: boolean }) => (
+  <div className={cx('px-3 pb-2 pt-2.5', tint && 'bg-ff-sunken/50')}>
+    <div className="flex h-5 items-center justify-between gap-2">
+      <h4 className="ff-label">{title}</h4>
+      {tally && <span className="font-mono text-[10.5px] text-ff-muted">{tally}</span>}
+    </div>
+    <ul className="mt-1 divide-y divide-ff-line/70">{children}</ul>
+  </div>
+)
+
+const tallyOf = (players: number, dollars: number) =>
+  [players && `${players} player${players === 1 ? '' : 's'}`, dollars > 0 && `$${dollars}`].filter(Boolean).join(' + ')
+
+/** One team's side of the deal, editable in place: what it sends (×, where to, add more, FAAB), what it gets, its read. */
 const SideCard = ({
   side,
   deal,
@@ -604,10 +678,16 @@ const SideCard = ({
   const team = analysis.teamById[side.rosterId]
   const many = deal.teams.length > 2
   const out = deal.faab.find((x) => x.from === side.rosterId)
+  const others = deal.teams.filter((t) => t !== side.rosterId)
   const left = faab?.remaining[side.rosterId] ?? 0
   const tone = toneOf(side.net.mid)
-  const nameOf = (t: number) => (t === me ? 'you' : (analysis.teamById[t]?.name ?? ''))
+  const nameOf = (t: number) => (t === me ? 'You' : (analysis.teamById[t]?.name ?? ''))
   const band = accept ? bandTone(accept.band) : 'neutral'
+  const take = (id: string) => update((d) => ({ ...d, moves: d.moves.filter((m) => m.player !== id) }))
+  const faabTo = out?.to ?? others[0]
+  // What comes in, FAAB by who pays it (in a bigger deal it can come from more than one team).
+  const faabIn = deal.faab.filter((x) => x.to === side.rosterId && x.dollars > 0)
+  const sub = (id: string) => `${fmt(perWeek[id])}/wk`
 
   return (
     <section aria-label={mine ? 'Your side' : `${team?.name}'s side`} className="border border-ff-line bg-ff-panel">
@@ -648,94 +728,109 @@ const SideCard = ({
         </div>
       )}
 
-      <div className="px-3 py-2.5">
-        <div className="ff-label mb-1">{mine ? 'You send' : 'Sends'}</div>
-        {side.sends.length > 0 && (
-          <ul className="-mx-1 divide-y divide-ff-line/70">
-            {side.sends.map((id) => {
-              const to = deal.moves.find((m) => m.player === id)?.to
-              return (
-                // In a bigger trade the "to" picker wraps under the name when both cannot fit, rather than cut the name short.
-                <li key={id} className="tb-fade flex min-h-[48px] flex-wrap items-center gap-x-1.5 px-1 md:min-h-[40px]">
-                  <span className="min-w-0 flex-1 basis-[11rem]">
-                    <PlayerName player={players[id]} id={id} size={28} sub={`${fmt(perWeek[id])}/wk`} />
-                  </span>
-                  <span className="ml-auto flex shrink-0 items-center gap-1.5">
-                    {many && to != null && (
-                      <DestPicker label={`Send ${players[id]?.name} to`} value={to} teams={deal.teams.filter((t) => t !== side.rosterId)} onChange={(t) => update((d) => redirectPlayer(d, id, t))} />
-                    )}
-                    <RemoveButton label={`Take ${players[id]?.name} out`} onClick={() => update((d) => ({ ...d, moves: d.moves.filter((m) => m.player !== id) }))} />
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-        {!side.sends.length && !adding && <p className="pb-1 text-[12px] text-ff-muted">Nothing yet</p>}
+      <Flow title={mine ? 'You send' : 'Sends'} tally={tallyOf(side.sends.length, out?.dollars ?? 0)}>
+        {side.sends.map((id) => {
+          const to = deal.moves.find((m) => m.player === id)?.to
+          return (
+            <SideRow
+              key={id}
+              lead={null}
+              where={
+                many && to != null ? (
+                  <DestPicker label={`Send ${players[id]?.name} to`} value={to} teams={others} onChange={(t) => update((d) => redirectPlayer(d, id, t))} />
+                ) : null
+              }
+              onRemove={() => take(id)}
+              removeLabel={`Take ${players[id]?.name} out`}
+            >
+              <PlayerName player={players[id]} id={id} size={28} sub={sub(id)} />
+            </SideRow>
+          )
+        })}
         {adding ? (
-          <InlinePicker team={side.rosterId} deal={deal} update={update} onDone={() => setAdding(false)} />
+          <li className="py-1.5">
+            <InlinePicker team={side.rosterId} deal={deal} update={update} onDone={() => setAdding(false)} />
+          </li>
         ) : (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="ff-press mt-1.5 flex h-10 w-full min-w-0 items-center justify-center gap-1.5 border border-dashed border-ff-line2 px-2 text-[12.5px] text-ff-text2 hover:border-ff-text2 hover:text-ff-text md:h-8"
-          >
-            <AddIcon size={11} />
-            <span className="truncate">{mine ? 'Add one of yours' : `Add from ${team?.name ?? 'their roster'}`}</span>
-          </button>
+          <li>
+            {/* Shaped like a line of the list (a tile where the face goes), so adding reads as the next line. */}
+            <button type="button" onClick={() => setAdding(true)} className="ff-press group -mx-1 flex min-h-[48px] w-[calc(100%+8px)] items-center gap-2.5 px-1 text-left hover:bg-ff-raised md:min-h-[44px]">
+              <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center border border-dashed border-ff-line2 text-ff-muted group-hover:border-ff-text2 group-hover:text-ff-text">
+                <AddIcon size={12} />
+              </span>
+              <span className="min-w-0 truncate text-[13px] text-ff-text2 group-hover:text-ff-text">
+                {mine ? 'Add a player of yours' : `Add a player of theirs`}
+              </span>
+            </button>
+          </li>
         )}
-
         {faab && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[12px] text-ff-text2">
-            <span className="ff-label">{mine ? 'You add' : 'Adds'} FAAB</span>
-            <label className="flex h-10 items-center border border-ff-line bg-ff-bg focus-within:outline focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-ff-accent md:h-7">
-              <span className="pl-2 font-mono text-[11px] text-ff-muted">$</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                max={left}
-                value={out?.dollars || ''}
-                placeholder="0"
-                onChange={(e) => {
-                  const n = Math.max(0, Math.min(left, Math.round(Number(e.target.value) || 0)))
-                  // Its destination passed through, so clearing the field to type a new figure keeps where it goes.
-                  update((d) => setDealFaab(d, side.rosterId, n, d.faab.find((x) => x.from === side.rosterId)?.to))
-                }}
-                className="num h-full w-14 appearance-none bg-transparent px-1 text-[16px] text-ff-text outline-none [-moz-appearance:textfield] md:text-[12.5px] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                aria-label={mine ? 'You add FAAB' : `${team?.name} adds FAAB`}
-              />
+          <SideRow
+            lead={<DollarTile dashed={!out?.dollars} />}
+            where={
+              many ? (
+                <DestPicker
+                  label={`Send ${mine ? 'your' : `${team?.name}'s`} FAAB to`}
+                  value={faabTo}
+                  teams={others}
+                  onChange={(t) => update((d) => setDealFaab(d, side.rosterId, d.faab.find((x) => x.from === side.rosterId)?.dollars ?? 0, t))}
+                />
+              ) : (
+                <Where dir="to" team={nameOf(faabTo)} />
+              )
+            }
+            onRemove={out?.dollars ? () => update((d) => setDealFaab(d, side.rosterId, 0)) : undefined}
+            removeLabel="Take the FAAB out"
+          >
+            {/* A sentence with a blank in it: "Add FAAB $[  ] of $164". */}
+            <label className="flex flex-wrap items-center gap-x-1.5 text-[13px] text-ff-text2">
+              <span>Add FAAB</span>
+              <span className="flex h-10 items-center border border-ff-line2 bg-ff-bg focus-within:outline focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-ff-accent md:h-7">
+                <span aria-hidden className="pl-2 font-mono text-[11px] text-ff-muted">
+                  $
+                </span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={left}
+                  value={out?.dollars || ''}
+                  placeholder="0"
+                  onChange={(e) => {
+                    const n = Math.max(0, Math.min(left, Math.round(Number(e.target.value) || 0)))
+                    // Its destination passed through, so clearing the field to type a new figure keeps where it goes.
+                    update((d) => setDealFaab(d, side.rosterId, n, d.faab.find((x) => x.from === side.rosterId)?.to))
+                  }}
+                  className="num h-full w-14 appearance-none bg-transparent px-1 text-[16px] text-ff-text outline-none placeholder:text-ff-muted [-moz-appearance:textfield] md:w-12 md:text-[12.5px] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  aria-label={`${mine ? 'FAAB you add' : `FAAB ${team?.name} adds`}, of $${left} left`}
+                />
+              </span>
+              <span aria-hidden className="font-mono text-[11px] text-ff-muted">
+                of ${left}
+              </span>
             </label>
-            <span className="font-mono text-[10.5px] text-ff-muted">of ${left}</span>
-            {many && (
-              <DestPicker
-                label={`Send ${team?.name}'s FAAB to`}
-                value={out?.to ?? deal.teams.find((t) => t !== side.rosterId)!}
-                teams={deal.teams.filter((t) => t !== side.rosterId)}
-                onChange={(t) => update((d) => setDealFaab(d, side.rosterId, d.faab.find((x) => x.from === side.rosterId)?.dollars ?? 0, t))}
-              />
-            )}
-          </div>
+          </SideRow>
         )}
+      </Flow>
 
-        {(side.receives.length > 0 || side.faab > 0) && (
-          <div className="mt-2.5">
-            <div className="ff-label mb-1">{mine ? 'You get' : 'Gets'}</div>
-            <ul className="flex flex-wrap gap-1">
-              {side.receives.map((id) => {
-                const from = deal.moves.find((m) => m.player === id)?.from
-                return (
-                  <li key={id} className="flex h-8 max-w-full items-center gap-1.5 border border-ff-line bg-ff-sunken pl-1 pr-2 text-[12px] text-ff-text">
-                    <PlayerAvatar id={id} player={players[id]} size={22} />
-                    <span className="truncate">{players[id]?.name}</span>
-                    {many && from != null && <span className="shrink-0 font-mono text-[10px] text-ff-muted">from {nameOf(from)}</span>}
-                  </li>
-                )
-              })}
-              {side.faab > 0 && <li className="flex h-8 items-center border border-ff-line bg-ff-sunken px-2 font-mono text-[12px] text-ff-text">+${side.faab} FAAB</li>}
-            </ul>
-          </div>
-        )}
+      <div className="border-t border-ff-line">
+        <Flow title={mine ? 'You get' : 'Gets'} tally={tallyOf(side.receives.length, faabIn.reduce((a, x) => a + x.dollars, 0))} tint>
+          {side.receives.map((id) => {
+            const from = deal.moves.find((m) => m.player === id)?.from
+            return (
+              <SideRow key={id} lead={null} where={many && from != null ? <Where dir="from" team={nameOf(from)} /> : null} onRemove={() => take(id)} removeLabel={`Take ${players[id]?.name} out`}>
+                <PlayerName player={players[id]} id={id} size={28} sub={sub(id)} />
+              </SideRow>
+            )
+          })}
+          {faabIn.map((x) => (
+            <SideRow key={`faab-${x.from}`} lead={<DollarTile />} where={many ? <Where dir="from" team={nameOf(x.from)} /> : null}>
+              <span className="num text-[13px] text-ff-text">${x.dollars}</span>
+              <span className="ms-1.5 font-mono text-[10.5px] text-ff-muted">FAAB</span>
+            </SideRow>
+          ))}
+          {!side.receives.length && !faabIn.length && <li className="py-2 text-[12.5px] text-ff-muted">Nothing yet</li>}
+        </Flow>
       </div>
 
       {!mine && (side.cuts.length > 0 || side.problems.length > 0) && (
@@ -807,8 +902,8 @@ const Review = ({ deal, update, pricing, onPick, split }: { deal: Deal; update: 
 const STEPS = ['pick', 'review'] as const
 
 /**
- * The step switch under a phone header: Pick, then Review, with what is moving counted. One tab stop; the arrows,
- * Home and End move between the two.
+ * The step switch under a phone header: Pick, then Review, with what is moving counted in words on the Review tab
+ * ("Review · 3 moving"). One tab stop; the arrows, Home and End move between the two.
  */
 const StepTabs = ({ step, setStep, count, ids }: { step: BuilderStep; setStep: (s: BuilderStep) => void; count: number; ids: string }) => {
   const list = useRef<HTMLDivElement>(null)
@@ -822,7 +917,7 @@ const StepTabs = ({ step, setStep, count, ids }: { step: BuilderStep; setStep: (
   }
   return (
     <div ref={list} role="tablist" aria-label="Steps" onKeyDown={onKey} className="grid shrink-0 grid-cols-2 border-b border-ff-line">
-      {STEPS.map((s, i) => (
+      {STEPS.map((s) => (
         <button
           key={s}
           id={`${ids}-${s}`}
@@ -833,17 +928,13 @@ const StepTabs = ({ step, setStep, count, ids }: { step: BuilderStep; setStep: (
           aria-controls={`${ids}-panel`}
           tabIndex={step === s ? 0 : -1}
           onClick={() => setStep(s)}
-          className={cx('relative flex h-11 items-center justify-center gap-2 text-[13px] focus-visible:-outline-offset-2', step === s ? 'font-medium text-ff-text' : 'text-ff-muted hover:text-ff-text2')}
+          className={cx('relative flex h-11 items-center justify-center gap-1.5 text-[13px] focus-visible:-outline-offset-2', step === s ? 'font-medium text-ff-text' : 'text-ff-muted hover:text-ff-text2')}
         >
-          <span aria-hidden className={cx('flex h-[18px] w-[18px] items-center justify-center border font-mono text-[10px]', step === s ? 'border-ff-text text-ff-text' : 'border-ff-line2')}>
-            {i + 1}
-          </span>
-          {s === 'pick' ? 'Pick' : 'Review'}
-          {/* Outlined in the accent rather than filled: light text on some themes' accent falls short of 4.5:1. */}
+          {s === 'pick' ? 'Pick players' : 'Review'}
           {s === 'review' && count > 0 && (
-            <span className="num min-w-[18px] border border-ff-accent px-1 text-center text-[10.5px] leading-[16px] text-ff-accent">
-              {count}
-              <span className="sr-only"> moving</span>
+            <span className={cx('num text-[12px] font-normal', step === s ? 'text-ff-text2' : 'text-ff-accent')}>
+              <span aria-hidden className="text-ff-muted">· </span>
+              {count} moving
             </span>
           )}
           <span aria-hidden className={cx('absolute inset-x-4 bottom-[-1px] h-[2px]', step === s ? 'bg-ff-text' : 'bg-transparent')} />
@@ -888,29 +979,30 @@ const Tray = ({ deal, pricing, onReview }: { deal: Deal; pricing: DealPricing; o
       ) : (
         <span className="min-w-0 flex-1 text-[12.5px] leading-snug text-ff-muted">{deal.teams.length < 2 ? 'Pick a partner to see their roster' : 'Pick players to put in the trade'}</span>
       )}
-      {ready ? (
-        <button type="button" onClick={onReview} className="ff-aqua ff-aqua-fab shrink-0">
-          Review <span aria-hidden>→</span>
-        </button>
-      ) : (
-        <button type="button" disabled className="flex h-11 shrink-0 items-center gap-1.5 border border-ff-line px-4 text-[13.5px] text-ff-muted">
-          Review <span aria-hidden>→</span>
-        </button>
-      )}
+      {/* A plain button: the tray is the builder's own furniture, not the page's one big action. */}
+      <Button onClick={onReview} disabled={!ready} className="!h-11 px-4 text-[13.5px] font-medium enabled:border-ff-line2 disabled:!opacity-100 disabled:text-ff-muted">
+        Review <span aria-hidden>→</span>
+      </Button>
     </div>
   )
 }
 
-/** Header: what this is, the deal in a line, and minimize and close. */
+/** Header: what this is (and which of the open trades), the deal in a line, then new, minimize and close. */
 export const BuilderHeader = ({
   summary,
   onMinimize,
   onClose,
+  onNew,
+  place,
   titleId,
 }: {
   summary: ReactNode
   onMinimize: () => void
   onClose: () => void
+  /** Start another trade beside this one (this one minimizes). */
+  onNew?: () => void
+  /** Which open trade this is, when there is more than one: [2, 3] is "2 of 3". */
+  place?: [number, number] | null
   titleId: string
 }) => (
   <header className="flex h-14 shrink-0 items-center gap-2.5 border-b border-ff-line pl-3 pr-1.5 md:pl-4 md:pr-2">
@@ -918,11 +1010,22 @@ export const BuilderHeader = ({
       <TradeIcon size={15} />
     </span>
     <div className="min-w-0 flex-1 leading-tight">
-      <h2 id={titleId} className="text-[15px] font-medium text-ff-text">
+      <h2 id={titleId} className="flex items-baseline gap-2 text-[15px] font-medium text-ff-text">
         Trade builder
+        {place && (
+          <span className="num shrink-0 text-[11px] font-normal text-ff-muted">
+            {place[0]} of {place[1]} open
+          </span>
+        )}
       </h2>
       <p className="truncate font-mono text-[10.5px] text-ff-muted">{summary}</p>
     </div>
+    {onNew && (
+      <button type="button" onClick={onNew} aria-label="Start another trade" title="Start another trade (this one is kept, minimized)" className="ff-press flex h-10 items-center gap-1.5 px-2.5 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text">
+        <AddIcon size={12} />
+        <span className="max-sm:sr-only">New</span>
+      </button>
+    )}
     <button type="button" onClick={onMinimize} aria-label="Minimize the builder" title="Minimize (Esc)" className="ff-press flex h-10 w-10 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-text">
       <Glyph d={MINIMIZE} />
     </button>
@@ -1047,7 +1150,7 @@ const TradeBuilder = ({
         <div className="flex h-[60px] shrink-0 items-center gap-2 border-t border-ff-line bg-ff-panel px-3">
           {/* Back to the first step, named as its tab is (the tray's "Review →" is the way forward). */}
           <button type="button" onClick={() => goStep('pick')} className="ff-press flex h-11 items-center gap-1.5 border border-ff-line2 px-3.5 text-[13px] text-ff-text hover:bg-ff-raised">
-            <span aria-hidden>←</span> Pick
+            <span aria-hidden>←</span> Pick players
           </button>
           <span className="min-w-0 flex-1 truncate text-right font-mono text-[11px] text-ff-muted">
             {pricing.odds != null && (
