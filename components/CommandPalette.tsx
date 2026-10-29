@@ -1,10 +1,10 @@
 import React, { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { dealSummary } from '../lib/deal'
 import { THEMES, themeById, type Scheme } from '../lib/themes'
 import { useFantasy } from './FantasyContext'
 import { SECTIONS, sectionCode, type SectionKey } from './Shell'
 import { Swatch, type Density } from './ThemePicker'
 import { useOpenTrades, useTradeDock } from './TradeDock'
-import { dealSummary } from '../lib/deal'
 import { TradeIcon } from './icons'
 import { Avatar, PlayerAvatar, cx, fmt, ownerLabel, shortcutLabel } from './ui'
 
@@ -34,6 +34,7 @@ const TABS: Partial<Record<SectionKey, [string, string][]>> = {
   ],
   trades: [
     ['suggested', 'Suggested trades'],
+    ['compare', 'Compare trades'],
     ['targets', 'Trade targets'],
     ['needs', 'League needs'],
     ['injuries', 'Injuries & roles'],

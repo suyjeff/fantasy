@@ -49,32 +49,77 @@ const priced = new WeakMap<Deal, { on: object; read: DealRead | null }>()
 /** Your side's figure, read first everywhere: lineup plus FAAB when FAAB moves, else the lineup alone. */
 export const headline = (side: DealSide | undefined) => (side ? (side.faab ? side.net.mid : side.lineup) : null)
 
-/** A deal priced for every side, or null when there is nothing to price (no weeks left, nothing moving). */
-export const useDealRead = (deal: Deal, on = true): DealRead | null => {
+/**
+ * A pricer for deals, steady for the league data it prices on: each deal priced once and kept (the `priced` cache),
+ * however many places show it.
+ */
+export const useDealReader = () => {
   const { data, analysis, models } = useFantasy()
   const rosters = useMemo(() => rostersOf(analysis), [analysis])
   // Only where trades can carry FAAB (not ESPN): otherwise the money is never priced.
   const faab = data.tradeFaab ? models.faab : null
   return useMemo(() => {
-    if (!on || !data.horizon.length || !dealActive(deal)) return null
-    const hit = priced.get(deal)
-    if (hit && hit.on === analysis) return hit.read
-    const read = readDeal(deal, {
-      slots: analysis.slots,
-      players: data.players,
-      horizon: data.horizon,
-      floor: analysis.horizonReplacement,
-      capacity: analysis.capacity,
-      pts: analysis.horizon.perWeek,
-      tradeMarket: analysis.tradeMarket,
-      rosters,
-      currency: analysis.currency,
-      faab,
-    })
-    // Kept against the analysis (shared by every caller, and new with new league data, which prices afresh).
-    priced.set(deal, { on: analysis, read })
-    return read
-  }, [on, deal, data.horizon, data.players, analysis, rosters, faab])
+    const read = (deal: Deal): DealRead | null => {
+      if (!data.horizon.length || !dealActive(deal)) return null
+      const hit = priced.get(deal)
+      if (hit && hit.on === analysis) return hit.read
+      const out = readDeal(deal, {
+        slots: analysis.slots,
+        players: data.players,
+        horizon: data.horizon,
+        floor: analysis.horizonReplacement,
+        capacity: analysis.capacity,
+        pts: analysis.horizon.perWeek,
+        tradeMarket: analysis.tradeMarket,
+        rosters,
+        currency: analysis.currency,
+        faab,
+      })
+      // Kept against the analysis (shared by every caller, and new with new league data, which prices afresh).
+      priced.set(deal, { on: analysis, read: out })
+      return out
+    }
+    return { read }
+  }, [data.horizon, data.players, analysis, rosters, faab])
+}
+
+/** A deal priced for every side, or null when there is nothing to price (no weeks left, nothing moving). */
+export const useDealRead = (deal: Deal, on = true): DealRead | null => {
+  const { read } = useDealReader()
+  return useMemo(() => (on ? read(deal) : null), [on, deal, read])
+}
+
+/**
+ * Each other manager's read of their side, from the same read the suggested trades use, and the odds that every one
+ * of them says yes (taken as independent). Shared by the builder and the comparison, so both quote the same odds.
+ */
+export const acceptOf = (read: DealRead | null, me: number, tradeRead: (idea: TradeIdea, graded?: boolean) => AcceptRead) => {
+  const accept: Record<number, AcceptRead> = {}
+  if (!read) return { accept, odds: null }
+  const mine = read.sides.find((s) => s.rosterId === me)
+  for (const s of read.sides) {
+    if (s.rosterId === me || (!s.receives.length && !s.sends.length && !s.faab)) continue
+    const idea: TradeIdea = {
+      partnerId: s.rosterId,
+      give: s.receives,
+      get: s.sends,
+      shape: s.sends.length === s.receives.length ? 'swap' : s.sends.length > s.receives.length ? 'depth' : 'consolidate',
+      myGain: mine?.lineup ?? 0,
+      theirGain: s.net.mid,
+      myCost: 0,
+      valueAsk: -s.value,
+      weeksBetter: s.weeksBetter,
+      weeks: s.perWeek.length,
+      fills: null,
+      myCuts: [],
+      theirCuts: s.cuts,
+      mutual: Math.min(mine?.lineup ?? 0, s.net.mid),
+      perWeek: [],
+    }
+    accept[s.rosterId] = tradeRead(idea, false)
+  }
+  const reads = Object.values(accept)
+  return { accept, odds: reads.length ? reads.reduce((a, r) => a * (r.index / 100), 1) : null }
 }
 
 /** How long the figures may trail an edit before they are marked as catching up. */
@@ -99,36 +144,7 @@ export const useDealPricing = (deal: Deal, on: boolean): DealPricing => {
     const t = window.setTimeout(() => setSlow(true), LAG_MS)
     return () => window.clearTimeout(t)
   }, [behind])
-  // Each other manager's read of their side, from the same read the suggested trades use.
-  const accept = useMemo(() => {
-    const out: Record<number, AcceptRead> = {}
-    if (!read) return out
-    const mine = read.sides.find((s) => s.rosterId === me)
-    for (const s of read.sides) {
-      if (s.rosterId === me || (!s.receives.length && !s.sends.length && !s.faab)) continue
-      const idea: TradeIdea = {
-        partnerId: s.rosterId,
-        give: s.receives,
-        get: s.sends,
-        shape: s.sends.length === s.receives.length ? 'swap' : s.sends.length > s.receives.length ? 'depth' : 'consolidate',
-        myGain: mine?.lineup ?? 0,
-        theirGain: s.net.mid,
-        myCost: 0,
-        valueAsk: -s.value,
-        weeksBetter: s.weeksBetter,
-        weeks: s.perWeek.length,
-        fills: null,
-        myCuts: [],
-        theirCuts: s.cuts,
-        mutual: Math.min(mine?.lineup ?? 0, s.net.mid),
-        perWeek: [],
-      }
-      out[s.rosterId] = tradeRead(idea, false)
-    }
-    return out
-  }, [read, me, tradeRead])
-  const reads = Object.values(accept)
-  const odds = reads.length ? reads.reduce((a, r) => a * (r.index / 100), 1) : null
+  const { accept, odds } = useMemo(() => acceptOf(read, me, tradeRead), [read, me, tradeRead])
   return { read, accept, odds, stale: behind && slow, unpriced: !data.horizon.length }
 }
 
@@ -611,10 +627,10 @@ const InlinePicker = ({ team, deal, update, onDone }: { team: number; deal: Deal
  * One line of a side, sent or received, and every line has the same parts: a 28px face (or a $ tile), what it is,
  * then where it goes or comes from, then ×. Sends and gets read alike, so a side reads as two lists, not a form.
  */
-const SideRow = ({ lead, children, where, onRemove, removeLabel }: { lead: ReactNode; children: ReactNode; where?: ReactNode; onRemove?: () => void; removeLabel?: string }) => (
+const SideRow = ({ lead, children, where, onRemove, removeLabel, wide }: { lead: ReactNode; children: ReactNode; where?: ReactNode; onRemove?: () => void; removeLabel?: string; /** Needs more room before what trails it fits beside it. */ wide?: boolean }) => (
   // Where it goes wraps under the name when both cannot fit, rather than cut the name short.
   <li className="tb-fade flex min-h-[48px] flex-wrap items-center gap-x-2.5 md:min-h-[44px]">
-    <span className="flex min-w-0 flex-1 basis-[10rem] items-center gap-2.5">
+    <span className={cx('flex min-w-0 flex-1 items-center gap-2.5', wide ? 'basis-[15.5rem]' : 'basis-[10rem]')}>
       {lead}
       <span className="min-w-0 flex-1">{children}</span>
     </span>
@@ -766,6 +782,7 @@ const SideCard = ({
         )}
         {faab && (
           <SideRow
+            wide
             lead={<DollarTile dashed={!out?.dollars} />}
             where={
               many ? (
@@ -783,7 +800,7 @@ const SideCard = ({
             removeLabel="Take the FAAB out"
           >
             {/* A sentence with a blank in it: "Add FAAB $[  ] of $164". */}
-            <label className="flex flex-wrap items-center gap-x-1.5 text-[13px] text-ff-text2">
+            <label className="flex items-center gap-x-1.5 whitespace-nowrap text-[13px] text-ff-text2">
               <span>Add FAAB</span>
               <span className="flex h-10 items-center border border-ff-line2 bg-ff-bg focus-within:outline focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-ff-accent md:h-7">
                 <span aria-hidden className="pl-2 font-mono text-[11px] text-ff-muted">
@@ -987,13 +1004,24 @@ const Tray = ({ deal, pricing, onReview }: { deal: Deal; pricing: DealPricing; o
   )
 }
 
-/** Header: what this is (and which of the open trades), the deal in a line, then new, minimize and close. */
+/** Set by a switch, read by the header that mounts for the trade switched to. */
+let switched = false
+
+/** One open trade, as the header's switcher shows it. */
+export type TradeTab = { id: string; label: number; line: string; current: boolean }
+
+/**
+ * Header: what this is (and which of the open trades), the deal in a line, then the switcher between open trades,
+ * new, minimize and close. `actions` sits before them (the compare toggle, where there is room for it).
+ */
 export const BuilderHeader = ({
   summary,
   onMinimize,
   onClose,
   onNew,
-  place,
+  tabs,
+  onSwitch,
+  actions,
   titleId,
 }: {
   summary: ReactNode
@@ -1001,39 +1029,92 @@ export const BuilderHeader = ({
   onClose: () => void
   /** Start another trade beside this one (this one minimizes). */
   onNew?: () => void
-  /** Which open trade this is, when there is more than one: [2, 3] is "2 of 3". */
-  place?: [number, number] | null
+  /** Every open trade, by number, when there is more than one. */
+  tabs?: TradeTab[] | null
+  onSwitch?: (id: string) => void
+  actions?: ReactNode
   titleId: string
-}) => (
-  <header className="flex h-14 shrink-0 items-center gap-2.5 border-b border-ff-line pl-3 pr-1.5 md:pl-4 md:pr-2">
-    <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center border border-ff-accent/40 bg-ff-accent/10 text-ff-accent">
-      <TradeIcon size={15} />
-    </span>
-    <div className="min-w-0 flex-1 leading-tight">
-      <h2 id={titleId} className="flex items-baseline gap-2 text-[15px] font-medium text-ff-text">
-        Trade builder
-        {place && (
-          <span className="num shrink-0 text-[11px] font-normal text-ff-muted">
-            {place[0]} of {place[1]} open
-          </span>
-        )}
-      </h2>
-      <p className="truncate font-mono text-[10.5px] text-ff-muted">{summary}</p>
-    </div>
-    {onNew && (
-      <button type="button" onClick={onNew} aria-label="Start another trade" title="Start another trade (this one is kept, minimized)" className="ff-press flex h-10 items-center gap-1.5 px-2.5 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text">
-        <AddIcon size={12} />
-        <span className="max-sm:sr-only">New</span>
+}) => {
+  const many = !!tabs && tabs.length > 1
+  const cur = tabs?.find((t) => t.current)
+  const list = useRef<HTMLDivElement>(null)
+  // Switching remounts the builder for the other trade, header and all, so the pressed tab's focus is put back on
+  // the new header's tab.
+  const go = (id: string) => {
+    switched = true
+    onSwitch?.(id)
+  }
+  useEffect(() => {
+    if (!switched) return
+    switched = false
+    list.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus({ preventScroll: true })
+  }, [])
+  // The switcher is one tab stop: arrows move along it (and switch), as the step and roster tabs do.
+  const onKey = (e: React.KeyboardEvent) => {
+    if (!tabs) return
+    const at = tabs.findIndex((t) => t.current)
+    const n = tabs.length
+    const i = e.key === 'ArrowRight' ? (at + 1) % n : e.key === 'ArrowLeft' ? (at - 1 + n) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1
+    if (i < 0) return
+    e.preventDefault()
+    if (i !== at) go(tabs[i].id)
+  }
+  return (
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-ff-line pl-3 pr-1.5 md:gap-2.5 md:pl-4 md:pr-2">
+      <span aria-hidden className={cx('h-8 w-8 shrink-0 items-center justify-center border border-ff-accent/40 bg-ff-accent/10 text-ff-accent', many ? 'hidden md:flex' : 'flex')}>
+        <TradeIcon size={15} />
+      </span>
+      <div className="min-w-0 flex-1 leading-tight">
+        <h2 id={titleId} className="truncate text-[15px] font-medium text-ff-text">
+          {many && cur ? `Trade ${cur.label}` : 'Trade builder'}
+        </h2>
+        <p className="truncate font-mono text-[10.5px] text-ff-muted">{summary}</p>
+      </div>
+      {actions}
+      {many && (
+        <div ref={list} role="tablist" aria-label="Open trades" onKeyDown={onKey} className="flex shrink-0 border border-ff-line">
+          {tabs!.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={t.current}
+              tabIndex={t.current ? 0 : -1}
+              aria-label={`Trade ${t.label}: ${t.line}`}
+              title={`Trade ${t.label}: ${t.line}`}
+              onClick={() => !t.current && go(t.id)}
+              className={cx(
+                'num relative flex h-9 w-9 items-center justify-center text-[13px] [&:not(:first-child)]:border-l [&:not(:first-child)]:border-ff-line md:h-8 md:w-8 md:text-[12.5px]',
+                t.current ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-muted hover:bg-ff-raised hover:text-ff-text',
+              )}
+            >
+              {t.label}
+              {t.current && <span aria-hidden className="absolute inset-x-0 -top-px h-[2px] bg-ff-accent" />}
+            </button>
+          ))}
+        </div>
+      )}
+      {onNew && (
+        <button
+          type="button"
+          onClick={onNew}
+          aria-label="Start another trade"
+          title="Start another trade (this one is kept, minimized)"
+          className={cx('ff-press flex h-10 shrink-0 items-center justify-center gap-1.5 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text', many ? 'w-10 md:w-auto md:px-2.5' : 'px-2.5')}
+        >
+          <AddIcon size={12} />
+          <span className={cx(many && 'max-md:sr-only')}>New</span>
+        </button>
+      )}
+      <button type="button" onClick={onMinimize} aria-label="Minimize the builder" title="Minimize (Esc)" className="ff-press flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-text">
+        <Glyph d={MINIMIZE} />
       </button>
-    )}
-    <button type="button" onClick={onMinimize} aria-label="Minimize the builder" title="Minimize (Esc)" className="ff-press flex h-10 w-10 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-text">
-      <Glyph d={MINIMIZE} />
-    </button>
-    <button type="button" onClick={onClose} aria-label="Close and discard the trade" title="Close and discard the trade (you can undo)" className="ff-press flex h-10 w-10 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-neg">
-      <Glyph d={CLOSE} />
-    </button>
-  </header>
-)
+      <button type="button" onClick={onClose} aria-label="Close and discard the trade" title="Close and discard the trade (you can undo)" className="ff-press flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-neg">
+        <Glyph d={CLOSE} />
+      </button>
+    </header>
+  )
+}
 
 /**
  * The builder. `steps`: Pick and Review as two steps of one panel, with a tray carrying the deal while picking
@@ -1050,6 +1131,7 @@ const TradeBuilder = ({
   layout,
   header,
   onClear,
+  reviewAction,
 }: {
   deal: Deal
   update: DealUpdate
@@ -1061,6 +1143,8 @@ const TradeBuilder = ({
   layout: BuilderLayout
   header: ReactNode
   onClear: () => void
+  /** An action for the review step's footer (the compare toggle, on a phone, where the header has no room for it). */
+  reviewAction?: ReactNode
 }) => {
   const { analysis } = useFantasy()
   const me = analysis.myRosterId
@@ -1152,13 +1236,16 @@ const TradeBuilder = ({
           <button type="button" onClick={() => goStep('pick')} className="ff-press flex h-11 items-center gap-1.5 border border-ff-line2 px-3.5 text-[13px] text-ff-text hover:bg-ff-raised">
             <span aria-hidden>←</span> Pick players
           </button>
-          <span className="min-w-0 flex-1 truncate text-right font-mono text-[11px] text-ff-muted">
+          <span className={cx('min-w-0 flex-1 truncate text-right font-mono text-[11px] text-ff-muted', reviewAction && 'max-[359px]:hidden')}>
             {pricing.odds != null && (
               <>
-                {oddsLabel(many).toLowerCase()} <span className={cx('num text-[12.5px]', TEXT[oddsTone(pricing.odds)])}>{pct(pricing.odds)}</span>
+                <span className={cx(reviewAction && 'max-md:hidden')}>{oddsLabel(many).toLowerCase()} </span>
+                <span className={cx('num text-[12.5px]', TEXT[oddsTone(pricing.odds)])}>{pct(pricing.odds)}</span>
+                {reviewAction && <span className="md:hidden"> yes</span>}
               </>
             )}
           </span>
+          {reviewAction}
         </div>
       )}
     </div>

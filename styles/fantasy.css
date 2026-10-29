@@ -1671,17 +1671,18 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   transition-duration: 140ms;
 }
 /* The minimized trades: an ink strip, darker than anything on the page in either mode, so they read as the dock's
-   and not the page's. Light themes take the theme's own text colour as the surface (an inverse); dark themes go
-   below their page colour toward black, with a brighter rim. Inks on it are mixed per mode to hold contrast. */
+   and not the page's. Light themes take the theme's own text colour, deepened, as the surface (an inverse); dark
+   themes go below their page colour toward black, with a brighter rim and a heavier shadow. Inks on it are mixed
+   per mode to hold 4.5:1 in every theme (accent 3:1, as an icon). */
 .ff .tb-ink {
-  --ink-bg: light-dark(rgb(var(--ff-text)), color-mix(in oklab, rgb(var(--ff-bg)) 55%, black));
-  --ink-hover: light-dark(color-mix(in oklab, rgb(var(--ff-text)) 86%, rgb(var(--ff-panel))), color-mix(in oklab, rgb(var(--ff-bg)) 82%, rgb(var(--ff-text))));
+  --ink-bg: light-dark(color-mix(in oklab, rgb(var(--ff-text)) 72%, black), color-mix(in oklab, rgb(var(--ff-bg)) 55%, black));
+  --ink-hover: light-dark(color-mix(in oklab, rgb(var(--ff-text)) 90%, rgb(var(--ff-panel))), color-mix(in oklab, rgb(var(--ff-bg)) 82%, rgb(var(--ff-text))));
   --ink-text: light-dark(rgb(var(--ff-panel)), rgb(var(--ff-text)));
   --ink-muted: light-dark(color-mix(in oklab, rgb(var(--ff-panel)) 68%, rgb(var(--ff-text))), rgb(var(--ff-muted)));
-  --ink-line: light-dark(color-mix(in oklab, rgb(var(--ff-panel)) 20%, rgb(var(--ff-text))), rgb(var(--ff-text) / 0.2));
-  --ink-accent: light-dark(color-mix(in oklab, rgb(var(--ff-accent)) 55%, white), rgb(var(--ff-accent)));
-  --ink-pos: light-dark(color-mix(in oklab, rgb(var(--ff-pos)) 55%, white), rgb(var(--ff-pos)));
-  --ink-neg: light-dark(color-mix(in oklab, rgb(var(--ff-neg)) 55%, white), rgb(var(--ff-neg)));
+  --ink-line: light-dark(color-mix(in oklab, rgb(var(--ff-panel)) 20%, rgb(var(--ff-text))), rgb(var(--ff-text) / 0.36));
+  --ink-accent: light-dark(color-mix(in oklab, rgb(var(--ff-accent)) 50%, white), rgb(var(--ff-accent)));
+  --ink-pos: light-dark(color-mix(in oklab, rgb(var(--ff-pos)) 50%, white), rgb(var(--ff-pos)));
+  --ink-neg: light-dark(color-mix(in oklab, rgb(var(--ff-neg)) 50%, white), rgb(var(--ff-neg)));
   background: var(--ink-bg);
   color: var(--ink-text);
   border-color: var(--ink-line);

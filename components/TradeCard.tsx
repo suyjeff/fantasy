@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../lib/analysis'
 import type { AcceptRead } from '../lib/behavior'
 import { leverageOf, leverageRun, type Forecast, type ForecastInput, type Leverage, type TradeSides } from '../lib/forecast'
@@ -6,6 +6,8 @@ import { runSim } from '../lib/simRunner'
 import { applyTrade, type TradeIdea } from '../lib/trades'
 import type { LeagueData } from '../lib/useLeagueData'
 import { ContextNotes } from './ContextNotes'
+import { dealFromIdea } from '../lib/deal'
+import { CompareToggle } from './useCompare'
 import { BuildIcon } from './icons'
 import { InsightMark } from './InsightMark'
 import { useFantasy, useTradeRead } from './FantasyContext'
@@ -84,20 +86,31 @@ const PlayerLine = ({ id, data, analysis, notes, side }: { id: string; data: Lea
 }
 
 // Each trade's leverage, once per forecast and trade: run sliced in idle time on the shared simulation queue
-// (lib/simRunner), one trade at a time, and kept for every card that shows the same trade.
-const leverageCache = new WeakMap<Forecast, Map<string, Promise<Leverage | null>>>()
-const leverageFor = (input: ForecastInput, f: Forecast, trade: TradeSides) => {
-  let byTrade = leverageCache.get(f)
-  if (!byTrade) leverageCache.set(f, (byTrade = new Map()))
-  const key = `${trade.me}:${[...trade.myRoster].sort().join(',')}|${trade.partner}:${[...trade.theirRoster].sort().join(',')}`
-  let hit = byTrade.get(key)
+// (lib/simRunner), one trade at a time, and kept for every card that shows the same trade. What has settled is kept
+// beside the promise too, so a card that shows it again (a re-sort, a remount, the comparison) has it at once.
+type LevCache = { pending: Map<string, Promise<Leverage | null>>; done: Map<string, Leverage | null> }
+const leverageCache = new WeakMap<Forecast, LevCache>()
+const cacheOf = (f: Forecast) => {
+  let c = leverageCache.get(f)
+  if (!c) leverageCache.set(f, (c = { pending: new Map(), done: new Map() }))
+  return c
+}
+const leverageKey = (trade: TradeSides) => `${trade.me}:${[...trade.myRoster].sort().join(',')}|${trade.partner}:${[...trade.theirRoster].sort().join(',')}`
+const leverageFor = (input: ForecastInput, f: Forecast, trade: TradeSides, key = leverageKey(trade)) => {
+  const c = cacheOf(f)
+  let hit = c.pending.get(key)
   if (!hit) {
     // Rating the two rosters is work too: done in idle time, one trade at a time, ahead of its simulation.
-    hit = (ratingQueue = ratingQueue.catch(() => {}).then(idle)).then(() => {
-      const run = leverageRun(input, f, trade)
-      return run ? runSim(run, { urgent: false }).then((post) => (post ? leverageOf(f, trade, post) : null)) : null
-    })
-    byTrade.set(key, hit)
+    hit = (ratingQueue = ratingQueue.catch(() => {}).then(idle))
+      .then(() => {
+        const run = leverageRun(input, f, trade)
+        return run ? runSim(run, { urgent: false }).then((post) => (post ? leverageOf(f, trade, post) : null)) : null
+      })
+      .then((v) => {
+        c.done.set(key, v)
+        return v
+      })
+    c.pending.set(key, hit)
   }
   return hit
 }
@@ -109,31 +122,59 @@ const idle = () =>
     else window.setTimeout(r, 16)
   })
 
-/** Playoff and title odds before and after, run on the same simulated seasons, in idle time so cards paint first. */
-const useLeverage = (idea: TradeIdea) => {
-  const { models, analysis } = useFantasy()
-  const [lev, setLev] = useState<Leverage | null | undefined>(undefined)
+/** Both rosters after a two-team trade, each side cutting its weakest if it ends up over the limit. */
+export const useTradeSides = () => {
+  const { analysis } = useFantasy()
+  return useCallback(
+    (partner: number, give: string[], get: string[]): TradeSides | null => {
+      const me = analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
+      const them = analysis.teamById[partner]
+      if (!me || !them) return null
+      const pts = analysis.horizon.perWeek
+      return {
+        me: me.rosterId,
+        partner: them.rosterId,
+        myRoster: applyTrade(me.players, give, get, analysis.capacity, pts),
+        theirRoster: applyTrade(them.players, get, give, analysis.capacity, pts),
+      }
+    },
+    [analysis],
+  )
+}
+
+/**
+ * Playoff and title odds before and after, for each trade (null where there is none to run), on the same simulated
+ * seasons, in idle time so what shows them paints first. A trade already run shows at once: undefined only while
+ * one is still simulating, null where there is no forecast to run it on.
+ */
+export const useLeverages = (trades: (TradeSides | null)[]): (Leverage | null | undefined)[] => {
+  const { models } = useFantasy()
+  const f = models.forecast
+  const keys = trades.map((t) => (t ? leverageKey(t) : null))
+  const sig = keys.join('~')
+  // Bumped as runs land, to show them; what to show is read from the cache, never held in state that could lag it.
+  const [, setTick] = useState(0)
   useEffect(() => {
-    setLev(undefined)
-    if (!models.forecast || analysis.myRosterId == null) {
-      setLev(null)
-      return
-    }
-    const me = analysis.teamById[analysis.myRosterId]
-    const them = analysis.teamById[idea.partnerId]
-    const pts = analysis.horizon.perWeek
+    if (!f) return
     let live = true
-    leverageFor(models.forecastInput, models.forecast, {
-      me: me.rosterId,
-      partner: them.rosterId,
-      myRoster: applyTrade(me.players, idea.give, idea.get, analysis.capacity, pts),
-      theirRoster: applyTrade(them.players, idea.get, idea.give, analysis.capacity, pts),
-    }).then((v) => live && setLev(v))
+    const c = cacheOf(f)
+    trades.forEach((t, i) => {
+      const k = keys[i]
+      if (!t || !k || c.done.has(k)) return
+      leverageFor(models.forecastInput, f, t, k).then(() => live && setTick((x) => x + 1))
+    })
     return () => {
       live = false
     }
-  }, [idea, models, analysis])
-  return lev
+  }, [sig, f, models.forecastInput]) // eslint-disable-line react-hooks/exhaustive-deps
+  return keys.map((k) => (!f || !k ? null : cacheOf(f).done.get(k)))
+}
+
+/** One suggested trade's leverage (see useLeverages). */
+const useLeverage = (idea: TradeIdea) => {
+  const sidesOf = useTradeSides()
+  const sides = useMemo(() => sidesOf(idea.partnerId, idea.give, idea.get), [sidesOf, idea])
+  return useLeverages([sides])[0]
 }
 
 /** A change in probability as signed points: +0.9. */
@@ -243,6 +284,8 @@ const TradeCard = ({
   const base = useMemo(() => readOf(idea, false), [readOf, idea])
   const read = useMemo(() => grades.apply(base, idea), [grades, base, idea])
   const lev = useLeverage(idea)
+  // The deal as the builder and the comparison hold it.
+  const asDeal = useMemo(() => (analysis.myRosterId != null ? dealFromIdea(analysis.myRosterId, idea.partnerId, idea.give, idea.get) : null), [analysis.myRosterId, idea])
   const odds = models.forecast?.sim[idea.partnerId]
   const mood = models.momentum.teams[idea.partnerId]
   const need = analysis.needs[idea.partnerId]?.worstPos
@@ -414,7 +457,7 @@ const TradeCard = ({
 
       <footer className="mt-auto flex items-center justify-between gap-2 border-t border-ff-line px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="ff-hit py-1 font-mono text-[11px] text-ff-muted hover:text-ff-text">
+          <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="ff-hit whitespace-nowrap py-1 font-mono text-[11px] text-ff-muted hover:text-ff-text">
             {open ? 'less ▴' : 'details ▾'}
           </button>
           {versions.length > 1 && (
@@ -432,10 +475,13 @@ const TradeCard = ({
           )}
         </div>
         {onBuild && (
-          <Button size="sm" variant="aqua" className="ff-aqua-soft" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
-            <BuildIcon size={12} />
-            Open in builder
-          </Button>
+          <span className="flex shrink-0 items-center gap-1.5">
+            {asDeal && <CompareToggle deal={asDeal} size="sm" />}
+            <Button size="sm" variant="aqua" className="ff-aqua-soft" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
+              <BuildIcon size={12} />
+              Open in builder
+            </Button>
+          </span>
         )}
       </footer>
     </article>

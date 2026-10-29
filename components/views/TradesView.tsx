@@ -9,6 +9,8 @@ import PlayerName from '../PlayerName'
 import TeamName from '../TeamName'
 import TradeCard from '../TradeCard'
 import { useTradeDock } from '../TradeDock'
+import CompareView from '../TradeCompare'
+import { useCompare } from '../useCompare'
 import { TradeIcon } from '../icons'
 import { Callout } from '../Callout'
 import { ShowMore } from './ShowMore'
@@ -42,8 +44,8 @@ import {
 } from '../ui'
 
 // The builder was a tab here; it is now the trade dock (components/TradeDock), over every page.
-type Sub = 'suggested' | 'targets' | 'needs' | 'injuries'
-const SUBS: Sub[] = ['suggested', 'targets', 'needs', 'injuries']
+type Sub = 'suggested' | 'compare' | 'targets' | 'needs' | 'injuries'
+const SUBS: Sub[] = ['suggested', 'compare', 'targets', 'needs', 'injuries']
 type Sort = 'mine' | 'likely' | 'balanced'
 type Makeup = 'any' | TradeShape
 
@@ -62,6 +64,7 @@ const TradesView = ({
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'suggested'
   const dock = useTradeDock()
+  const compare = useCompare()
   // An old link to the builder tab opens the builder, over Suggested.
   useEffect(() => {
     if (sub !== 'builder') return
@@ -383,6 +386,7 @@ const TradesView = ({
             stacked={phone}
             items={[
               { key: 'suggested', label: 'Suggested', count: search.ideas.length },
+              { key: 'compare', label: 'Compare', count: compare?.items.length || null, mark: 'BETA' },
               { key: 'targets', label: 'Targets', count: targets.length },
               { key: 'needs', label: 'League needs' },
               { key: 'injuries', label: 'Injuries & roles', count: situations.length },
@@ -471,6 +475,10 @@ const TradesView = ({
             <Disclosure from="md" summary="How deals are found" className="text-[11.5px] leading-relaxed text-ff-muted">
               Deals start from every one-for-one that helps you and grow only when a piece improves them. Numbers are points per week added to each best lineup, injuries priced in; the side taking more players cuts its weakest.
             </Disclosure>
+        </TabSection>
+
+        <TabSection id="compare" active={tab === 'compare'}>
+          <CompareView onSuggested={() => onSub('suggested')} />
         </TabSection>
 
         <TabSection id="targets" active={tab === 'targets'}>

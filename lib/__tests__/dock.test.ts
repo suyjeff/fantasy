@@ -139,4 +139,38 @@ describe('the trade dock', () => {
     expect(s.trades[0].touched).toBeGreaterThan(s.trades[2].touched)
     expect(editTrade(s, 'nope', () => emptyDeal([ME]))).toBe(s)
   })
+
+  it('keeps each trade’s number while it is open: a discard never renumbers the rest', () => {
+    let s = full()
+    const labels = () => s.trades.map((t) => t.label)
+    expect(labels()).toEqual([1, 2, 3])
+    s = discard(s, s.trades[0].id)
+    expect(labels()).toEqual([2, 3])
+    // The next new trade takes the lowest number free.
+    s = startTrade(s, ME, deal(5))
+    expect(labels()).toEqual([2, 3, 1])
+    // A trade replaced at the limit hands its number to the one replacing it.
+    const lo = s.trades.reduce((a, t) => (t.touched < a.touched ? t : a))
+    s = startTrade(s, ME, deal(6))
+    expect(s.trades.find((t) => t.deal.teams.includes(6))?.label).toBe(lo.label)
+    expect(new Set(labels()).size).toBe(3)
+  })
+
+  it('gives a restored trade its number back, or a free one if it was taken', () => {
+    let s = full()
+    s = discard(s, s.trades[0].id)
+    s = undoDock(s)
+    expect(s.trades.map((t) => t.label)).toEqual([1, 2, 3])
+    // Two open; Trade 1 discarded, and a new trade takes its number before the undo.
+    s = startTrade(startTrade(emptyDock(), ME, deal(2)), ME, deal(3))
+    s = discard(s, s.trades[0].id)
+    s = minimize(startTrade(s, ME, deal(4)))
+    expect(s.trades.map((t) => t.label)).toEqual([2, 1])
+    s = undoDock(s)
+    expect(s.trades.map((t) => [t.deal.teams[1], t.label])).toEqual([
+      [2, 3],
+      [3, 2],
+      [4, 1],
+    ])
+  })
 })

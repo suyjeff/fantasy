@@ -20,6 +20,11 @@ export type DockTrade = {
   view: number
   /** When it was last opened or edited, as a running count: the lowest is the one a fourth trade replaces. */
   touched: number
+  /**
+   * Its number, "Trade 2", kept for as long as it is open: closing another trade never renumbers it. A new trade takes
+   * the lowest number free.
+   */
+  label: number
 }
 
 /** What the last throwaway action took, to put back. */
@@ -56,6 +61,14 @@ const firstView = (deal: Deal, me: number) => deal.teams.find((t) => t !== me) ?
 
 const sameDeal = (a: Deal, b: Deal) => JSON.stringify(a) === JSON.stringify(b)
 
+/** The lowest trade number no open trade has (`except` freed first: the trade being replaced). */
+export const freeLabel = (trades: DockTrade[], except?: string) => {
+  const used = new Set(trades.filter((t) => t.id !== except).map((t) => t.label))
+  let n = 1
+  while (used.has(n)) n++
+  return n
+}
+
 const touch = (s: DockState, id: string): DockState => {
   const seq = s.seq + 1
   return { ...s, seq, trades: s.trades.map((t) => (t.id === id ? { ...t, touched: seq } : t)) }
@@ -73,19 +86,20 @@ export const startTrade = (s: DockState, me: number, deal?: Deal, step?: DockSte
     if (same) return expand({ ...s, trades: s.trades.map((t) => (t.id === same.id ? { ...t, step: st } : t)) }, same.id)
   }
   const seq = s.seq + 1
-  const fresh = (id: string): DockTrade => ({ id, deal: d, step: st, view: firstView(d, me), touched: seq })
+  const fresh = (id: string, label: number): DockTrade => ({ id, deal: d, step: st, view: firstView(d, me), touched: seq, label })
   // A spent replace or clear goes with the next start; a discarded trade stays restorable.
   const undo = s.undo?.kind === 'discarded' ? s.undo : null
   const base = { ...s, seq, focus: null, toast: 0, undo }
   // A blank start brings up an empty trade as it stands (its partner kept); a deal fills it.
   const idle = s.trades.find((t) => !dealActive(t.deal))
-  if (idle) return { ...base, open: idle.id, trades: s.trades.map((t) => (t.id === idle.id ? (deal ? { ...fresh(t.id) } : { ...t, touched: seq }) : t)) }
+  if (idle) return { ...base, open: idle.id, trades: s.trades.map((t) => (t.id === idle.id ? (deal ? fresh(t.id, t.label) : { ...t, touched: seq }) : t)) }
   if (s.trades.length < MAX_TRADES) {
-    const t = fresh(`t${seq}`)
+    const t = fresh(`t${seq}`, freeLabel(s.trades))
     return { ...base, open: t.id, trades: [...s.trades, t] }
   }
   const index = s.trades.reduce((lo, t, i) => (t.touched < s.trades[lo].touched ? i : lo), 0)
-  const t = fresh(`t${seq}`)
+  // The new trade takes the number of the one it replaces, in its place.
+  const t = fresh(`t${seq}`, s.trades[index].label)
   return { ...base, open: t.id, trades: s.trades.map((x, i) => (i === index ? t : x)), undo: { kind: 'replaced', trade: s.trades[index], index, by: t.id } }
 }
 
@@ -144,9 +158,13 @@ export const undoDock = (s: DockState): DockState => {
     if (!s.trades.some((t) => t.id === u.by)) return done
     return { ...done, open: s.open === u.by ? u.trade.id : s.open, trades: s.trades.map((t) => (t.id === u.by ? u.trade : t)) }
   }
-  // Restored from inside an empty trade: it takes that trade's place.
+  // Restored from inside an empty trade: it takes that trade's place (and its number, if another trade took its own).
   const host = openTrade(s)
-  if (host && !dealActive(host.deal)) return { ...done, open: u.trade.id, focus: null, trades: s.trades.map((t) => (t.id === host.id ? u.trade : t)) }
+  if (host && !dealActive(host.deal)) {
+    const taken = s.trades.some((t) => t.id !== host.id && t.label === u.trade.label)
+    const back = taken ? { ...u.trade, label: host.label } : u.trade
+    return { ...done, open: u.trade.id, focus: null, trades: s.trades.map((t) => (t.id === host.id ? back : t)) }
+  }
   // From the notice: back in its place, if there is room (an empty trade makes room).
   let trades = s.trades
   if (trades.length >= MAX_TRADES) {
@@ -155,7 +173,9 @@ export const undoDock = (s: DockState): DockState => {
     trades = trades.filter((t) => t.id !== idle.id)
   }
   const at = Math.min(u.index, trades.length)
-  trades = [...trades.slice(0, at), u.trade, ...trades.slice(at)]
+  // Its old number, unless a newer trade has taken it meanwhile.
+  const back = trades.some((t) => t.label === u.trade.label) ? { ...u.trade, label: freeLabel(trades) } : u.trade
+  trades = [...trades.slice(0, at), back, ...trades.slice(at)]
   const reopen = u.wasOpen && !s.open
   return { ...done, trades, open: reopen ? u.trade.id : s.open, focus: reopen ? null : u.trade.id }
 }

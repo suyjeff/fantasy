@@ -8,6 +8,8 @@ import { TradeIcon } from './icons'
 import { useModal } from './Sheet'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import TradeBuilder, { BuilderHeader, CLOSE, Glyph, headline, useDealPricing, useDealRead, type DealUpdate } from './TradeBuilder'
+import { AddIcon } from './icons'
+import { CompareProvider, CompareToggle } from './useCompare'
 import { cx, fmtSigned, reducedMotion, useMedia, usePhone } from './ui'
 
 // The trade builder's home: up to three trades for the whole app, kept above the pages so they survive being
@@ -106,8 +108,10 @@ export const TradeDockProvider = ({ children }: { children: ReactNode }) => {
   return (
     <DockCtx.Provider value={api}>
       <TradesCtx.Provider value={me == null ? NONE : trades}>
-        {children}
-        {api && <DockHost state={d} set={set} api={api} />}
+        <CompareProvider>
+          {children}
+          {api && <DockHost state={d} set={set} api={api} />}
+        </CompareProvider>
       </TradesCtx.Provider>
     </DockCtx.Provider>
   )
@@ -124,10 +128,12 @@ const DockHost = ({ state, set, api }: HostProps) => {
   const name = (t: number) => analysis.teamById[t]?.name ?? `#${t}`
   const open = dock.openTrade(state)
   const u = state.undo
-  const minimized = state.trades.filter((t) => t.id !== state.open)
+  // In number order, so "Trade 2" is always the second bar, whatever order the trades were started in.
+  const minimized = state.trades.filter((t) => t.id !== state.open).sort((a, b) => a.label - b.label)
   const toast = state.toast > 0 && !open && u?.kind === 'discarded' ? u : null
   const undo = useCallback(() => set(dock.undoDock), [set])
   const dismiss = useCallback(() => set(dock.dismissUndo), [set])
+  const more = phone && !open && state.trades.length < MAX_TRADES
 
   // What a discard, replace or clear just did, said once to screen readers from a region that is always there.
   const said = !u
@@ -146,7 +152,7 @@ const DockHost = ({ state, set, api }: HostProps) => {
     <Minimized
       key={t.id}
       trade={t}
-      label={state.trades.length > 1 ? `Trade ${state.trades.indexOf(t) + 1}` : 'Trade builder'}
+      label={state.trades.length > 1 ? `Trade ${t.label}` : 'Trade builder'}
       phone={phone}
       onOpen={() => api.openTrade(t.id)}
       onClose={() => api.close(t.id)}
@@ -155,7 +161,7 @@ const DockHost = ({ state, set, api }: HostProps) => {
   ))
   if (toast)
     items.splice(
-      Math.min(toast.index, items.length),
+      minimized.filter((t) => t.label < toast.trade.label).length,
       0,
       <Discarded key={`gone-${state.toast}`} line={dealSummary(toast.trade.deal, me, name)} phone={phone} onUndo={undo} onDismiss={dismiss} />,
     )
@@ -165,7 +171,7 @@ const DockHost = ({ state, set, api }: HostProps) => {
         {said && `${said} Undo is available.`}
       </p>
       {/* Room at the end of the page for the stack, so it never covers the last of it. */}
-      {items.length > 0 && <div aria-hidden style={{ height: phone ? items.length * 56 : 76 }} />}
+      {items.length > 0 && <div aria-hidden style={{ height: phone ? items.length * BAR + (more ? NEW_TAB : 0) : 76 }} />}
       {items.length > 0 && (
         <div
           role="region"
@@ -177,6 +183,22 @@ const DockHost = ({ state, set, api }: HostProps) => {
               : 'bottom-4 right-4 max-w-[calc(100vw-32px)] items-end justify-end gap-2',
           )}
         >
+          {/* One accent rule across the top of the phone's stack, not one per bar. */}
+          {phone && <span aria-hidden className="absolute inset-x-0 -top-px z-[1] h-[2px] bg-[color:var(--ink-accent)]" />}
+          {/* On a phone the build button steps aside while trades are minimized; a tab on the stack starts another. */}
+          {more && (
+            <button
+              type="button"
+              onClick={() => api.open()}
+              className="tb-ink tb-ink-btn ff-press absolute bottom-full right-[max(0px,env(safe-area-inset-right))] flex items-center gap-1.5 border-x border-t px-3 text-[12.5px] font-medium"
+              style={{ height: NEW_TAB }}
+            >
+              <span className="text-[color:var(--ink-accent)]">
+                <AddIcon size={11} />
+              </span>
+              New trade
+            </button>
+          )}
           {items}
         </div>
       )}
@@ -210,7 +232,11 @@ const Body = ({ state, set, api, trade, layout, titleId, onMinimize, onClose }: 
   ) : u.kind === 'discarded' && !dealActive(trade.deal) ? (
     <UndoNotice text="Discarded trade" detail={dealSummary(u.trade.deal, me, name)} action="Restore" onAction={undo} onDismiss={dismiss} />
   ) : null
-  const n = state.trades.length
+  // Every open trade by its number, for the header's switcher.
+  const tabs = useMemo(
+    () => (state.trades.length > 1 ? [...state.trades].sort((a, b) => a.label - b.label).map((t) => ({ id: t.id, label: t.label, line: dealSummary(t.deal, me, name), current: t.id === id })) : null),
+    [state.trades, id, me], // eslint-disable-line react-hooks/exhaustive-deps
+  )
   // The lineup figure has places of its own (the tray, the verdict, the minimized card), so the header's line
   // leaves it out rather than have it cut off.
   return (
@@ -224,12 +250,15 @@ const Body = ({ state, set, api, trade, layout, titleId, onMinimize, onClose }: 
       setView={setView}
       layout={layout}
       onClear={clear}
+      reviewAction={<CompareToggle deal={trade.deal} tradeId={id} className="md:hidden" />}
       header={
         <>
           <BuilderHeader
             titleId={titleId}
             summary={dealSummary(trade.deal, me, name)}
-            place={n > 1 ? [state.trades.indexOf(trade) + 1, n] : null}
+            tabs={tabs}
+            onSwitch={api.openTrade}
+            actions={<CompareToggle deal={trade.deal} tradeId={id} className="max-md:hidden" />}
             onNew={() => api.open()}
             onMinimize={onMinimize}
             onClose={onClose}
@@ -338,12 +367,19 @@ const DesktopDialog = (props: OpenProps) => {
   )
 }
 
-/** One place in the minimized stack: a bar above the phone's tab bar, or a card in the corner, on the dock's ink. */
+/** A phone bar's height, and the New trade tab's above the stack. */
+const BAR = 44
+const NEW_TAB = 36
+
+/**
+ * One place in the minimized stack: a single-line bar above the phone's tab bar (three of them take 132px), or a
+ * card in the corner, on the dock's ink.
+ */
 const slot = (phone: boolean) =>
   cx(
     'tb-mini tb-ink relative flex items-stretch',
     phone
-      ? 'h-14 w-full border-t pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]'
+      ? 'h-11 w-full border-t pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]'
       : 'h-[60px] w-[300px] min-w-0 shrink border shadow-[0_10px_30px_-6px_rgba(0,0,0,0.55),0_2px_6px_rgba(0,0,0,0.25)]',
   )
 
@@ -351,6 +387,7 @@ const INK_TONE = (v: number | null) => (v == null ? 'text-[color:var(--ink-muted
 
 /**
  * A minimized trade. Shows the deal in a line and your lineup change, reopens on a tap; × discards it (undoable).
+ * On a phone it is one line: its number, the deal, the figure.
  */
 const Minimized = ({ trade, label, phone, onOpen, onClose, autoFocus }: { trade: DockTrade; label: string; phone: boolean; onOpen: () => void; onClose: () => void; autoFocus: boolean }) => {
   const { analysis } = useFantasy()
@@ -367,27 +404,44 @@ const Minimized = ({ trade, label, phone, onOpen, onClose, autoFocus }: { trade:
   }, [autoFocus])
   return (
     <div className={slot(phone)}>
-      <span aria-hidden className="absolute inset-x-0 -top-px h-[2px] bg-[color:var(--ink-accent)]" />
-      <button ref={open} type="button" onClick={onOpen} className="tb-ink-btn ff-press flex min-w-0 flex-1 items-center gap-2.5 pl-2.5 pr-2 text-left outline-none" aria-label={`Open ${what}: ${dealSummary(trade.deal, me, name, lineup)}`}>
-        <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center border border-[color:var(--ink-line)] text-[color:var(--ink-accent)]">
-          <TradeIcon size={15} />
-        </span>
-        <span className="min-w-0 flex-1 leading-tight">
-          <span className="flex items-center gap-1.5 whitespace-nowrap">
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--ink-muted)]">{label}</span>
-            {/* The hint goes first when the bar is narrow (320px), so the label never wraps. */}
-            <span aria-hidden className="font-mono text-[10px] text-[color:var(--ink-muted)] max-[359px]:hidden">
-              {phone ? '· tap to open' : '↗'}
+      {!phone && <span aria-hidden className="absolute inset-x-0 -top-px h-[2px] bg-[color:var(--ink-accent)]" />}
+      <button ref={open} type="button" onClick={onOpen} className={cx('tb-ink-btn ff-press flex min-w-0 flex-1 items-center text-left outline-none', phone ? 'gap-2.5 pl-3 pr-2' : 'gap-2.5 pl-2.5 pr-2')} aria-label={`Open ${what}: ${dealSummary(trade.deal, me, name, lineup)}`}>
+        {phone ? (
+          <>
+            {/* Its number where there are several; the trade glyph where there is one. */}
+            <span aria-hidden className="num flex h-6 min-w-6 shrink-0 items-center justify-center border border-[color:var(--ink-line)] px-1 text-[11.5px] text-[color:var(--ink-accent)]">
+              {label === 'Trade builder' ? <TradeIcon size={12} /> : label.replace('Trade ', '')}
             </span>
-          </span>
-          <span className="mt-0.5 block truncate text-[13px]">{line}</span>
-        </span>
-        {lineup != null && (
-          <span className={cx('num shrink-0 text-right text-[15px] font-medium leading-none', INK_TONE(lineup))}>
-            {fmtSigned(lineup, 1)}
-            <span className="block pt-0.5 font-mono text-[9.5px] font-normal text-[color:var(--ink-muted)]">/wk</span>
-          </span>
+            <span className="min-w-0 flex-1 truncate text-[13px]">{line}</span>
+          </>
+        ) : (
+          <>
+            <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center border border-[color:var(--ink-line)] text-[color:var(--ink-accent)]">
+              <TradeIcon size={15} />
+            </span>
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="flex items-center gap-1.5 whitespace-nowrap">
+                <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--ink-muted)]">{label}</span>
+                <span aria-hidden className="font-mono text-[10px] text-[color:var(--ink-muted)]">
+                  ↗
+                </span>
+              </span>
+              <span className="mt-0.5 block truncate text-[13px]">{line}</span>
+            </span>
+          </>
         )}
+        {lineup != null &&
+          (phone ? (
+            <span className={cx('num shrink-0 text-right text-[13.5px] font-medium', INK_TONE(lineup))}>
+              {fmtSigned(lineup, 1)}
+              <span className="ml-0.5 font-mono text-[9.5px] font-normal text-[color:var(--ink-muted)]">/wk</span>
+            </span>
+          ) : (
+            <span className={cx('num shrink-0 text-right text-[15px] font-medium leading-none', INK_TONE(lineup))}>
+              {fmtSigned(lineup, 1)}
+              <span className="block pt-0.5 font-mono text-[9.5px] font-normal text-[color:var(--ink-muted)]">/wk</span>
+            </span>
+          ))}
       </button>
       <button
         type="button"
@@ -435,8 +489,8 @@ const Discarded = ({ line, phone, onUndo, onDismiss }: { line: string; phone: bo
       onFocus={() => !placing.current && setFocus(true)}
       onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFocus(false)}
     >
-      <p className="flex min-w-0 flex-1 flex-col justify-center pl-3 leading-tight">
-        <span className="text-[13px] font-medium">Trade discarded</span>
+      <p className={cx('flex min-w-0 flex-1 justify-center pl-3 leading-tight', phone ? 'items-center gap-1.5 whitespace-nowrap' : 'flex-col')}>
+        <span className="shrink-0 text-[13px] font-medium">Trade discarded</span>
         <span className="truncate font-mono text-[10.5px] text-[color:var(--ink-muted)]">{line}</span>
       </p>
       <button ref={undoRef} type="button" onClick={onUndo} className="tb-ink-btn ff-press shrink-0 px-4 text-[13.5px] font-medium text-[color:var(--ink-accent)]">
