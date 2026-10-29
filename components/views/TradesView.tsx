@@ -8,12 +8,11 @@ import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import PlayerName from '../PlayerName'
 import TeamName from '../TeamName'
 import TradeCard from '../TradeCard'
-import TradeBuilder from '../TradeBuilder'
+import { useTradeDock } from '../TradeDock'
 import { TradeIcon } from '../icons'
 import { Callout } from '../Callout'
 import { ShowMore } from './ShowMore'
 import { Disclosure } from '../Disclosure'
-import { emptyDeal, type Deal } from '../../lib/deal'
 import { sharingOn } from '../../lib/sharedGrades'
 import { useFantasy, useTradeRead } from '../FantasyContext'
 import {
@@ -42,8 +41,9 @@ import {
   usePhoneCap,
 } from '../ui'
 
-type Sub = 'suggested' | 'targets' | 'needs' | 'injuries' | 'builder'
-const SUBS: Sub[] = ['suggested', 'targets', 'needs', 'injuries', 'builder']
+// The builder was a tab here; it is now the trade dock (components/TradeDock), over every page.
+type Sub = 'suggested' | 'targets' | 'needs' | 'injuries'
+const SUBS: Sub[] = ['suggested', 'targets', 'needs', 'injuries']
 type Sort = 'mine' | 'likely' | 'balanced'
 type Makeup = 'any' | TradeShape
 
@@ -58,9 +58,16 @@ const TradesView = ({
   data: LeagueData
   analysis: Analysis
   sub: string | null
-  onSub: (s: string) => void
+  onSub: (s: string, opts?: { replace?: boolean }) => void
 }) => {
   const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'suggested'
+  const dock = useTradeDock()
+  // An old link to the builder tab opens the builder, over Suggested.
+  useEffect(() => {
+    if (sub !== 'builder') return
+    dock?.open()
+    onSub('suggested', { replace: true })
+  }, [sub]) // eslint-disable-line react-hooks/exhaustive-deps
   // On a phone each tab is its own page, so pages are kept short and the small print folds away.
   const phone = usePhone()
   const { myRosterId, teamById, needs } = analysis
@@ -250,17 +257,9 @@ const TradesView = ({
   )
   const situationCap = usePhoneCap(20, situationScope)
 
-  // ---- Builder: a deal of any shape, you plus one to three other teams ----
-  const [deal, setDeal] = useState<Deal>(() => emptyDeal(myRosterId != null ? [myRosterId] : []))
-  const openInBuilder = (idea: TradeIdea) => {
-    setDeal({
-      teams: [myRosterId!, idea.partnerId],
-      moves: [...idea.give.map((player) => ({ player, from: myRosterId!, to: idea.partnerId })), ...idea.get.map((player) => ({ player, from: idea.partnerId, to: myRosterId! }))],
-      faab: [],
-    })
-    onSub('builder')
-    window.scrollTo({ top: 0 })
-  }
+  // ---- Builder: the dock holds the deal; a card opens its trade there, priced, at the review ----
+  const openInBuilder = (idea: TradeIdea) => dock?.openIdea(idea)
+  const openBuilder = () => dock?.open()
 
   if (!me) {
     return (
@@ -310,8 +309,10 @@ const TradesView = ({
     </div>
   )
 
-  // The floating build action: the cards carry their own "Open in builder", and the builder is where it leads.
-  const fab = phone && tab !== 'builder' && tab !== 'suggested'
+  // The floating build action, on every tab: the builder is a sheet over the page now, not a tab of its own. It steps
+  // aside while the builder is open or minimized (the docked bar is the way back in then), and while the notice
+  // after a discard sits in the same place.
+  const fab = phone && dock?.mode === 'closed' && !dock.toast
   const limitsChanged = minTheirGain !== DEFAULT_TRADE_CONFIG.minTheirGain || maxValueAsk !== DEFAULT_TRADE_CONFIG.maxValueAsk
   const activeFilters = Number(makeup !== 'any') + Number(partner !== 'all') + Number(limitsChanged)
 
@@ -368,9 +369,8 @@ const TradesView = ({
       <PageHeader
         title="Trades"
         actions={
-          !phone &&
-          tab !== 'builder' && (
-            <Button variant="aqua" onClick={() => onSub('builder')} title="Put together any deal and see it priced">
+          !phone && (
+            <Button variant="aqua" onClick={openBuilder} title="Put together any deal and see it priced">
               <TradeIcon />
               Build a trade
             </Button>
@@ -386,7 +386,6 @@ const TradesView = ({
               { key: 'targets', label: 'Targets', count: targets.length },
               { key: 'needs', label: 'League needs' },
               { key: 'injuries', label: 'Injuries & roles', count: situations.length },
-              { key: 'builder', label: 'Builder' },
             ]}
           />
         }
@@ -450,7 +449,7 @@ const TradesView = ({
               </Empty>
             ) : (
               <>
-                <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                   {shown.slice(0, visible).map((versions) => (
                     <TradeCard
                       key={`${versions[0].partnerId}:${versions[0].get.join('+')}`}
@@ -721,12 +720,8 @@ const TradesView = ({
             />
           </Panel>
         </TabSection>
-
-        <TabSection id="builder" active={tab === 'builder'}>
-          <TradeBuilder deal={deal} setDeal={setDeal} />
-        </TabSection>
       </div>
-      <Fab hidden={!fab} onClick={() => onSub('builder')}>
+      <Fab hidden={!fab} onClick={openBuilder}>
         <TradeIcon size={16} />
         Build a trade
       </Fab>

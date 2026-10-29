@@ -279,7 +279,7 @@ const Btn = ({ children, onClick, disabled, primary, className }: { children: Re
     disabled={disabled}
     className={cx(
       'inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap border px-2 font-mono text-[11px] uppercase tracking-[0.08em] md:h-9 disabled:cursor-default disabled:opacity-50',
-      primary ? 'border-ff-accent bg-ff-accent text-ff-on-accent enabled:hover:brightness-110' : 'border-ff-line2 text-ff-text2 enabled:hover:bg-ff-raised enabled:hover:text-ff-text',
+      primary ? 'border-[rgb(var(--ff-accent-deep))] bg-[rgb(var(--ff-accent-deep))] text-[rgb(var(--ff-on-accent))] enabled:hover:brightness-110' : 'border-ff-line2 text-ff-text2 enabled:hover:bg-ff-raised enabled:hover:text-ff-text',
       className,
     )}
   >

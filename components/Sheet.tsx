@@ -4,6 +4,70 @@ import { lockScroll } from './scrollLock'
 import { cx, usePhone } from './ui'
 
 /**
+ * A modal panel's manners, shared by the sheets and the trade builder: focus moves into it, Tab stays inside, Escape
+ * asks it to go (out of a field first, and an open menu closes itself first), nothing behind it scrolls, and focus
+ * goes back where it was when it closes. A modal opened over it (another sheet, the command palette) keeps its own
+ * keys. Set up once, on mount; `panel` is read at each key press, so a panel that swaps element still works.
+ */
+export const useModal = (panel: React.RefObject<HTMLElement | null>, onEscape: () => void) => {
+  const esc = useRef(onEscape)
+  esc.current = onEscape
+  useEffect(() => {
+    const back = document.activeElement as HTMLElement | null
+    const own = panel.current
+    // No scroll on focus: on phones it would cut short the sheet's entrance, which is itself a scroll.
+    own?.focus({ preventScroll: true })
+    const onKey = (e: KeyboardEvent) => {
+      const el = panel.current
+      if (!el) return
+      const t = e.target as HTMLElement | null
+      if (t && !el.contains(t) && t.closest?.('[aria-modal="true"]')) return
+      if (e.key === 'Escape') {
+        if (e.defaultPrevented || t?.closest?.('[role="combobox"][aria-expanded="true"]')) return
+        // In a field, Escape leaves the field; a second press closes.
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) {
+          t.blur()
+          el.focus({ preventScroll: true })
+        } else esc.current()
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      if (e.key !== 'Tab') return
+      // <summary> too: a disclosure ("How it is priced") is a stop of its own.
+      const focusable = [...el.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])')].filter(
+        (x) => !x.hasAttribute('disabled') && x.offsetParent !== null && x.tabIndex >= 0,
+      )
+      if (!focusable.length) return e.preventDefault()
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const at = document.activeElement
+      if (e.shiftKey && (at === first || at === el)) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && at === last) {
+        e.preventDefault()
+        first.focus()
+      } else if (!el.contains(at)) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    // Captured first, so Escape here never also closes a menu or drawer behind.
+    window.addEventListener('keydown', onKey, true)
+    const unlock = lockScroll()
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      unlock()
+      // Back to where it was, unless focus has since gone somewhere else on purpose (the command palette, opened
+      // while this one was sliding away).
+      const at = document.activeElement
+      if ((!at || at === document.body || own?.contains(at)) && back?.isConnected) back.focus({ preventScroll: true })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/**
  * A detail sheet over the page: from the right on wide screens, from the bottom (swipe down to close) on phones.
  * Escape closes it, Tab stays inside, the page behind holds still, and focus returns to where it was. Another
  * sheet opened from inside it stacks on top and keeps its own keys.
@@ -61,58 +125,7 @@ const Sheet = ({
     el.setAttribute('data-open', '')
   }, [phone])
 
-  useEffect(() => {
-    const back = document.activeElement as HTMLElement | null
-    const own = panel.current
-    // No scroll on focus: on phones it would cut short the sheet's entrance, which is itself a scroll.
-    panel.current?.focus({ preventScroll: true })
-    const onKey = (e: KeyboardEvent) => {
-      // A modal opened over this one (another sheet, the command palette) handles its own keys.
-      const t0 = e.target as Element | null
-      if (t0 && panel.current && !panel.current.contains(t0) && t0.closest?.('[aria-modal="true"]')) return
-      if (e.key === 'Escape') {
-        if (e.defaultPrevented) return
-        // In a field, Escape leaves the field; a second press closes.
-        const t = e.target as HTMLElement | null
-        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) {
-          t.blur()
-          panel.current?.focus({ preventScroll: true })
-        } else close.current()
-        e.preventDefault()
-        e.stopPropagation()
-        return
-      }
-      if (e.key !== 'Tab' || !panel.current) return
-      const focusable = [...panel.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(
-        (el) => !el.hasAttribute('disabled') && el.offsetParent !== null,
-      )
-      if (!focusable.length) return e.preventDefault()
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      const at = document.activeElement
-      if (e.shiftKey && (at === first || at === panel.current)) {
-        e.preventDefault()
-        last.focus()
-      } else if (!e.shiftKey && at === last) {
-        e.preventDefault()
-        first.focus()
-      } else if (!panel.current.contains(at)) {
-        e.preventDefault()
-        first.focus()
-      }
-    }
-    // Captured first, so Escape here never also closes a menu or drawer behind.
-    window.addEventListener('keydown', onKey, true)
-    const unlock = lockScroll()
-    return () => {
-      window.removeEventListener('keydown', onKey, true)
-      unlock()
-      // Back to where it was, unless focus has since gone somewhere else on purpose (the command palette, opened
-      // while this one was sliding away).
-      const at = document.activeElement
-      if (!at || at === document.body || own?.contains(at)) back?.focus?.({ preventScroll: true })
-    }
-  }, [])
+  useModal(panel, () => close.current())
 
   // One sheet at a time: opening another from inside swaps the content in the same panel.
   const first = useRef(true)

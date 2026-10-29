@@ -69,15 +69,31 @@ const headline = (recap: Recap, analysis: Analysis) => {
   return { top, topName, mine }
 }
 
-const Move = ({ move, className }: { move: number; className?: string }) =>
-  move === 0 ? (
-    <span className={cx('num text-ff-text2', className)}>–</span>
-  ) : (
-    <span className={cx('num', className)} aria-label={move > 0 ? `up ${move}` : `down ${-move}`}>
-      {move > 0 ? '▲' : '▼'}
-      {Math.abs(move)}
+/**
+ * The rank change as a small coloured arrow beside its number: up in the positive ink, down in the negative, a muted
+ * dash when it held. The arrow is a drawn shape, so it stays crisp at 11px; the label is for screen readers.
+ */
+const Move = ({ move, className }: { move: number; className?: string }) => {
+  if (move === 0)
+    return (
+      <span className={cx('inline-flex items-center gap-0.5 align-middle text-ff-muted', className)} role="img" aria-label="unchanged">
+        <svg aria-hidden width="10" height="10" viewBox="0 0 10 10" className="shrink-0">
+          <path d="M2 5H8" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        </svg>
+      </span>
+    )
+  const up = move > 0
+  return (
+    <span className={cx('inline-flex items-center gap-0.5 align-middle', up ? 'text-ff-pos' : 'text-ff-neg', className)} role="img" aria-label={up ? `up ${move}` : `down ${-move}`}>
+      <svg aria-hidden width="10" height="10" viewBox="0 0 10 10" className="shrink-0">
+        <path d={up ? 'M5 9V1.5M1.75 4.75L5 1.5L8.25 4.75' : 'M5 1V8.5M1.75 5.25L5 8.5L8.25 5.25'} stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="square" />
+      </svg>
+      <span aria-hidden className="num font-medium">
+        {Math.abs(move)}
+      </span>
     </span>
   )
+}
 
 /** Hairline drafting shapes for the banner's right side; they move on hover (see fantasy.css). */
 const Drafting = ({ compact }: { compact?: boolean }) => (
@@ -249,7 +265,13 @@ export const NavBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap |
   const { topName, mine } = headline(recap, analysis)
   return (
     <div className="shrink-0 border-t border-ff-line px-2 py-2">
-      <button type="button" onClick={onOpen} className="ff-rv-banner flex h-14 w-full items-center gap-2.5 px-2.5 text-left md:h-12" aria-label={`Replay the week ${recap.week} power rank reveal`}>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="ff-rv-banner flex h-14 w-full items-center gap-2.5 px-2.5 text-left md:h-12"
+        // The name starts with the words on the button, so asking for it by what it says (voice control) finds it.
+        aria-label={`Wk ${recap.week} power rank: ${mine ? `You're No. ${mine.rankAfter}, ${mine.move === 0 ? 'unchanged' : mine.move > 0 ? `up ${mine.move}` : `down ${-mine.move}`}` : `${topName} is No. 1`}. Replay the reveal.`}
+      >
         <span className="ff-rv-sweep" aria-hidden />
         <Drafting compact />
         <span className="ff-rv-lift relative">
@@ -260,7 +282,7 @@ export const NavBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap |
           <span className="mt-0.5 block truncate text-[13px] font-medium md:text-[12.5px]">
             {mine ? (
               <>
-                You&apos;re No. {mine.rankAfter} <Move move={mine.move} className="text-[11px]" />
+                You&apos;re No. {mine.rankAfter} <Move move={mine.move} className="ml-0.5 text-[11px]" />
               </>
             ) : (
               <>{topName} is No. 1</>
