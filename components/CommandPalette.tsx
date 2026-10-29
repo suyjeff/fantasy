@@ -3,6 +3,8 @@ import { THEMES, themeById, type Scheme } from '../lib/themes'
 import { useFantasy } from './FantasyContext'
 import { SECTIONS, sectionCode, type SectionKey } from './Shell'
 import { Swatch, type Density } from './ThemePicker'
+import { useTradeDock } from './TradeDock'
+import { TradeIcon } from './icons'
 import { Avatar, PlayerAvatar, cx, fmt, ownerLabel, shortcutLabel } from './ui'
 
 // Cmd/Ctrl+K: one box that reaches every section and tab, every player in the
@@ -34,7 +36,6 @@ const TABS: Partial<Record<SectionKey, [string, string][]>> = {
     ['targets', 'Trade targets'],
     ['needs', 'League needs'],
     ['injuries', 'Injuries & roles'],
-    ['builder', 'Trade builder'],
   ],
   me: [
     ['overview', 'Overview'],
@@ -130,6 +131,7 @@ const CommandPalette = ({
   onLeague: (id: string) => void
 }) => {
   const { data, analysis, go, openPlayer } = useFantasy()
+  const dock = useTradeDock()
   const current = themeById(theme)
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
@@ -188,12 +190,15 @@ const CommandPalette = ({
         ? { id: 'density:comfortable', group: 'Actions', label: 'Comfortable density', keywords: 'larger text type size bigger rows spacing', run: () => onDensity('comfortable') }
         : { id: 'density:compact', group: 'Actions', label: 'Compact density', keywords: 'smaller text type size dense rows spacing', run: () => onDensity('compact') },
     )
+    // The builder is a panel over any page now, not a Trades tab, so it opens straight from here.
+    if (dock)
+      items.push({ id: 'build', group: 'Actions', label: 'Build a trade', keywords: 'trade builder deal offer', icon: <TradeIcon size={14} />, weight: 2, run: () => dock.open() })
     items.push({ id: 'tour', group: 'Actions', label: 'Replay the tour', keywords: 'help guide onboarding intro walkthrough', run: onTour })
     items.push({ id: 'reload', group: 'Actions', label: `Reload from ${source}`, keywords: 'refresh sync', hint: 'R', run: onReload })
     for (const l of leagues)
       if (l.id !== data.league.league_id) items.push({ id: `league:${l.id}`, group: 'Actions', label: `Switch league: ${l.name}`, keywords: 'league', run: () => onLeague(l.id) })
     return items
-  }, [analysis, go, onTheme, onScheme, current, scheme, density, onDensity, onReload, source, onTour, leagues, onLeague, data.league.league_id])
+  }, [analysis, go, onTheme, onScheme, current, scheme, density, onDensity, onReload, source, onTour, leagues, onLeague, data.league.league_id, dock])
 
   // Players worth finding: anyone rostered here or with a value or a projection ahead.
   const pool = useMemo(

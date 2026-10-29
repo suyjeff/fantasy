@@ -448,19 +448,24 @@ export const Segmented = <K extends string>({
 /** The command palette's shortcut as this platform writes it. */
 export const shortcutLabel = () => (typeof navigator !== 'undefined' && /Mac|iP(hone|ad|od)/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K')
 
-/** Whether the viewport is phone-width (below md), kept live across rotation and resizing. */
-export const usePhone = () => {
-  const query = '(max-width: 767px)'
-  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
+/** Whether a media query matches, kept live across rotation and resizing. */
+export const useMedia = (query: string) => {
+  const [match, setMatch] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
   useEffect(() => {
     const mq = window.matchMedia(query)
-    const on = () => setPhone(mq.matches)
+    const on = () => setMatch(mq.matches)
     on()
     mq.addEventListener('change', on)
     return () => mq.removeEventListener('change', on)
-  }, [])
-  return phone
+  }, [query])
+  return match
 }
+
+/** Whether the viewport is phone-width (below md). */
+export const usePhone = () => useMedia('(max-width: 767px)')
+
+/** Whether motion should be kept to a minimum, read at the moment it is asked. */
+export const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 // Server render has no layout; the effect only matters in the browser.
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect

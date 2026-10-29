@@ -6,7 +6,7 @@ import { useFantasy } from './FantasyContext'
 import { Phrase, RowBody, TeamLabel } from './PowerRecap'
 import { GorillaFace, Poop } from './RevealArt'
 import { Crown } from './RevealBanner'
-import { cx, fmt } from './ui'
+import { cx, fmt, reducedMotion } from './ui'
 
 // The two acts of the power-rank reveal (PowerReveal.tsx runs them in order):
 //   Model      the model introduces itself: a gorilla drawn as a technical study, its name, and the composite
@@ -16,7 +16,6 @@ import { cx, fmt } from './ui'
 
 export const d = (ms: number) => ({ '--d': `${ms}ms` }) as CSSProperties
 export const pad2 = (n: number) => String(n).padStart(2, '0')
-export const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 export type Box = { w: number; h: number }
 
 /** Ticks from 0 up to `count`, one every `ms`, starting after `delay`. Cleaned up with the act. */

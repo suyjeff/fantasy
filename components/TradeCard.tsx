@@ -275,7 +275,9 @@ const TradeCard = ({
         </div>
       </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2">
+      {/* Cards sit in a grid whose rows share the tallest card's height: this section takes up the slack, so the
+          send and get columns (and the rule between them) run to the verdict and the footer stays at the bottom. */}
+      <div className="grid flex-1 grid-cols-1 sm:grid-cols-2">
         <div className="min-w-0 border-b border-ff-line px-3 pb-1.5 pt-2 sm:border-b-0 sm:border-r">
           <div className="ff-label">You send</div>
           {idea.give.map((id) => (

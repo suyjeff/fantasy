@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FantasyProvider } from '../components/FantasyContext'
 import SheetHost, { sheetKey, type SheetRef } from '../components/SheetHost'
+import { TradeDockProvider } from '../components/TradeDock'
 import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../components/Shell'
 import { Label, Segmented, Select, cx, simOdds } from '../components/ui'
 import DashboardView from '../components/views/DashboardView'
@@ -78,7 +79,6 @@ export type Prefs = {
 
 const TOUR_KEY = 'ff:tour:v1'
 
-const HORIZON_SHORT: Record<HorizonMode, string> = { next6: '6 wks', regular: 'season', playoffs: '+ playoffs' }
 const HORIZON_LONG: Record<HorizonMode, string> = {
   next6: 'The next six regular-season weeks',
   regular: 'Everything left before the fantasy playoffs',
@@ -464,11 +464,10 @@ const FantasyPage = () => {
       leagueId={data?.league.league_id ?? null}
       onLeague={(id) => update({ leagueId: id })}
       leagueMeta={data ? `${data.league.season} · ${data.league.total_rosters} teams${data.state.season_type === 'regular' && data.league.season === data.state.season ? ` · wk ${data.state.week}` : ''}` : undefined}
-      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: `${mySeason ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : ''}${mySim ? ` · ${simOdds(mySim, 'playoffs')} playoffs` : myPower ? ` · power rank #${myPower.rank} of ${analysis!.teams.length}` : ''}` } : null}
+      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: `${mySeason ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : ''}${mySim ? ` · ${simOdds(mySim, 'playoffs')} playoffs` : myPower ? ` · power rank #${myPower.rank} of ${analysis!.teams.length}` : ''}`, onOpen: () => route.go('teams', String(myTeam.rosterId)) } : null}
       controls={controls}
       controlsOpen={prefs.settingsOpen}
       onControls={(open) => update({ settingsOpen: open })}
-      controlsSummary={`${HORIZON_SHORT[prefs.horizon]} · ${themeById(prefs.theme).label}`}
       loading={loading}
       progress={progress}
       onRefresh={reload}
@@ -511,6 +510,8 @@ const FantasyPage = () => {
 
       {data && analysis && models && prefs ? (
         <FantasyProvider value={{ data, analysis, models, adjust, grades, go: (s, sub) => route.go(s, sub ?? undefined), ...sheetApi }}>
+        {/* The trade builder's one deal, kept here so it outlives the page that opened it. */}
+        <TradeDockProvider>
         <div key={data.league.league_id} ref={view} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
@@ -561,6 +562,7 @@ const FantasyPage = () => {
           leagues={(data.leagues ?? []).map((l) => ({ id: l.league_id, name: l.name }))}
           onLeague={(id) => update({ leagueId: id })}
         />
+        </TradeDockProvider>
         </FantasyProvider>
       ) : (
         !error && (

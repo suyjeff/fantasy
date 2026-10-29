@@ -47,12 +47,12 @@ export type ShellProps = {
   leagueId: string | null
   onLeague: (id: string) => void
   leagueMeta?: string
-  me?: { name: string; avatar: string | null; line: string } | null
+  /** `onOpen` makes the row a button to your team's page. */
+  me?: { name: string; avatar: string | null; line: string; onOpen?: () => void } | null
   controls?: ReactNode
-  /** The settings box, folded to a one-line summary or open. */
+  /** The settings box, folded to one line or open. */
   controlsOpen?: boolean
   onControls?: (open: boolean) => void
-  controlsSummary?: ReactNode
   loading: boolean
   progress: string
   onRefresh: () => void
@@ -141,7 +141,6 @@ const SidebarBody = ({
   clearToggle,
   controlsOpen,
   onControls,
-  controlsSummary,
   navFooter,
 }: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void; tourKey?: string | null; /** Leave room at the left of the header for the fixed sidebar toggle. */ clearToggle?: boolean }) => (
   <div className="flex h-full flex-col">
@@ -179,15 +178,36 @@ const SidebarBody = ({
           </span>
         )}
       />
-      {me && (
-        <div className="flex items-center gap-2 border-t border-ff-line px-3 py-2">
-          <Avatar src={me.avatar} name={me.name} size={22} />
-          <span className="min-w-0 leading-tight">
-            <span className="block truncate text-[12.5px] text-ff-text">{me.name}</span>
-            <span className="block truncate font-mono text-[10.5px] text-ff-muted">{me.line}</span>
-          </span>
-        </div>
-      )}
+      {me && (() => {
+        const who = (
+          <>
+            <Avatar src={me.avatar} name={me.name} size={22} />
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate text-[12.5px] text-ff-text">{me.name}</span>
+              <span className="block truncate font-mono text-[10.5px] text-ff-muted">{me.line}</span>
+            </span>
+          </>
+        )
+        return me.onOpen ? (
+          <button
+            type="button"
+            onClick={() => {
+              onClose?.()
+              me.onOpen?.()
+              window.scrollTo({ top: 0 })
+            }}
+            title="Open your team's page"
+            className="group/me flex min-h-11 w-full items-center gap-2 border-t border-ff-line px-3 py-2 text-left transition-colors hover:bg-ff-raised focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent md:min-h-0"
+          >
+            {who}
+            <span aria-hidden className="shrink-0 font-mono text-[12px] text-ff-muted group-hover/me:text-ff-text2">
+              ›
+            </span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 border-t border-ff-line px-3 py-2">{who}</div>
+        )
+      })()}
     </div>
 
     {onSearch && (
@@ -259,7 +279,7 @@ const SidebarBody = ({
 
     {controls && (
       <div className="shrink-0 border-t border-ff-line">
-        {/* Settings fold to one line: what they are set to, opened when needed. */}
+        {/* Settings fold to one line, opened when needed. */}
         <button
           type="button"
           aria-expanded={!!controlsOpen}
@@ -267,8 +287,7 @@ const SidebarBody = ({
           onClick={() => onControls?.(!controlsOpen)}
           className="flex h-11 w-full items-center gap-2 px-3 text-left hover:bg-ff-raised md:h-9"
         >
-          <span className="ff-label shrink-0">Settings</span>
-          <span className="min-w-0 flex-1 truncate text-right font-mono text-[10.5px] text-ff-muted">{controlsSummary}</span>
+          <span className="ff-label min-w-0 flex-1">Settings</span>
           <span aria-hidden className={cx('font-mono text-[10px] text-ff-muted motion-safe:transition-transform motion-safe:duration-150', controlsOpen && 'rotate-180')}>
             ▴
           </span>

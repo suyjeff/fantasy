@@ -1280,38 +1280,24 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 
 /* ---- Banners ----
- * The Power page's banner and the sidebar's: the panel washed with the theme's accent into a breath of gold, a crisp
- * accent edge (left and top), a dot grid and hairline drafting shapes in the theme's own ink. On a pointer that hovers, the shapes come alive: a scan crosses, the squares turn a quarter,
- * the ticks slide, and the crown lifts. A press gives a little on any device. */
+ * The Power page's banner and the sidebar's: a quiet raised surface with a hairline all round, a faint dot grid and
+ * hairline drafting shapes in the theme's own ink. Colour is left to the crown and the rank arrow. On a pointer that
+ * hovers, the shapes come alive: a scan crosses, the squares turn a quarter, the ticks slide, and the crown lifts.
+ * A press gives a little on any device. */
 .ff .ff-rv-banner {
   position: relative;
   isolation: isolate;
   overflow: hidden;
   color: rgb(var(--ff-text));
-  /* Plain raised panel where color-mix() is not supported (Safari before 16.2): the gradient below then drops out. */
-  background: rgb(var(--ff-raised));
+  --ff-rv-edge: rgb(var(--ff-line));
   background:
-    radial-gradient(rgb(var(--ff-text) / 0.1) 1px, transparent 1.3px) -6px -6px / 12px 12px,
-    linear-gradient(
-      100deg,
-      color-mix(in oklab, var(--ff-rv-a) 24%, rgb(var(--ff-panel))) 0%,
-      color-mix(in oklab, var(--ff-rv-a) 9%, rgb(var(--ff-panel))) 58%,
-      color-mix(in oklab, var(--ff-rv-b) 13%, rgb(var(--ff-panel))) 100%
-    );
-  /* A hairline of the accent all round and a stronger rule down the left edge. */
-  box-shadow:
-    inset 3px 0 0 var(--ff-rv-a),
-    inset 0 0 0 1px color-mix(in oklab, var(--ff-rv-a) 38%, rgb(var(--ff-line)));
-  transition: scale 200ms var(--ff-ease-out);
+    radial-gradient(rgb(var(--ff-text) / 0.07) 1px, transparent 1.3px) -6px -6px / 12px 12px,
+    rgb(var(--ff-raised));
+  box-shadow: inset 0 0 0 1px var(--ff-rv-edge);
+  transition: scale 200ms var(--ff-ease-out), box-shadow 160ms var(--ff-ease-out);
 }
-/* The top rule: the accent running into gold. */
-.ff .ff-rv-banner::after {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 2px;
-  pointer-events: none;
-  background: linear-gradient(90deg, var(--ff-rv-a), var(--ff-rv-b));
+.ff button.ff-rv-banner:hover {
+  --ff-rv-edge: rgb(var(--ff-line2));
 }
 .ff .ff-rv-banner:focus-visible,
 .ff .ff-rv-replay:focus-visible {
@@ -1600,5 +1586,89 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
   .ff .ff-rv-scanrow {
     transition: none;
+  }
+}
+
+/* ---------- Trade builder (components/TradeBuilder.tsx, components/TradeDock.tsx) ----------
+ * Everything here is short (under 200ms) and on the house curves. Switching rosters slides the list the way the tabs
+ * went; what joins the deal fades or pops in; the wide-screen dialog rises in and, minimized, shrinks toward the
+ * corner card it becomes. Reduced motion keeps only the fades. */
+@keyframes tb-slide-next {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+@keyframes tb-slide-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+}
+@keyframes tb-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes tb-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+@keyframes tb-mini-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.ff .tb-slide-next {
+  animation: tb-slide-next 180ms var(--ff-ease-out);
+}
+.ff .tb-slide-prev {
+  animation: tb-slide-prev 180ms var(--ff-ease-out);
+}
+.ff :is(.tb-fade, .tb-step-in) {
+  animation: ff-fade-in 140ms var(--ff-ease-out);
+}
+.ff .tb-pop {
+  animation: tb-pop 160ms var(--ff-ease-out);
+}
+.ff .tb-mini {
+  animation: tb-mini-in 180ms var(--ff-ease-out);
+}
+.ff .tb-dialog {
+  transform-origin: 100% 100%;
+  animation: tb-rise 200ms var(--ff-ease-out);
+  transition:
+    opacity 180ms var(--ff-ease-out),
+    transform 180ms var(--ff-ease-out);
+}
+.ff .tb-scrim {
+  animation: ff-fade-in 200ms ease-out;
+  transition: opacity 160ms ease;
+}
+.ff .tb-dialog-root[data-leaving] {
+  pointer-events: none;
+}
+.ff .tb-dialog-root[data-leaving] .tb-scrim {
+  opacity: 0;
+}
+.ff .tb-dialog-root[data-leaving='min'] .tb-dialog {
+  opacity: 0;
+  transform: translate(18%, 22%) scale(0.45);
+}
+.ff .tb-dialog-root[data-leaving='close'] .tb-dialog {
+  opacity: 0;
+  transform: scale(0.98);
+  transition-duration: 140ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff :is(.tb-slide-next, .tb-slide-prev, .tb-pop, .tb-mini, .tb-dialog) {
+    animation: ff-fade-in 120ms ease-out;
+  }
+  .ff .tb-dialog-root[data-leaving] .tb-dialog {
+    transform: none;
   }
 }

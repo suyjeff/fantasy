@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { cx } from './ui'
+import { cx, reducedMotion } from './ui'
 
 // A phone sheet whose swipe is the browser's own scroll, after React Aria's Sheet
 // (react-aria-components, Apache-2.0). The sheet sits in a scroll container two
@@ -24,7 +24,6 @@ const iosSafari = () => {
   const ios = /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
   return ios && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua)
 }
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 const SwipeSheet = forwardRef<
   SwipeSheetHandle,

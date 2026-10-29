@@ -114,12 +114,82 @@ export const readDeal = (deal: Deal, input: DealInput): DealRead => {
   return { sides, valid, weeks }
 }
 
-/** Every team in the deal gives something or gets something, and nobody trades with themselves. */
+/**
+ * Every move and payment runs between two teams still in the deal, and nobody trades with themselves. A $0 payment
+ * stays: it is a destination picked before the amount (setDealFaab), and moves nothing until a figure goes in.
+ */
 export const tidyDeal = (deal: Deal): Deal => ({
   ...deal,
   moves: deal.moves.filter((m) => m.from !== m.to && deal.teams.includes(m.from) && deal.teams.includes(m.to)),
-  faab: deal.faab.filter((x) => x.dollars > 0 && x.from !== x.to && deal.teams.includes(x.from) && deal.teams.includes(x.to)),
+  faab: deal.faab.filter((x) => x.from !== x.to && deal.teams.includes(x.from) && deal.teams.includes(x.to)),
 })
 
 /** Rosters by team, from the analysis. */
 export const rostersOf = (analysis: Analysis) => Object.fromEntries(analysis.teams.map((t: TradeTeam) => [t.rosterId, t.players])) as Record<number, string[]>
+
+// ---- Editing a deal ----
+// The builder's edits, kept pure so the dock, the inline pickers and the tests all move a deal the same way.
+
+/** A two-team deal from a suggested trade: what you give goes to them, what you get comes to you. */
+export const dealFromIdea = (me: number, partner: number, give: string[], get: string[]): Deal => ({
+  teams: [me, partner],
+  moves: [...give.map((player) => ({ player, from: me, to: partner })), ...get.map((player) => ({ player, from: partner, to: me }))],
+  faab: [],
+})
+
+/**
+ * Put a player in the deal, or take him out if he is in it. A new one leaves the team that has him: one of yours goes
+ * to the first partner, anyone else's comes to you (or, in a deal you are not in, to the first other team).
+ */
+export const togglePlayer = (deal: Deal, id: string, rosters: Record<number, string[]>, me: number): Deal => {
+  if (deal.moves.some((m) => m.player === id)) return { ...deal, moves: deal.moves.filter((m) => m.player !== id) }
+  const from = deal.teams.find((t) => rosters[t]?.includes(id))
+  if (from == null) return deal
+  const others = deal.teams.filter((t) => t !== from)
+  if (!others.length) return deal
+  const to = from === me ? others[0] : others.includes(me) ? me : others[0]
+  return { ...deal, moves: [...deal.moves, { player: id, from, to }] }
+}
+
+/** Send a player somewhere else in a three- or four-team deal. */
+export const redirectPlayer = (deal: Deal, id: string, to: number): Deal => ({ ...deal, moves: deal.moves.map((m) => (m.player === id && m.from !== to ? { ...m, to } : m)) })
+
+/**
+ * Each team sends at most one FAAB payment. Picking its destination before the amount is remembered as a $0 payment,
+ * so the choice survives until a figure goes in.
+ */
+export const setDealFaab = (deal: Deal, from: number, dollars: number, to?: number): Deal => {
+  const rest = deal.faab.filter((x) => x.from !== from)
+  const dest = to ?? deal.faab.find((x) => x.from === from)?.to ?? deal.teams.find((t) => t !== from)
+  if (dest == null) return deal
+  return { ...deal, faab: dollars > 0 || to != null ? [...rest, { from, to: dest, dollars }] : rest }
+}
+
+export const addDealTeam = (deal: Deal, id: number): Deal => (deal.teams.includes(id) ? deal : tidyDeal({ ...deal, teams: [...deal.teams, id] }))
+export const removeDealTeam = (deal: Deal, id: number): Deal => tidyDeal({ ...deal, teams: deal.teams.filter((t) => t !== id) })
+
+/** Whether anything moves yet: a player, or some FAAB. */
+export const dealActive = (deal: Deal) => deal.moves.length > 0 || deal.faab.some((x) => x.dollars > 0)
+
+const signed = (v: number) => (Math.abs(v) < 0.05 ? '0.0' : `${v > 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`)
+
+/**
+ * The deal in one short line, for the minimized builder: "You ⇄ Team X · 2 for 1 · +3.1/wk". Two teams count what you
+ * send against what you get; a bigger deal counts the players moving. `lineup` is your lineup gain per week, when priced.
+ */
+export const dealSummary = (deal: Deal, me: number, name: (rosterId: number) => string, lineup?: number | null): string => {
+  const partners = deal.teams.filter((t) => t !== me)
+  if (!partners.length) return 'Pick a partner'
+  const head = `You ⇄ ${partners.map(name).join(' + ')}`
+  if (!dealActive(deal)) return `${head} · pick players`
+  const parts = [head]
+  if (partners.length === 1) {
+    const out = deal.moves.filter((m) => m.from === me).length
+    const back = deal.moves.filter((m) => m.to === me).length
+    if (out || back) parts.push(`${out} for ${back}`)
+  } else parts.push(`${deal.moves.length} player${deal.moves.length === 1 ? '' : 's'}`)
+  const paid = deal.faab.reduce((a, x) => a + (x.to === me ? x.dollars : 0) - (x.from === me ? x.dollars : 0), 0)
+  if (paid) parts.push(`${paid > 0 ? '+' : '−'}$${Math.abs(paid)}`)
+  if (lineup != null && Number.isFinite(lineup)) parts.push(`${signed(lineup)}/wk`)
+  return parts.join(' · ')
+}
