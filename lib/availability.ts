@@ -22,11 +22,13 @@ export const waiverClears = (transactions: SleeperTransaction[], rosteredBy: Rec
   if (!(clearDays > 0)) return out
   const since = now - clearDays * DAY
   for (const t of transactions) {
-    if (t.type === 'trade' || t.status !== 'complete' || !t.drops || t.created < since) continue
+    // The clock starts when the drop went through: a claim's drop happens when claims run, not when it was put in.
+    const at = t.processed ?? t.created
+    if (t.type === 'trade' || t.status !== 'complete' || !t.drops || at < since) continue
     for (const id of Object.keys(t.drops)) {
       // Picked up again since (by anyone, the same team included): rostered, not on waivers.
       if (rosteredBy[id] != null) continue
-      const clears = t.created + clearDays * DAY
+      const clears = at + clearDays * DAY
       if (clears > now) out[id] = Math.max(out[id] ?? 0, clears)
     }
   }
@@ -96,8 +98,9 @@ export const sortPlayers = (ids: string[], sort: FaSort, m: FaMetrics, players: 
 }
 
 /**
- * The browsable pool: every player at a fantasy position who is on an NFL team or a fantasy roster, filtered by
- * position, standing and a search. Players with no numbers stay in (they sort to the end), so nobody is missing.
+ * The browsable pool: every player at a fantasy position who is on an NFL team, a fantasy roster or has numbers for
+ * the view (`keep`), filtered by position, standing and a search. Players with no numbers stay in (they sort to the
+ * end), so nobody is missing.
  */
 export const filterPlayers = (input: {
   players: PlayerMap
@@ -110,9 +113,11 @@ export const filterPlayers = (input: {
   positions?: string[]
   /** Anyone failing this is left out unless a search names him: the long tail with no projection at all. */
   relevant?: (id: string) => boolean
+  /** Who stays though off every NFL roster: whoever has numbers for the view (a released player's season so far). */
+  keep?: (id: string) => boolean
   status: (id: string) => Availability
 }) => {
-  const { players, pos, own, query, flex, positions, relevant, status } = input
+  const { players, pos, own, query, flex, positions, relevant, keep, status } = input
   const searching = !!query.trim()
   const ids = input.pool ?? Object.keys(players)
   const out: string[] = []
@@ -123,8 +128,9 @@ export const filterPlayers = (input: {
     if (!matchesPos(p, pos, flex)) continue
     const a = status(id)
     if (!matchesOwn(a, own)) continue
-    // Free agents off every NFL roster (retired, unsigned) only clutter the list; anyone rostered here stays.
-    if (!p.team && a.kind !== 'mine' && a.kind !== 'team') continue
+    // Free agents off every NFL roster (retired, unsigned) only clutter the list; anyone rostered here stays, and so
+    // does anyone with numbers for the view.
+    if (!p.team && a.kind !== 'mine' && a.kind !== 'team' && !keep?.(id)) continue
     if (!matchesQuery(p, query)) continue
     if (!searching && relevant && a.kind !== 'mine' && a.kind !== 'team' && !relevant(id)) continue
     out.push(id)

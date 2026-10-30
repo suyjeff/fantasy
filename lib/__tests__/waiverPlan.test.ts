@@ -82,6 +82,15 @@ describe('planWaivers', () => {
     // An alternative, an upgrade, or a kicker is not a stash.
     for (const id of ['rbC', 'rbD', 'wrA', 'faK']) expect(ids).not.toContain(id)
   })
+  it('never stashes a player who would start for you, though the upgrade limits left him out', () => {
+    // Room for one upgrade only: the receiver who would start misses the cut, and is no bench bet either.
+    const tight = planWaivers({ ...base, limits: { upgrades: 1 } })
+    expect(tight.upgrades.map((u) => u.id)).toEqual(['rbA'])
+    const ids = tight.stashes.map((s) => s.id)
+    expect(ids).not.toContain('wrA')
+    // One who would not start (under the bar) still can be.
+    expect(ids).toContain('faQb')
+  })
   it('takes a K stream in place of yours, so no bench player is cut twice', () => {
     const drops = [...plan.upgrades, ...plan.streams].map((m) => m.drop).filter(Boolean)
     expect(new Set(drops).size).toBe(drops.length)

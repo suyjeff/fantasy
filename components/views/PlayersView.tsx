@@ -52,7 +52,9 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   const ids = useMemo(() => {
     const relevant = (id: string) => (perWeek[id] ?? 0) > 0 || values[id] != null || (trending[id] ?? 0) > 0
     const pool = basis === 'ahead' ? undefined : Object.keys(values)
-    return filterPlayers({ players, pool, pos, own, query, flex, positions, relevant, status }).sort((a, b) =>
+    // A player released since stays on the list his numbers belong to: his season so far, or a projection.
+    const keep = (id: string) => (basis === 'ahead' ? (perWeek[id] ?? 0) > 0 : values[id] != null)
+    return filterPlayers({ players, pool, pos, own, query, flex, positions, relevant, keep, status }).sort((a, b) =>
       basis === 'ahead' ? (market[b] ?? -99) - (market[a] ?? -99) || (perWeek[b] ?? 0) - (perWeek[a] ?? 0) : (values[b]?.war ?? -99) - (values[a]?.war ?? -99),
     )
   }, [basis, perWeek, values, players, pos, own, query, flex, positions, status, trending, market])

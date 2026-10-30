@@ -14,6 +14,15 @@ describe('grades worker aggregation', () => {
     expect(c.all.n).toBe(3)
   })
 
+  it('takes no residual from a grade whose read the deal itself capped', () => {
+    const c = contribute([g({ key: 'aaaa1', x: -4.6, capped: true }), g({ key: 'bbbb2', capped: true, why: 'dormant' })])
+    expect(c.partners[3].n).toBe(0)
+    expect(c.partners[3].dormant).toBe(true)
+    expect(c.all.n).toBe(0)
+    expect(cleanGrade(g({ capped: true }))?.capped).toBe(true)
+    expect(cleanGrade({ ...g(), capped: 'yes' })?.capped).toBeUndefined()
+  })
+
   it('keeps the smallest balked premium per price scale', () => {
     const c = contribute([g({ key: 'aaaa1', why: 'lopsided', ask: 3, v: 2 }), g({ key: 'bbbb2', why: 'lopsided', ask: 2, v: 2 }), g({ key: 'cccc3', why: 'lopsided', ask: 1, v: 1 })])
     expect(c.partners[3].ask).toEqual({ 1: 1, 2: 2 })

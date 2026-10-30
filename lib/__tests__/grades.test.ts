@@ -10,6 +10,7 @@ const read = (logit: number, perceivedAsk: number | null = 0): AcceptRead => ({
   band: 'possible',
   tier: 'fair',
   cap: null,
+  capped: false,
   perceivedAsk,
   faab: null,
   reasons: [],

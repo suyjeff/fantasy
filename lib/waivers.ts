@@ -326,6 +326,8 @@ export const WEEKLY_STREAM: StreamPos[] = ['QB', 'TE', 'K', 'DEF']
 const OUT = /^(IR|Out|PUP|Sus)/i
 
 export type PlanTarget = { id: string; add: number; slot: string | null }
+/** The least a free agent must add to your lineup, pts/wk, to count as one who would start for you. */
+export const STARTS_FOR_YOU = 0.3
 
 export type PlanUpgrade = { id: string; pos: string; gain: number; slot: string | null; drop: string | null; alts: PlanTarget[] }
 export type PlanStream = { id: string; pos: string; proj: number; gain: number; vs: string | null; drop: string | null; alts: { id: string; proj: number }[] }
@@ -371,7 +373,7 @@ export const planWaivers = (input: {
   // Lineup upgrades: up to two a position, kickers and defenses left to the weekly streams.
   const upgrades: PlanUpgrade[] = []
   const perPos: Record<string, number> = {}
-  const real = targets.filter((t) => t.add >= 0.3)
+  const real = targets.filter((t) => t.add >= STARTS_FOR_YOU)
   for (const t of real) {
     const pos = posOf(t.id)
     if (!pos || pos === 'K' || pos === 'DEF' || (perPos[pos] ?? 0) >= lim.perPos) continue
@@ -427,12 +429,14 @@ export const planWaivers = (input: {
   }
 
   // Stashes: the most rest-of-season value left on the wire among players who would not start for you now, with a
-  // nudge for the ones the rest of Sleeper is grabbing.
+  // nudge for the ones the rest of Sleeper is grabbing. One who would start, but missed the upgrades for their limits,
+  // is no bench bet: he is an upgrade, and not one to be told he would not start.
+  const starter = new Set(real.map((t) => t.id))
   const stashScore = (id: string) => (value[id] ?? 0) + Math.min(1, Math.log10(1 + (trending[id] ?? 0)) / 5)
   const stashes: PlanStash[] = Object.keys(value)
     .filter((id) => {
       const pos = posOf(id)
-      return rosteredBy[id] == null && !used.has(id) && !!players[id]?.team && pos !== 'K' && pos !== 'DEF' && input.startable.includes(pos)
+      return rosteredBy[id] == null && !used.has(id) && !starter.has(id) && !!players[id]?.team && pos !== 'K' && pos !== 'DEF' && input.startable.includes(pos)
     })
     .sort((a, b) => stashScore(b) - stashScore(a))
     .slice(0, lim.stashes)

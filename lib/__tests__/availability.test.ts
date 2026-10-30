@@ -22,6 +22,13 @@ describe('waiverClears', () => {
     const w = waiverClears([tx('free_agent', { rb1: 1 }, DAY), tx('waiver', { wr1: 2 }, 3 * DAY)], {}, 2, now)
     expect(w).toEqual({ rb1: now - DAY + 2 * DAY })
   })
+  it('starts the clock when a claim went through, not when it was put in', () => {
+    // Put in three days ago, processed half a day ago: the player it dropped has been on waivers for half a day.
+    const claim = { ...tx('waiver', { wr1: 2 }, 3 * DAY), processed: now - DAY / 2 }
+    expect(waiverClears([claim], {}, 2, now)).toEqual({ wr1: now - DAY / 2 + 2 * DAY })
+    // Without a processed time (an older cached copy, another platform), the submission time stands in.
+    expect(waiverClears([tx('waiver', { wr1: 2 }, 3 * DAY)], {}, 2, now)).toEqual({})
+  })
   it('ignores trades, failed moves and players picked up again', () => {
     const failed = { ...tx('waiver', { k1: 1 }, DAY), status: 'failed' }
     const w = waiverClears([tx('trade', { qb1: 1 }, DAY), failed, tx('free_agent', { te1: 1 }, DAY)], { te1: 3 }, 2, now)
@@ -82,6 +89,14 @@ describe('filters', () => {
     expect(filterPlayers({ ...base, relevant })).not.toContain('k1')
     expect(filterPlayers({ ...base, relevant, query: 'k1' })).toEqual(['k1'])
     expect(filterPlayers({ ...base, own: 'available' })).not.toContain('gone')
+  })
+  it('keeps a released player with numbers for the view, off every NFL roster and every fantasy one', () => {
+    const status = (id: string) => availabilityOf(id, {}, 1, {})
+    const base = { players, pos: 'ALL' as const, own: 'all' as const, query: '', status }
+    expect(filterPlayers(base)).not.toContain('gone')
+    // Season to date: he played for someone before his release.
+    expect(filterPlayers({ ...base, pool: ['gone', 'wr1'], keep: (id) => id === 'gone' })).toEqual(['gone', 'wr1'])
+    expect(filterPlayers({ ...base, own: 'available', keep: (id) => id === 'gone' })).toContain('gone')
   })
 })
 

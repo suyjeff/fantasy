@@ -97,7 +97,9 @@ export const acceptOf = (read: DealRead | null, me: number, tradeRead: (idea: Tr
       get: s.sends,
       shape: s.sends.length === s.receives.length ? 'swap' : s.sends.length > s.receives.length ? 'depth' : 'consolidate',
       myGain: mine?.lineup ?? 0,
-      theirGain: s.net.mid,
+      // Lineup alone: the read counts the FAAB once, in what the deal is worth to them (idea.faab), the way it counts
+      // a suggestion's sweetener, so a deal reads the same here as on its card.
+      theirGain: s.lineup,
       myCost: 0,
       valueAsk: -s.value,
       weeksBetter: s.weeksBetter,
@@ -105,7 +107,7 @@ export const acceptOf = (read: DealRead | null, me: number, tradeRead: (idea: Tr
       fills: null,
       myCuts: [],
       theirCuts: s.cuts,
-      mutual: Math.min(mine?.lineup ?? 0, s.net.mid),
+      mutual: Math.min(mine?.lineup ?? 0, s.lineup),
       perWeek: [],
       faab: s.faab,
     }

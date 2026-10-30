@@ -153,8 +153,13 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
     }
   }, [stream.rows])
 
-  // Everyone off the wire who would start for you, with the cut it forces already priced in.
-  const adds = useMemo(() => ((tab === 'available' || tab === 'moves') && me ? waiverTargets(data, analysis) : []), [tab, me, data, analysis])
+  // Everyone off the wire who would start for you, with the cut it forces already priced in. Every free agent with a
+  // projection, not just the top of the pool: the browser's "For you" column reads a blank as "would not start", so
+  // it must be one. The cheap screen drops nearly all of them first, so the whole pool costs a few milliseconds.
+  const adds = useMemo(
+    () => ((tab === 'available' || tab === 'moves') && me ? waiverTargets(data, analysis, { pool: Infinity, limit: Infinity }) : []),
+    [tab, me, data, analysis],
+  )
   const gains = useMemo(() => Object.fromEntries(adds.map((t) => [t.id, t.add])) as Record<string, number>, [adds])
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
   // Bench players to cut, weakest first, with the consensus price as a floor (lib/moves).

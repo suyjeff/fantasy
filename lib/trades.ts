@@ -590,8 +590,8 @@ export type TradeSearchInput = {
   form?: Record<string, number>
   /**
    * What the room reads each player at (the consensus priced on the value curve, as the trade read uses it). A deal
-   * that reads past fair on it, or on `tradeMarket`, with each player's standing counted (currency.ts dealTier), is
-   * not suggested: a clear overpay only when `maxValueAsk` is raised to show lowballs, a lopsided deal or one that
+   * that reads past fair on it (on `tradeMarket` without it), moved by `form`, with each player's standing counted
+   * (currency.ts dealTier), is not suggested: a clear overpay only when `maxValueAsk` is raised to show lowballs, a lopsided deal or one that
    * would never happen never.
    */
   perceived?: Record<string, number> | null
@@ -769,11 +769,15 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   const mine = me.players.filter(tradeable)
 
   const funnel: TradeFunnel = { combinations: 0, scored: 0, rejectedValueAsk: 0, rejectedLopsided: 0, rejectedBye: 0, rejectedMyGain: 0, rejectedTheirGain: 0, kept: 0 }
-  // Whether they would read it as past fair (a clear overpay or worse, where the read's odds collapse): on the room's
-  // prices or on the trade market, either one. Raising `maxValueAsk` asks to see lowballs, so a clear overpay passes
-  // then; a lopsided deal or one that would never happen never does.
+  // Whether they would read it as past fair (a clear overpay or worse, where the read's odds collapse), on the prices
+  // the trade read judges it on (behavior.ts acceptRead): the room's where there are some, else the trade market,
+  // each moved by recent form, so a deal that passes here is not capped there. Raising `maxValueAsk` asks to see
+  // lowballs, so a clear overpay passes then; a lopsided deal or one that would never happen never does.
+  const form = input.form ?? {}
+  const judged = { ...(input.perceived ?? market) }
+  for (const id of Object.keys(form)) judged[id] = Math.max(0, judged[id] ?? 0) * form[id]
   const passes = cfg.maxValueAsk > DEFAULT_TRADE_CONFIG.maxValueAsk ? ['fair', 'overpay'] : ['fair']
-  const hopeless = (give: string[], get: string[]) => [input.perceived, market].some((prices) => !!prices && !passes.includes(dealTier({ gives: get, gets: give, prices, currency: input.currency }).tier))
+  const hopeless = (give: string[], get: string[]) => !passes.includes(dealTier({ gives: get, gets: give, prices: judged, currency: input.currency }).tier)
 
   type State = { give: string[]; get: string[]; my: number; their: number; ask: number; imbalance: number; objective: number }
   /**
@@ -789,7 +793,6 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   // Buying a player the room has marked down off a dud, or selling one it has marked up off a spike, is value
   // the price does not show. Per player, in trade-value points: what you save getting him, or gain sending him.
   // Bounded, so it breaks near-ties rather than making a deal.
-  const form = input.form ?? {}
   const edgeGet: Record<string, number> = {}
   const edgeGive: Record<string, number> = {}
   for (const id of Object.keys(form)) {

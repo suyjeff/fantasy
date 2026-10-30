@@ -263,12 +263,15 @@ export const tradeCurrency = (input: {
   return { factor, attached, standing: rosterStanding(input) }
 }
 
+/** One player's trade value (see `tradeValue`). */
+const playerValue = (id: string, market: Record<string, number>, currency: Currency | undefined, owned: boolean) => {
+  const v = starValue(Math.max(0, market[id] ?? 0)) * (currency?.factor[id] ?? 1)
+  return owned && currency?.attached.has(id) ? v * ATTACHMENT : v
+}
+
 /** A set's trade value: its market value, as people price it (stars dear, streamers cheap). `owned` adds the owner's attachment. */
 export const tradeValue = (ids: string[], market: Record<string, number>, currency: Currency | undefined, owned: boolean) =>
-  ids.reduce((a, id) => {
-    const v = starValue(Math.max(0, market[id] ?? 0)) * (currency?.factor[id] ?? 1)
-    return a + (owned && currency?.attached.has(id) ? v * ATTACHMENT : v)
-  }, 0)
+  ids.reduce((a, id) => a + playerValue(id, market, currency, owned), 0)
 
 // ---- How lopsided a deal reads ----
 //
@@ -342,16 +345,27 @@ export const dealTier = (input: {
 }): TierRead => {
   const { gives, gets, prices, currency } = input
   const standing = currency?.standing ?? {}
-  const price = (id: string, owned: boolean) => (prices ? tradeValue([id], prices, currency, owned) : 0)
+  const price = (id: string, owned: boolean) => (prices ? playerValue(id, prices, currency, owned) : 0)
   // Without a standing, a player is judged by his price alone: worth something, or a cut candidate.
   const roleOf = (id: string): Role => standing[id]?.role ?? (price(id, true) >= LOPSIDED.floor.useful ? 'useful' : 'scrub')
-  const worth = (id: string, owned: boolean) => Math.max(price(id, owned), LOPSIDED.floor[roleOf(id)])
+  // Each player's worth worked out once, not again in every comparison: the trade search runs this on every package.
+  const worth = (ids: string[], owned: boolean) => ids.map((id) => Math.max(price(id, owned), LOPSIDED.floor[roleOf(id)]))
+  const giveW = worth(gives, true)
+  const getW = worth(gets, false)
   const faabIn = Math.max(0, input.faab?.value ?? 0)
   const faabOut = Math.max(0, -(input.faab?.value ?? 0))
-  const giveV = gives.reduce((a, id) => a + worth(id, true), 0) + faabOut
-  const getV = gets.reduce((a, id) => a + worth(id, false), 0) + faabIn
+  const giveV = giveW.reduce((a, w) => a + w, 0) + faabOut
+  const getV = getW.reduce((a, w) => a + w, 0) + faabIn
   const nothingBack = gives.length > 0 && !gets.length && (faabIn <= 0 || faabIn < LOPSIDED.faab * giveV)
-  const head = [...gives].sort((a, b) => ROLE_ORDER[roleOf(b)] - ROLE_ORDER[roleOf(a)] || worth(b, true) - worth(a, true))[0] ?? null
+  // The headline: the best standing they give, the dearest among equals, the first among those.
+  let head: string | null = null
+  for (let i = 0, rank = -1, best = -1; i < gives.length; i++) {
+    const r = ROLE_ORDER[roleOf(gives[i])]
+    if (head != null && (r - rank || giveW[i] - best) <= 0) continue
+    head = gives[i]
+    rank = r
+    best = giveW[i]
+  }
   const out = (tier: DealTier, text: string | null): TierRead => ({ tier, gives: Math.round(giveV * 100) / 100, gets: Math.round(getV * 100) / 100, nothingBack, headline: head, text })
   if (!head) return out('fair', null)
   const role = roleOf(head)

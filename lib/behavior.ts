@@ -171,6 +171,8 @@ export type AcceptRead = {
   tier: DealTier
   /** The highest logit the tier allows, kept when your grades move the read; null for a fair deal. */
   cap: number | null
+  /** Whether the cap held the read down: the tier, not the manager, set these odds (lib/grades learns nothing from it). */
+  capped: boolean
   /** Value they give minus value they get, as the consensus rankings price it, moved by recent form (momentum.ts). */
   perceivedAsk: number | null
   /** FAAB to add so the deal reads as fair to them, in dollars, when money can close the gap. */
@@ -251,9 +253,12 @@ export const acceptRead = (
   // is added. A deal that is lopsided as it stands is read as it stands: the FAAB is offered only as the fix, when it
   // would make it a real offer.
   let sweetener = faab ? faabSweetener(faab, me, ask) : null
-  const evened = sweetener ? tierOf(sweetener).tier : tier.tier
-  if (evened === 'lopsided' || evened === 'nonsense') sweetener = null
-  const level = sweetener && !bad ? evened : tier.tier
+  const evened = sweetener ? tierOf(sweetener) : tier
+  if (evened.tier === 'lopsided' || evened.tier === 'nonsense') sweetener = null
+  // The deal the read is on: with the sweetener when it is assumed added, so its figures (the overpay below
+  // included) are the sweetened ones and the advice to add it shows in the odds.
+  const judged = sweetener && !bad ? evened : tier
+  const level = judged.tier
   const askNet = sweetener && !bad ? ask - faabTradeValue(faab!, sweetener) : ask
   // A team on a losing run wants a move, and pays a little more for one that helps it now.
   const mood = momentum?.teams[idea.partnerId]
@@ -275,8 +280,8 @@ export const acceptRead = (
   }
   if (level === 'overpay') {
     // Steeper than the linear term, the further past the line it is.
-    x -= 0.5 + 0.5 * Math.max(0, tier.gives - tier.gets - LOPSIDED.overpay.gap)
-    say(tier.text!, 'neg')
+    x -= 0.5 + 0.5 * Math.max(0, judged.gives - judged.gets - LOPSIDED.overpay.gap)
+    say(judged.text!, 'neg')
   }
   if (perceivedAsk != null) {
     if (sweetener) say(`add $${sweetener} FAAB to even it by consensus`, 'pos')
@@ -304,7 +309,8 @@ export const acceptRead = (
   x -= 0.15 * Math.max(0, idea.give.length + idea.get.length - 2)
   // The tier's ceiling. A deal that would never happen, or that no manager takes, says why before anything else.
   const cap = level === 'fair' ? null : logit(TIER_CAP[level])
-  if (cap != null) x = Math.min(x, cap)
+  const capped = cap != null && x > cap
+  if (capped) x = cap
   if (bad) signals.unshift({ text: tier.text!, tone: 'neg' })
   const index = Math.round(logistic(x) * 100)
   return {
@@ -312,6 +318,7 @@ export const acceptRead = (
     band: bandOf(index),
     tier: level,
     cap,
+    capped,
     perceivedAsk: perceivedAsk == null ? null : Math.round(perceivedAsk * 100) / 100,
     faab: sweetener,
     reasons: signals.map((s) => s.text),

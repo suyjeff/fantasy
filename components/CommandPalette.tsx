@@ -2,6 +2,7 @@ import React, { useEffect, useId, useMemo, useRef, useState, type ReactNode } fr
 import { dealSummary } from '../lib/deal'
 import { THEMES, themeById, type Scheme } from '../lib/themes'
 import { useFantasy } from './FantasyContext'
+import { useAvailability } from './useAvailability'
 import { SECTIONS, sectionCode, type SectionKey } from './Shell'
 import { Swatch, type Density } from './ThemePicker'
 import { useOpenTrades, useTradeDock } from './TradeDock'
@@ -133,6 +134,7 @@ const CommandPalette = ({
   onLeague: (id: string) => void
 }) => {
   const { data, analysis, go, openPlayer } = useFantasy()
+  const { status } = useAvailability(data, analysis)
   const dock = useTradeDock()
   const trades = useOpenTrades()
   const current = themeById(theme)
@@ -234,7 +236,7 @@ const CommandPalette = ({
         {p.pos} {p.team ?? 'FA'}
         <span className="hidden sm:inline">
           {' · '}
-          {ownerLabel(analysis, p.id)}
+          {ownerLabel(status(p.id), analysis.teamById)}
           {analysis.horizon.perWeek[p.id] ? ` · ${fmt(analysis.horizon.perWeek[p.id])}/wk` : ''}
         </span>
       </span>
@@ -268,7 +270,7 @@ const CommandPalette = ({
         if (out.filter((o) => o.group === i.group).length < 8) out.push(i)
         return out
       }, [])
-  }, [q, fixed, pool, recent]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [q, fixed, pool, recent, status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => setActive(0), [q])
   useEffect(() => {

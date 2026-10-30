@@ -193,9 +193,9 @@ const GradeBar = ({ idea, base, nm, posOf }: { idea: TradeIdea; base: AcceptRead
   const rec = grades.all[ideaKey(idea)]
   const pick = (g: Grade) =>
     // Picking the grade you already gave takes it back.
-    rec?.grade === g ? grades.set(idea, null) : grades.set(idea, { grade: g, x: base.logit, ask: base.perceivedAsk, v: PRICING_VERSION, why: g === 'yes' ? undefined : rec?.why, player: g === 'yes' ? undefined : rec?.player })
+    rec?.grade === g ? grades.set(idea, null) : grades.set(idea, { grade: g, x: base.logit, capped: base.capped || undefined, ask: base.perceivedAsk, v: PRICING_VERSION, why: g === 'yes' ? undefined : rec?.why, player: g === 'yes' ? undefined : rec?.player })
   const because = (why: GradeWhy, player?: string) =>
-    rec && grades.set(idea, { grade: rec.grade, x: rec.x, ask: rec.ask, v: rec.v, ...(rec.why === why && rec.player === player ? {} : { why, player }) })
+    rec && grades.set(idea, { grade: rec.grade, x: rec.x, capped: rec.capped, ask: rec.ask, v: rec.v, ...(rec.why === why && rec.player === player ? {} : { why, player }) })
   const givePos = [...new Set(idea.give.map(posOf).filter(Boolean))].join('/')
   const reasons: { why: GradeWhy; player?: string; label: string }[] = [
     ...idea.get.map((id) => ({ why: 'untouchable' as const, player: id, label: `won't move ${nm(id).split(' ').slice(-1)[0]}` })),

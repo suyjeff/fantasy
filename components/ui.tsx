@@ -1,4 +1,5 @@
 import React, { Children, createContext, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { clearsLabel, type Availability } from '../lib/availability'
 import type { TrimmedPlayer } from '../lib/types'
 import { chance, share } from '../lib/format'
 import { ShowMore } from './views/ShowMore'
@@ -1131,11 +1132,10 @@ export const N = ({ children, tone }: { children: ReactNode; tone?: 'pos' | 'neg
 /** Injury statuses that mean he does not play: IR, Out, PUP, suspended, not active. */
 export const isOut = (injury?: string | null) => !!injury && /^(IR|Out|PUP|Sus|NA)/i.test(injury)
 
-/** Who holds a player, for a detail card: "Free agent", "Your roster", or the team's name. */
-export const ownerLabel = (a: { rosteredBy: Record<string, number>; myRosterId: number | null; teamById: Record<number, { name: string } | undefined> }, id: string) => {
-  const owner = a.rosteredBy[id]
-  return owner === undefined ? 'Free agent' : owner === a.myRosterId ? 'Your roster' : (a.teamById[owner]?.name ?? '—')
-}
+/** Who holds a player, for a detail card, in the words every list uses (lib/availability): "Free agent", "On waivers ·
+ *  clears Thu", "Your roster", or the team's name. */
+export const ownerLabel = (a: Availability, teamById: Record<number, { name: string } | undefined>) =>
+  a.kind === 'fa' ? 'Free agent' : a.kind === 'waivers' ? `On waivers · ${clearsLabel(a.clears)}` : a.kind === 'mine' ? 'Your roster' : (teamById[a.rosterId]?.name ?? '—')
 
 export const PosTag = ({ pos, className }: { pos: string; className?: string }) => (
   <span

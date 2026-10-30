@@ -18,6 +18,8 @@ export type StoredGrade = {
   player?: string
   /** The model's log-odds when graded, before any lessons. */
   x: number
+  /** The deal's tier capped that read: the odds were the deal's, not the manager's, so it teaches no residual. */
+  capped?: boolean
   ask: number | null
   /** The trade-value scale `ask` is in. */
   v?: number
@@ -76,6 +78,7 @@ export const cleanGrade = (raw: unknown): StoredGrade | null => {
   if (ask !== null && (ask < 0 || ask > LIMITS.ask)) return null
   const out: StoredGrade = { key: r.key, partnerId, grade: r.grade as Grade, x, ask, at: num(r.at) ?? 0 }
   if (typeof r.why === 'string' && WHYS.includes(r.why)) out.why = r.why as Why
+  if (r.capped === true) out.capped = true
   if (out.why === 'untouchable' && typeof r.player === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(r.player)) out.player = r.player
   const v = num(r.v)
   if (v !== null && Number.isInteger(v) && v >= 0 && v < 1000) out.v = v
@@ -89,7 +92,7 @@ export const contribute = (grades: StoredGrade[], at = 0): Contribution => {
     const p = (out.partners[r.partnerId] ??= { sum: 0, n: 0, dormant: false, untouchable: [], ask: {} })
     // A reason that is a rule of its own does not also drag the manager's whole curve.
     const rule = r.why === 'untouchable' || r.why === 'fit'
-    if (!rule) {
+    if (!rule && !r.capped) {
       const residual = logit(TARGET[r.grade]) - r.x
       p.sum += residual
       p.n++

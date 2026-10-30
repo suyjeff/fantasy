@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/analysis'
 import { suggestBid, type BidAdvice } from '../../lib/faab'
+import { lastName } from '../../lib/names'
 import type { LeagueData } from '../../lib/useLeagueData'
 import { planWaivers, type PlanTarget } from '../../lib/waivers'
 import { contextReasons } from '../ContextNotes'
@@ -268,7 +269,7 @@ const WaiverMoves = ({
   const minBid = faab?.minBid ?? 0
   const total = plan.upgrades.length + plan.streams.length + plan.stashes.length + plan.handcuffs.length
   const valueText = (v: number) => `${fmtSigned(v, 1)}/wk value`
-  const lastName = (id: string) => players[id]?.name.split(' ').slice(-1)[0] ?? 'yours'
+  const surname = (id: string) => (players[id] ? lastName(players[id].name) : 'yours')
 
   return (
     <div className="ff-stack">
@@ -378,7 +379,7 @@ const WaiverMoves = ({
                   dropSub={s.drop ? valueText(analysis.market[s.drop] ?? 0) : undefined}
                   gain={s.gain}
                   gainUnit="pts"
-                  gainNote={s.vs ? `wk ${week ?? ''}, over ${lastName(s.vs)}` : `wk ${week ?? ''}: you have no ${s.pos}`}
+                  gainNote={s.vs ? `wk ${week ?? ''}, over ${surname(s.vs)}` : `wk ${week ?? ''}: you have no ${s.pos}`}
                   bid={faab ? { amount: minBid, note: 'the minimum: a one-week rental' } : null}
                   why={why}
                   alts={s.alts.map((a) => ({ id: a.id, text: <N>{fmt(a.proj)}</N> }))}

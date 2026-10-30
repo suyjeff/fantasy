@@ -38,6 +38,8 @@ export type GradeRecord = {
   player?: string
   /** The model's log-odds when you graded it, before any lessons. */
   x: number
+  /** The deal's tier capped that read (behavior.ts TIER_CAP): the odds were the deal's, not the manager's. */
+  capped?: boolean
   /** Value you asked of them by consensus, pts/wk. */
   ask: number | null
   /** The trade-value scale `ask` is in (currency.ts PRICING_VERSION); a grade from before there was one has none, and its ask is not comparable. */
@@ -120,7 +122,9 @@ export const learn = (grades: Grades, posOf: (id: string) => string | undefined,
     // Those grades count toward neither the residual nor its sample, so they never dilute the real ones.
     const rule = r.why === 'untouchable' || r.why === 'fit'
     const p = (partner[r.partnerId] ??= { offset: 0, n: 0, dormant: false, shared: 0 })
-    if (!rule) {
+    // A read its tier held down measured the deal, not the manager: "no way" to a deal already near zero says
+    // nothing about how they trade, and the cap would make it read as generous. It teaches only its reason.
+    if (!rule && !r.capped) {
       const residual = logit(TARGET[r.grade]) - r.x
       sums[r.partnerId] = (sums[r.partnerId] ?? 0) + residual
       all += residual

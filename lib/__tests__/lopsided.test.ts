@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { acceptRead, bandOf } from '../behavior'
 import type { Consensus } from '../consensus'
-import { dealTier, rosterStanding, tradeCurrency } from '../currency'
-import type { Faab } from '../faab'
-import { applyLessons, type Lessons } from '../grades'
+import { dealTier, rosterStanding, tradeCurrency, type Currency } from '../currency'
+import { faabTradeValue, type Faab } from '../faab'
+import { acceptOf } from '../../components/TradeBuilder'
+import type { DealRead, DealSide } from '../deal'
+import { applyLessons, ideaKey, learn, type Lessons } from '../grades'
 import { startingSlots } from '../lineup'
+import type { Momentum } from '../momentum'
 import { findTrades, type Horizon, type TradeIdea } from '../trades'
 import type { PlayerMap } from '../types'
 
@@ -228,6 +231,62 @@ describe('FAAB in a lopsided offer', () => {
     expect(r.index).toBeGreaterThan(read(idea([], ['vaki'])).index)
   })
 
+  it('reads a deal the same in the builder with the FAAB in it as on its card with the FAAB suggested', () => {
+    // Their RB14 for your RB11, a little short of even by consensus: the card suggests the money and reads it added.
+    const card = read(idea(['hubbard'], ['brown'], 0.4))
+    expect(card.faab).not.toBeNull()
+    // The builder prices the same deal with that FAAB in it: their lineup moves the same, and the money is worth
+    // something to them on its own (deal.ts faabValue), which the read must not count a second time.
+    const side = (rosterId: number, receives: string[], sends: string[], lineup: number, faab: number, mid: number): DealSide => ({
+      rosterId,
+      receives,
+      sends,
+      faab,
+      lineup,
+      perWeek: [],
+      weeksBetter: 3,
+      value: 0,
+      faabValue: { low: mid, mid, high: mid },
+      net: { low: lineup + mid, mid: lineup + mid, high: lineup + mid },
+      cuts: [],
+      problems: [],
+    })
+    const deal: DealRead = { sides: [side(2, ['brown'], ['hubbard'], 1, -card.faab!, -0.5), side(1, ['hubbard'], ['brown'], 0.4, card.faab!, 0.5)], valid: true, weeks: [] }
+    const builder = acceptOf(deal, 2, (i) => read(i)).accept[1]
+    expect(builder.logit).toBeCloseTo(card.logit, 9)
+    expect(builder.index).toBe(card.index)
+    expect(builder.tier).toBe(card.tier)
+  })
+
+  it('reads a clear overpay with the sweetener’s own figures, so adding it helps', () => {
+    // Their star (rated well below his standing) and a starter for two of your starters: an overpay on standing,
+    // close on price, so a little FAAB is suggested, and the deal is still an overpay with it, by less.
+    const cur: Currency = {
+      factor: {},
+      attached: new Set(),
+      standing: {
+        s: { name: 'Their Star', pos: 'WR', posRank: 3, role: 'star', starts: true },
+        t: { name: 'Their Starter', pos: 'RB', posRank: 20, role: 'starter', starts: true },
+        a: { name: 'My One', pos: 'RB', posRank: 30, role: 'starter', starts: true },
+        b: { name: 'My Two', pos: 'WR', posRank: 40, role: 'starter', starts: true },
+      },
+    }
+    const px = { s: 1.4, t: 0.2, a: 0.4, b: 0.4 }
+    const i = idea(['a', 'b'], ['s', 't'], -1)
+    const r = acceptRead(i, 2, null, px, cur, FAAB, null)
+    expect(r.faab).not.toBeNull()
+    expect(r.tier).toBe('overpay')
+    const before = dealTier({ gives: ['s', 't'], gets: ['a', 'b'], prices: px, currency: cur })
+    expect(before.tier).toBe('overpay')
+    // The same deal with the FAAB already in it: the read the advice promises.
+    const paid = acceptRead({ ...i, faab: r.faab! }, 2, null, px, cur, FAAB, null)
+    expect(paid.tier).toBe('overpay')
+    expect(r.logit).toBeCloseTo(paid.logit, 9)
+    // Better than the overpay penalty on the deal without the money would make it.
+    const after = dealTier({ gives: ['s', 't'], gets: ['a', 'b'], prices: px, currency: cur, faab: { dollars: r.faab!, value: faabTradeValue(FAAB, r.faab!) } })
+    expect(after.gives - after.gets).toBeLessThan(before.gives - before.gets)
+  })
+
   it('works on standing alone where trades carry no FAAB', () => {
     const r = read(idea([], ['doubs']), null)
     expect(r.tier).toBe('nonsense')
@@ -256,6 +315,26 @@ describe('keeping the tiers', () => {
     expect(applyLessons(r, idea([], ['doubs']), lessons, names, posOf).index).toBeLessThanOrEqual(1)
     const graded = { ...lessons, grades: { '1|>doubs': { partnerId: 1, give: [], get: ['doubs'], grade: 'yes' as const, x: r.logit, ask: r.perceivedAsk, at: 0 } } }
     expect(applyLessons(r, idea([], ['doubs']), graded, names, posOf).index).toBe(75)
+  })
+
+  it('learns nothing about a manager from a grade on a read its tier capped', () => {
+    // "No way" to Doubs for nothing, a deal held to 1% whatever the manager is like.
+    const i = idea([], ['doubs'], 1.5)
+    const r = read(i)
+    expect(r.capped).toBe(true)
+    const no = learn({ [ideaKey(i)]: { partnerId: 1, give: [], get: ['doubs'], grade: 'no', x: r.logit, capped: r.capped, ask: r.perceivedAsk, at: 0 } }, () => 'WR')
+    expect(no.partner[1].offset).toBe(0)
+    expect(no.partner[1].n).toBe(0)
+    expect(no.global).toBe(0)
+    // A capped grade with a reason still teaches the reason.
+    const why = learn({ [ideaKey(i)]: { partnerId: 1, give: [], get: ['doubs'], grade: 'no', why: 'dormant', x: r.logit, capped: true, ask: null, at: 0 } }, () => 'WR')
+    expect(why.partner[1].dormant).toBe(true)
+    // An uncapped read still teaches: "no way" to a fair deal lowers that manager.
+    const fair = idea(['downs'], ['waddle'], 0.2)
+    const f = read(fair)
+    expect(f.capped).toBe(false)
+    const lower = learn({ [ideaKey(fair)]: { partnerId: 1, give: ['downs'], get: ['waddle'], grade: 'no', x: f.logit, capped: f.capped, ask: f.perceivedAsk, at: 0 } }, () => 'WR')
+    expect(lower.partner[1].offset).toBeLessThan(0)
   })
 
   it('names the band by the index alone, the same everywhere', () => {
@@ -315,5 +394,19 @@ describe('the search never suggests a hopeless deal', () => {
     expect(after.some((i) => i.get.includes('star'))).toBe(false)
     expect(rejected).toBeGreaterThan(0)
     for (const i of after) expect(dealTier({ gives: i.get, gets: i.give, prices: perceived, currency: cur }).tier).toBe('fair')
+  })
+
+  it('screens on the prices the read judges on, recent form included', () => {
+    // Their star off a spike: fair for your third back on the room's prices, a clear overpay once form moves his.
+    const room = { ...market, star: 6 }
+    const form = { star: 1.15 }
+    expect(dealTier({ gives: ['star'], gets: ['r3'], prices: room, currency: cur }).tier).toBe('fair')
+    const keys = (ideas: TradeIdea[]) => ideas.map((i) => `${i.give}>${i.get}`)
+    expect(keys(findTrades({ ...input, perceived: room }))).toContain('r3>star')
+    const ideas = findTrades({ ...input, perceived: room, form })
+    expect(keys(ideas)).not.toContain('r3>star')
+    // Every suggestion reads fair to the trade read, which prices the same form in.
+    const momentum: Momentum = { form: { star: { kind: 'sell-high', name: 'Star', actual: 30, expected: 13, games: 1, z: 2, factor: 1.15 } }, teams: {}, market }
+    for (const i of ideas) expect(acceptRead(i, 1, null, room, cur, null, momentum).tier, `${i.give}>${i.get}`).toBe('fair')
   })
 })

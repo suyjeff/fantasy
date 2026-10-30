@@ -107,7 +107,7 @@ const FreeAgentBrowser = ({ data, analysis, gains, trending }: { data: LeagueDat
             key: 'gain',
             label: 'For you',
             align: 'right' as const,
-            title: 'Points a week he would add to your best lineup over the rest of the season, after the drop it forces. Blank: he would not start for you.',
+            title: 'Points a week he would add to your best lineup over the rest of the season, after the drop it forces. Blank: he would not start for you, or has no projection.',
             sort: (id: string) => gains[id] ?? -99,
             render: (id: string) => (gains[id] ? <Num value={gains[id]} signed /> : <span className="text-ff-muted">–</span>),
           },
