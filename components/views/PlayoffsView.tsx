@@ -126,7 +126,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
     return (
       <>
         <PageHeader title="Playoffs" />
-        <div className="mt-4">
+        <div className="ff-page-body">
           <Empty title="No forecast yet">The playoff race needs Sleeper&apos;s projections for the weeks ahead.</Empty>
         </div>
       </>
@@ -416,7 +416,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
           />
         }
       />
-      <div className="mt-4 space-y-3">
+      <div className="ff-page-body ff-stack">
         <TabSection id="race" active={tab === 'race'}>
           {mine && me != null && (
             <StatGrid>
@@ -450,7 +450,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
               </Button>
             </div>
           )}
-          <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+          <div className="ff-grid-gap grid grid-cols-1 items-start xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
             {race}
             {!stacked && whatIf}
           </div>

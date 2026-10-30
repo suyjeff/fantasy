@@ -268,7 +268,7 @@ const TradesView = ({
     return (
       <>
         <PageHeader title="Trades" />
-        <div className="mt-4">
+        <div className="ff-page-body">
           <Empty title="No roster of yours in this league">Pick a league you are in from the menu.</Empty>
         </div>
       </>
@@ -278,7 +278,7 @@ const TradesView = ({
     return (
       <>
         <PageHeader title="Trades" />
-        <div className="mt-4">
+        <div className="ff-page-body">
           <Empty title="Nothing left to project">Trades are priced over the weeks still to be played, and this season has none left.</Empty>
         </div>
       </>
@@ -396,7 +396,7 @@ const TradesView = ({
         }
       />
 
-      <div className={cx('mt-4 space-y-3', fab && 'max-md:pb-16')}>
+      <div className={cx('ff-page-body ff-stack', fab && 'max-md:pb-16')}>
         <TabSection id="suggested" active={tab === 'suggested'}>
             <div className="flex flex-wrap items-center gap-2">
               <Segmented<Sort>
@@ -431,9 +431,9 @@ const TradesView = ({
             </div>
             {/* Always mounted so it can slide: the row grows from 0 to its height, and closed it leaves the tab order. */}
             {phone && (
-              <div className={cx('!mt-0 grid transition-[grid-template-rows] duration-[220ms] ease-ff-drawer motion-reduce:transition-none', moreOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+              <div className={cx('-mt-[var(--ff-gl)] grid transition-[grid-template-rows] duration-[220ms] ease-ff-drawer motion-reduce:transition-none', moreOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
                 <div className="min-h-0 overflow-hidden" inert={!moreOpen}>
-                  <div className="pt-3">
+                  <div className="pt-[var(--ff-gl)]">
                     <Panel title="Filters">
                       <div className="space-y-3">
                         {makeupSeg}
@@ -454,7 +454,7 @@ const TradesView = ({
               </Empty>
             ) : (
               <>
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div className="ff-grid-gap grid grid-cols-1 lg:grid-cols-2">
                   {shown.slice(0, visible).map((versions) => (
                     <TradeCard
                       key={`${versions[0].partnerId}:${versions[0].get.join('+')}`}
@@ -536,7 +536,7 @@ const TradesView = ({
 
         <TabSection id="needs" active={tab === 'needs'}>
           {/* On a phone the team-by-team cards come first: the grid of numbers is wider than the screen. */}
-          <div className="flex flex-col gap-3">
+          <div className="ff-stack">
           <Panel
             title={needsView === 'position' ? 'Points per week an average starter would add' : 'Each slot against the league average'}
             pad={false}

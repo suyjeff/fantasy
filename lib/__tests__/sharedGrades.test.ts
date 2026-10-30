@@ -9,6 +9,8 @@ const idea = (partnerId: number, give: string[], get: string[]) => ({ partnerId,
 const read = (logit: number, perceivedAsk: number | null = 0): AcceptRead => ({
   index: Math.round(100 / (1 + Math.exp(-logit))),
   band: 'possible',
+  tier: 'fair',
+  cap: null,
   perceivedAsk,
   faab: null,
   reasons: [],

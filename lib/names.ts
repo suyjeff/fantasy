@@ -17,3 +17,10 @@ export const normName = (name: string) =>
     .split(/\s+/)
     .filter((w) => w && !SUFFIX.has(w))
     .join(' ')
+
+/** A player's surname for short copy: "Burden" for Luther Burden III, "Cooper" for Omar Cooper Jr. */
+export const lastName = (name: string) => {
+  const parts = name.split(' ').filter(Boolean)
+  while (parts.length > 1 && /^(jr|sr|ii|iii|iv|v)\.?$/i.test(parts[parts.length - 1])) parts.pop()
+  return parts.length > 1 ? parts[parts.length - 1] : name
+}

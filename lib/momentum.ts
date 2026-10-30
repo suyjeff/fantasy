@@ -16,6 +16,7 @@
 
 import type { PlayerContext, Usage } from './context'
 import { ROLE_SWING } from './context'
+import { lastName } from './names'
 import { streakOf, type TeamSeason } from './power'
 import type { PlayerMap } from './types'
 import type { WeekPoints } from './war'
@@ -185,12 +186,8 @@ export const formText = (f: PlayerForm) => {
     : `${what} week: ${f.actual.toFixed(1)} vs ${f.expected.toFixed(1)} expected`
 }
 
-/** "Burden" for Luther Burden III, "Cooper" for Omar Cooper Jr. */
-export const lastName = (name: string) => {
-  const parts = name.split(' ').filter(Boolean)
-  while (parts.length > 1 && /^(jr|sr|ii|iii|iv|v)\.?$/i.test(parts[parts.length - 1])) parts.pop()
-  return parts.length > 1 ? parts[parts.length - 1] : name
-}
+/** "Burden" for Luther Burden III, "Cooper" for Omar Cooper Jr. (lives in names.ts, where the trade read also uses it). */
+export { lastName }
 
 /**
  * Every player's form read from the league's completed weeks. Nothing when the points are a proxy (last

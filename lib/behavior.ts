@@ -12,7 +12,7 @@
 //               model. A deal the model likes that the consensus calls fair
 //               is the one that gets accepted.
 
-import { tradeValue, type Currency } from './currency'
+import { dealTier, LOPSIDED, tradeValue, type Currency, type DealTier } from './currency'
 import { faabSweetener, faabTradeValue, type Faab } from './faab'
 import { formText, type Momentum } from './momentum'
 import type { LeagueHistory } from './useLeagueData'
@@ -147,10 +147,25 @@ export const leagueBehavior = (input: {
   }
 }
 
+export type Band = 'no chance' | 'long shot' | 'possible' | 'likely'
+
+/** The word for an index, the same everywhere a read is shown (and after your grades move it). */
+export const bandOf = (index: number): Band => (index >= 60 ? 'likely' : index >= 35 ? 'possible' : index >= 5 ? 'long shot' : 'no chance')
+
+/**
+ * The most each tier of lopsidedness may read, as a chance (currency.ts dealTier). A clear overpay falls off
+ * steeply; a lopsided deal is near zero; one that would never happen is at most 1%, whatever else is true.
+ */
+export const TIER_CAP: Record<Exclude<DealTier, 'fair'>, number> = { overpay: 0.15, lopsided: 0.03, nonsense: 0.01 }
+
 export type AcceptRead = {
   /** 0–100. A ranking index for "who is likeliest to say yes", not a calibrated probability. */
   index: number
-  band: 'long shot' | 'possible' | 'likely'
+  band: Band
+  /** How lopsided the deal reads to them, from fair to nonsense (currency.ts dealTier). */
+  tier: DealTier
+  /** The highest logit the tier allows, kept when your grades move the read; null for a fair deal. */
+  cap: number | null
   /** Value they give minus value they get, as the consensus rankings price it, moved by recent form (momentum.ts). */
   perceivedAsk: number | null
   /** FAAB to add so the deal reads as fair to them, in dollars, when money can close the gap. */
@@ -167,6 +182,7 @@ export type AcceptRead = {
 }
 
 const logistic = (x: number) => 1 / (1 + Math.exp(-x))
+const logit = (p: number) => Math.log(p / (1 - p))
 
 /**
  * How an offer is likely to land. The weights are judgment, not fit — there
@@ -184,6 +200,11 @@ const logistic = (x: number) => 1 / (1 + Math.exp(-x))
  *
  * Recent form moves the price itself rather than adding a term: a player off a dud reads cheaper to the
  * room, one off a spike dearer, by at most 15% of his value (momentum.ts FORM).
+ *
+ * Over all of that sits the deal's tier (currency.ts dealTier). A clear overpay costs more the bigger it is and
+ * reads 15% at most; a lopsided deal 3% at most; something for nothing, a star for spare parts or a starter for a
+ * bench scrap 1% at most, and its reason leads the signals. FAAB in the deal (`idea.faab`) counts toward what they
+ * get at its capped trade value (faab.ts), so it can even a small gap but never buys a star.
  */
 export const acceptRead = (
   idea: TradeIdea,
@@ -209,11 +230,26 @@ export const acceptRead = (
   }
   const shift = shiftOf(moved(idea.get), true) - shiftOf(moved(idea.give), false)
   // Consensus value, priced the way people price it: streamers cheap, their own drafted players dear.
-  const perceivedAsk = perceived ? tradeValue(idea.get, perceived, currency, true) - tradeValue(idea.give, perceived, currency, false) + shift : null
-  const ask = perceivedAsk ?? idea.valueAsk + shift
-  // A small overpay can be evened with FAAB; it counts for them at its (capped) trade value.
-  const sweetener = faab ? faabSweetener(faab, me, ask) : null
-  const askNet = sweetener ? ask - faabTradeValue(faab!, sweetener) : ask
+  // FAAB already in the deal (the builder's), at its capped trade value: what they get for it, or pay.
+  const dollars = idea.faab ?? 0
+  const faabIn = faab && dollars ? Math.sign(dollars) * faabTradeValue(faab, Math.abs(dollars)) : 0
+  const perceivedAsk = perceived ? tradeValue(idea.get, perceived, currency, true) - tradeValue(idea.give, perceived, currency, false) + shift - faabIn : null
+  const ask = perceivedAsk ?? idea.valueAsk + shift - faabIn
+  // How lopsided it reads, on the same prices (form included), with each player's standing as a floor.
+  const ids = [...idea.get, ...idea.give]
+  const prices = base ? Object.fromEntries(ids.map((id) => [id, Math.max(0, base[id] ?? 0) * (form[id]?.factor ?? 1)])) : null
+  const tierOf = (extra: number) =>
+    dealTier({ gives: idea.get, gets: idea.give, prices, currency, faab: faab && dollars + extra ? { dollars: dollars + extra, value: faabIn + (extra ? faabTradeValue(faab, extra) : 0) } : null })
+  const tier = tierOf(0)
+  const bad = tier.tier === 'lopsided' || tier.tier === 'nonsense'
+  // A small overpay can be evened with FAAB; it counts for them at its (capped) trade value, and the read assumes it
+  // is added. A deal that is lopsided as it stands is read as it stands: the FAAB is offered only as the fix, when it
+  // would make it a real offer.
+  let sweetener = faab ? faabSweetener(faab, me, ask) : null
+  const evened = sweetener ? tierOf(sweetener).tier : tier.tier
+  if (evened === 'lopsided' || evened === 'nonsense') sweetener = null
+  const level = sweetener && !bad ? evened : tier.tier
+  const askNet = sweetener && !bad ? ask - faabTradeValue(faab!, sweetener) : ask
   // A team on a losing run wants a move, and pays a little more for one that helps it now.
   const mood = momentum?.teams[idea.partnerId]
   const urgency = mood?.urgency ?? 0
@@ -232,11 +268,19 @@ export const acceptRead = (
     const note = good ? (mine ? 'sell high' : 'buy low') : mine ? 'reads low to them' : 'they price him high'
     say(`${f.name} ${formText(f)}, ${note}`, good ? 'pos' : 'neg')
   }
+  if (level === 'overpay') {
+    // Steeper than the linear term, the further past the line it is.
+    x -= 0.5 + 0.5 * Math.max(0, tier.gives - tier.gets - LOPSIDED.overpay.gap)
+    say(tier.text!, 'neg')
+  }
   if (perceivedAsk != null) {
     if (sweetener) say(`add $${sweetener} FAAB to even it by consensus`, 'pos')
-    else if (perceivedAsk > 1.5) say('looks like an overpay to them by consensus', 'neg')
-    else if (perceivedAsk < -0.5) say('consensus says they win it', 'pos')
-    else say('consensus calls it fair', 'neutral')
+    // A deal past fair has said so in its tier's own words.
+    else if (tier.tier === 'fair') {
+      if (perceivedAsk > 1.5) say('looks like an overpay to them by consensus', 'neg')
+      else if (perceivedAsk < -0.5) say('consensus says they win it', 'pos')
+      else say('consensus calls it fair', 'neutral')
+    }
   } else if (sweetener) say(`add $${sweetener} FAAB to even it`, 'pos')
   const team = behavior?.teams[idea.partnerId]
   if (team) {
@@ -253,10 +297,16 @@ export const acceptRead = (
     }
   }
   x -= 0.15 * Math.max(0, idea.give.length + idea.get.length - 2)
+  // The tier's ceiling. A deal that would never happen, or that no manager takes, says why before anything else.
+  const cap = level === 'fair' ? null : logit(TIER_CAP[level])
+  if (cap != null) x = Math.min(x, cap)
+  if (bad) signals.unshift({ text: tier.text!, tone: 'neg' })
   const index = Math.round(logistic(x) * 100)
   return {
     index,
-    band: index >= 60 ? 'likely' : index >= 35 ? 'possible' : 'long shot',
+    band: bandOf(index),
+    tier: level,
+    cap,
     perceivedAsk: perceivedAsk == null ? null : Math.round(perceivedAsk * 100) / 100,
     faab: sweetener,
     reasons: signals.map((s) => s.text),

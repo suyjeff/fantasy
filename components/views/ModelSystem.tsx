@@ -133,7 +133,7 @@ export const OverviewTab = ({ open }: { open: (s: string) => void }) => {
         </ul>
       </Panel>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="ff-grid-gap grid sm:grid-cols-2">
         <button onClick={() => open('value')} className="border border-ff-line bg-ff-panel px-3 py-2.5 text-left hover:border-ff-line2">
           <span className="ff-label block">Tuning →</span>
           <span className="mt-1 block text-[12.5px] text-ff-text2">Change how players are valued and how teams are ranked.</span>
@@ -310,7 +310,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
   const feeds = (id: NodeId) => EDGES.filter(([a]) => a === id).map(([, b]) => nodes.find((n) => n.id === b)!.label)
 
   return (
-    <div className="space-y-3">
+    <div className="ff-stack">
       <Panel title="How the models feed each other" pad={false} actions={<span>hover to trace · click to open</span>}>
         <div ref={wrap} className="relative p-3">
           {paths.length > 0 && (
@@ -365,7 +365,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
           </div>
         </div>
       </Panel>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="ff-grid-gap grid grid-cols-1 lg:grid-cols-3">
         <Panel title="Measured" index={1} pad={false}>
           <Sentences>
             <li>
@@ -432,7 +432,7 @@ export const ForecastTab = () => {
   if (!f) return <Panel title="Forecast">Needs projections for the weeks ahead.</Panel>
   const rows = [...f.ratings].sort((a, b) => b.rating - a.rating)
   return (
-    <div className="space-y-3">
+    <div className="ff-stack">
       <StatGrid>
         <Stat label="Weekly σ" value={fmt(f.sigma)} sub={f.noiseN ? `measured, ${f.noiseN} team-weeks` : 'fallback'} />
         <Stat label="Season τ" value={fmt(f.tau)} sub={`${SIM.tauShare} × σ`} />
@@ -561,7 +561,7 @@ export const BacktestTab = () => {
   const maxSkill = Math.max(0.05, ...rows.map((r) => Math.abs(r.skill)))
   const seasons = [data.league.season, ...(data.history ? [data.history.season] : [])]
   return (
-    <div className="space-y-3">
+    <div className="ff-stack">
       <LinesTracker />
       <Panel title="Next-week win probability, graded out of sample" pad={false} actions={<span>{seasons.join(' + ')}</span>}>
         <Table
@@ -625,7 +625,7 @@ export const BehaviorTab = () => {
   const teams = [...analysis.teams].sort((x, y) => b.teams[y.rosterId].engagement - b.teams[x.rosterId].engagement)
   const name = (id: string) => data.players[id]?.name ?? id
   return (
-    <div className="space-y-3">
+    <div className="ff-stack">
       <StatGrid>
         <Stat label="Moves" value={b.movesTotal} sub="waiver + FA adds" />
         <Stat label="Trades" value={b.trades.length} sub={data.history ? `incl. ${data.history.season}` : 'this season'} />
@@ -634,7 +634,7 @@ export const BehaviorTab = () => {
         <Stat label="Consensus" value={data.consensus ? 'on' : 'off'} sub="perceived fairness" />
         <Stat label="Personalities" value="no" sub="deliberately not modelled" />
       </StatGrid>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="ff-grid-gap grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Panel title="Managers" pad={false}>
           <Table
             rows={teams}

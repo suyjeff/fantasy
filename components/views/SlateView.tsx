@@ -222,7 +222,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
     return (
       <>
         <PageHeader title="Gameday" />
-        <div className="mt-4">
+        <div className="ff-page-body">
           <Empty title="No NFL week in progress">Gameday reads the current week&apos;s games against this league&apos;s matchups. It comes back with the regular season.</Empty>
         </div>
       </>
@@ -512,7 +512,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
           />
         }
       />
-      <div className="mt-4 space-y-3">
+      <div className="ff-page-body ff-stack">
         <TabSection id="week" active={tab === 'week'}>
           {mine && mySide && oppSide ? (
             <>
@@ -546,7 +546,7 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
                   sub={mine.games[0] ? `moves your win odds ±${pts(mine.games[0].swing / 2)}` : 'nothing left to play'}
                 />
               </StatGrid>
-              <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+              <div className="ff-grid-gap grid grid-cols-1 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
                 <Panel title="Things to watch" actions={<span>your matchup, in sentences</span>} pad={false}>
                   {watch.length ? <Reasons items={watch} columns={1} /> : <p className="px-3 py-3 text-[12px] text-ff-muted">Nothing stands out yet.</p>}
                 </Panel>
@@ -587,13 +587,13 @@ const SlateView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis:
                 </span>
               </div>
               {view === 'grid' ? (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+                <div className="ff-grid-gap grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
                   {gs.map((g) => (
                     <GameTile key={g.key} g={g} maxSwing={maxSwing} me={me} opp={opp} isKey={mine?.games[0]?.key === g.key} now={now} />
                   ))}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
+                <div className="ff-grid-gap grid grid-cols-1 items-start xl:grid-cols-2">
                   {gs.map((g) => (
                     <GameCard key={g.key} g={g} columns={playerCols} expand={playerWhy} isKey={mine?.games[0]?.key === g.key} now={now} />
                   ))}

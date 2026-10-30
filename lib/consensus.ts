@@ -184,3 +184,13 @@ export const perceivedValues = (consensus: Consensus, market: Record<string, num
   }
   return out
 }
+
+/**
+ * What the room reads every player at: the consensus priced on the value curve, and the model's own value
+ * (floored at zero) for anyone the consensus does not rank or the matcher missed, so a miss never looks like a
+ * free player. The trade read's "perceived" prices, and the search's guard against hopeless offers.
+ */
+export const roomPrices = (consensus: Consensus, market: Record<string, number>): Record<string, number> => ({
+  ...Object.fromEntries(Object.entries(market).map(([id, v]) => [id, Math.max(0, v)])),
+  ...perceivedValues(consensus, market),
+})

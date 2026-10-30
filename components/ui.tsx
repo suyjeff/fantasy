@@ -332,10 +332,10 @@ export const TabSection = ({
   const phone = usePhone()
   if (!active) return null
   // A phone page replaces the last at once, so it fades up (120ms, opacity only; reduced motion skips it in CSS).
-  // Keyed by the tab so each pick plays it. The wrapper takes over the page's `space-y-3`, which no longer reaches
+  // Keyed by the tab so each pick plays it. The wrapper takes over the page's `ff-stack`, which no longer reaches
   // the panels inside it; wide screens keep the bare content, so nothing changes there.
   return phone ? (
-    <div key={id} className="ff-page-in space-y-3">
+    <div key={id} className="ff-page-in ff-stack">
       {children}
     </div>
   ) : (

@@ -883,7 +883,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
     }))
 
   return (
-    <div className="space-y-3">
+    <div className="ff-stack">
       <section aria-label="Verdict" className="flex items-start gap-3 border border-ff-line bg-ff-panel px-3 py-2.5 md:px-4">
         <span className="ff-label mt-[3px] shrink-0">Verdict</span>
         <p aria-live="polite" className="min-w-0 text-[13.5px] leading-snug text-ff-text">

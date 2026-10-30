@@ -5,6 +5,7 @@
 import type { Analysis } from './analysis'
 import { DEFAULT_TRADE_CONFIG, findTargets, findTrades, SUGGESTED_TRADE_CONFIG, type TradeConfig, type TradeIdea, type TradeTarget } from './trades'
 import { formFactors } from './momentum'
+import { roomPrices } from './consensus'
 import type { LeagueData } from './useLeagueData'
 
 // Keyed on the market-value table, which keeps its identity across composite
@@ -29,6 +30,8 @@ export const tradeBase = (data: LeagueData, analysis: Analysis) => {
     floor: analysis.horizonReplacement,
     /** Recent form's move in a player's price: buy-lows and sell-highs climb the suggestions (see momentum.ts). */
     form: formFactors(analysis.form),
+    /** The room's prices, as the trade read has them: no suggestion reads as hopeless on them (see trades.ts). */
+    perceived: data.consensus ? roomPrices(data.consensus, analysis.market) : null,
   }
 }
 

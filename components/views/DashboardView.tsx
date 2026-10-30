@@ -22,9 +22,8 @@ const CHANNELS = 4
 const MIN_W = 2
 const MIN_H = 4
 const MAX_H = 24
-/** Grid row unit and gap, in px; they match auto-rows-[34px] and gap-2 below. */
+/** Grid row unit in px; it matches auto-rows-[34px] below. The gap is the page gutter, read off the grid when a drag starts. */
 const ROW = 34
-const GAP = 8
 /** Two columns at md (half or full width), the widget's own span from xl. */
 const spanClass = (w: number) => cx(w <= 6 ? 'md:col-span-6' : 'md:col-span-12', 'xl:[grid-column:span_var(--cols)_/_span_var(--cols)]')
 const heightLabel = (h: number) => HEIGHTS.find(([, x]) => x === h)?.[0] ?? String(h)
@@ -182,6 +181,7 @@ const DashboardView = () => {
     const el = e.currentTarget
     el.setPointerCapture(e.pointerId)
     const wide = window.matchMedia('(min-width: 1280px)').matches
+    const GAP = parseFloat(getComputedStyle(grid.current).columnGap) || 8
     const colW = (grid.current.clientWidth - GAP * 11) / 12
     const x0 = e.clientX
     const y0 = e.clientY
@@ -259,9 +259,9 @@ const DashboardView = () => {
           </>
         }
       />
-      <div className="ff-canvas ff-bleed ff-gutter mt-0 min-h-[calc(100dvh-120px)] py-1.5 md:py-2">
+      <div className="ff-canvas ff-bleed ff-gutter mt-0 min-h-[calc(100dvh-120px)] py-[var(--ff-gl)]">
         {/* Phones stack widgets at their natural height; the row grid starts at md. */}
-        <div ref={grid} className={cx('grid grid-cols-1 gap-2.5 md:grid-flow-row-dense md:auto-rows-[34px] md:grid-cols-12 md:gap-2', editing && 'ff-grid-guides')}>
+        <div ref={grid} className={cx('ff-grid-gap grid grid-cols-1 md:grid-flow-row-dense md:auto-rows-[34px] md:grid-cols-12', editing && 'ff-grid-guides')}>
           {layout.map((w) => {
             const meta = WIDGETS[w.kind]
             const key = keyFor(w)

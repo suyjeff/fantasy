@@ -45,8 +45,8 @@ const TABS: Partial<Record<SectionKey, [string, string][]>> = {
   ],
   waivers: [
     ['moves', 'Recommended moves'],
+    ['available', 'Free agents'],
     ['stream', 'Streamers'],
-    ['adds', 'All adds'],
   ],
   power: [
     ['rankings', 'Rankings'],

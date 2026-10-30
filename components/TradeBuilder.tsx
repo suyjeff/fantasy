@@ -107,6 +107,7 @@ export const acceptOf = (read: DealRead | null, me: number, tradeRead: (idea: Tr
       theirCuts: s.cuts,
       mutual: Math.min(mine?.lineup ?? 0, s.net.mid),
       perWeek: [],
+      faab: s.faab,
     }
     accept[s.rosterId] = tradeRead(idea, false)
   }
@@ -144,7 +145,7 @@ export const useDealPricing = (deal: Deal, on: boolean): DealPricing => {
 
 type Tone = 'pos' | 'neg' | 'neutral'
 const toneOf = (v: number, edge = 0.25): Tone => (v > edge ? 'pos' : v < -edge ? 'neg' : 'neutral')
-const bandTone = (band: AcceptRead['band']): Tone => (band === 'likely' ? 'pos' : band === 'long shot' ? 'neg' : 'neutral')
+const bandTone = (band: AcceptRead['band']): Tone => (band === 'likely' ? 'pos' : band === 'possible' ? 'neutral' : 'neg')
 const oddsTone = (p: number): Tone => (p >= 0.5 ? 'pos' : p < 0.25 ? 'neg' : 'neutral')
 /** The odds of a yes, named as the trade cards name them: one partner's "Would they?", or every partner's. */
 const oddsLabel = (many: boolean) => (many ? 'All say yes' : 'Would they?')

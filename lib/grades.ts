@@ -19,7 +19,7 @@
 // they are also sent, anonymously, and the league's other grades arrive as a prior: your own grades
 // dominate, and the shared ones count for less as they thin out.
 
-import type { AcceptRead } from './behavior'
+import { bandOf, type AcceptRead } from './behavior'
 import { PRICING_VERSION } from './currency'
 import { blendGlobal, blendOffset, shareGrades, SHARED_DORMANT_MIN, type SharedPrior } from './sharedGrades'
 import type { TradeIdea } from './trades'
@@ -228,14 +228,15 @@ export const applyLessons = (
     x -= 0.8
     signals.unshift({ text: `you said they have no use for another ${[...new Set(idea.give.map(posOf))].join('/')}`, tone: 'neg' })
   }
-  // Your own grade of this very deal is the answer.
+  // Your own grade of this very deal is the answer. Short of that, nothing lifts a lopsided deal past its tier's cap.
   if (own) x = logit(TARGET[own.grade])
+  else if (read.cap != null) x = Math.min(x, read.cap)
   const index = Math.round(logistic(x) * 100)
   return {
     ...read,
     logit: x,
     index,
-    band: index >= 60 ? 'likely' : index >= 35 ? 'possible' : 'long shot',
+    band: bandOf(index),
     reasons: signals.map((s) => s.text),
     signals,
     graded: own ? own.grade : null,

@@ -263,7 +263,7 @@ const PowerView = ({
           />
         }
       />
-      <div className="mt-4 space-y-3">
+      <div className="ff-page-body ff-stack">
         {(recap || pending) && onReveal && here('rankings') && <PowerBanner recap={recap ?? null} pending={pending ?? null} analysis={analysis} onOpen={onReveal} />}
         {me && (
           <StatGrid>

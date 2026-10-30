@@ -201,7 +201,7 @@ const MeView = ({
     return (
       <>
         <PageHeader title="My team" />
-        <div className="mt-4">
+        <div className="ff-page-body">
           <Empty title="No roster of yours in this league">Pick a league you are in from the menu.</Empty>
         </div>
       </>
@@ -449,7 +449,7 @@ const MeView = ({
           />
         }
       />
-      <div className="mt-4 space-y-3">
+      <div className="ff-page-body ff-stack">
         <TabSection id="overview" active={tab === 'overview'}>
           {kpis && (
             <StatGrid>
