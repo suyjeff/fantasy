@@ -8,9 +8,11 @@ import { ContextNotes, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import { useAvailability } from '../useAvailability'
-import { Dropdown, FadeStrip, Num, Panel, Reasons, Segmented, Table, compact, fmt, pct, type Column, type Reason, type RowCap } from '../ui'
+import { Dropdown, FadeStrip, Num, Panel, Reasons, Segmented, Table, compact, fmt, pct, type Column, type Reason, type RowCap, type TableSort } from '../ui'
 
 const PAGE = 50
+/** The sorts with a best-first order of their own (lib/availability sortPlayers); the rest are the table's. */
+const FA_SORTS: FaSort[] = ['week', 'value', 'trend', 'gain']
 
 /**
  * Every player you can add, free agents and waiver claims alike: filter by position, sort by this week, the rest of
@@ -22,11 +24,12 @@ const FreeAgentBrowser = ({ data, analysis, gains, trending }: { data: LeagueDat
   const { status } = useAvailability(data, analysis)
   const players = data.players
   const [pos, setPos] = useState<PosFilter>('ALL')
-  const [sort, setSort] = useState<FaSort>('value')
+  // One sort for the Sort menu and the table's headers: either sets it, and both show it.
+  const [sort, setSort] = useState<TableSort>({ key: 'value', desc: true })
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(PAGE)
   // A new filter starts the list over at the first page (set during render, so the old length never paints).
-  const filterKey = `${pos}|${sort}|${query}`
+  const filterKey = `${pos}|${sort.key}|${sort.desc}|${query}`
   const [lastKey, setLastKey] = useState(filterKey)
   if (lastKey !== filterKey) {
     setLastKey(filterKey)
@@ -47,8 +50,10 @@ const FreeAgentBrowser = ({ data, analysis, gains, trending }: { data: LeagueDat
   const relevant = useMemo(() => (id: string) => (perWeek[id] ?? 0) > 0 || (trending[id] ?? 0) > 0, [perWeek, trending])
   const rows = useMemo(() => {
     const ids = filterPlayers({ players, pool: available, pos, own: 'all', query, flex, relevant, status })
-    return sortPlayers(ids, sort, metrics, players)
-  }, [available, players, pos, query, flex, relevant, status, sort, metrics])
+    // Best first on the menu's number (ties by value, then name); the table then orders by the column chosen, keeping
+    // that order among equals.
+    return sortPlayers(ids, FA_SORTS.includes(sort.key as FaSort) ? (sort.key as FaSort) : 'value', metrics, players)
+  }, [available, players, pos, query, flex, relevant, status, sort.key, metrics])
   const cap: RowCap = { limit, step: PAGE, more: () => setLimit((l) => l + PAGE) }
 
   const me = analysis.myRosterId
@@ -137,11 +142,16 @@ const FreeAgentBrowser = ({ data, analysis, gains, trending }: { data: LeagueDat
     { key: 'why', label: 'Context', hideBelow: 'xl', render: (id) => <ContextNotes context={data.context[id]} players={players} max={2} /> },
   ]
 
-  const SORTS: { key: FaSort; label: string; title: string }[] = [
+  // The menu names every sort the headers offer, so it always says how the table is ordered.
+  const SORTS: { key: string; label: string; title: string }[] = [
     { key: 'value', label: 'Rest of season', title: 'Rest-of-season value over replacement' },
     { key: 'week', label: week ? `Week ${week}` : 'This week', title: 'Projected points this week' },
-    ...(me != null ? [{ key: 'gain' as const, label: 'For you', title: 'Gain to your best lineup' }] : []),
+    ...(me != null ? [{ key: 'gain', label: 'For you', title: 'Gain to your best lineup' }] : []),
     { key: 'trend', label: 'Trending', title: 'Sleeper adds in the last 24 hours' },
+    { key: 'exp', label: 'Exp/wk', title: 'Expected points a week, rest of season' },
+    ...(data.consensus ? [{ key: 'ecr', label: 'ECR', title: 'FantasyPros rank at his position' }] : []),
+    { key: 'play', label: 'Plays', title: 'Chance he plays in the weeks ahead' },
+    { key: 'p', label: 'Name', title: 'Player name' },
   ]
 
   return (
@@ -154,9 +164,25 @@ const FreeAgentBrowser = ({ data, analysis, gains, trending }: { data: LeagueDat
         <div className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-2 lg:flex lg:flex-1 lg:items-center">
         <Dropdown
           label="Sort by"
-          value={sort}
-          onChange={(v) => setSort(v as FaSort)}
-          options={SORTS.map((o) => ({ value: o.key, label: o.label, sub: o.title, face: <><span className="text-ff-muted">Sort </span>{o.label}</> }))}
+          value={sort.key ?? 'value'}
+          onChange={(v) => setSort({ key: v, desc: v !== 'p' })}
+          options={SORTS.map((o) => ({
+            value: o.key,
+            label: o.label,
+            sub: o.title,
+            face: (
+              <>
+                {/* The narrowest phones drop the word (the menu is named "Sort by"), so the search keeps room for its text. */}
+                <span className="text-ff-muted max-[359px]:sr-only">Sort </span>
+                {o.label}
+                {/* The way it runs, as the header's arrow shows it. */}
+                <span aria-hidden className="ml-1 text-ff-muted">
+                  {sort.desc ? '↓' : '↑'}
+                </span>
+                <span className="sr-only">{sort.desc ? ', high to low' : ', low to high'}</span>
+              </>
+            ),
+          }))}
           className="lg:w-[200px]"
           buttonClassName="max-md:h-10"
         />
@@ -166,7 +192,7 @@ const FreeAgentBrowser = ({ data, analysis, gains, trending }: { data: LeagueDat
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Name or team"
           aria-label="Search available players by name or team"
-          className="h-8 min-w-0 rounded-sm border border-ff-line bg-ff-panel px-2.5 text-[13px] text-ff-text outline-none placeholder:text-ff-muted focus-visible:ring-2 focus-visible:ring-ff-accent/40 max-md:h-10 lg:w-[260px]"
+          className="h-8 min-w-0 rounded-sm border border-ff-line bg-ff-panel px-2.5 text-[13px] text-ff-text outline-none placeholder:text-ff-muted focus-visible:border-ff-accent focus-visible:ring-1 focus-visible:ring-ff-accent max-md:h-10 lg:w-[260px]"
         />
         </div>
       </div>
@@ -180,12 +206,12 @@ const FreeAgentBrowser = ({ data, analysis, gains, trending }: { data: LeagueDat
         pad={false}
       >
         <Table
-          key={sort}
           rows={rows}
           cap={cap}
           rowKey={(id) => id}
           columns={cols}
-          defaultSort={sort === 'week' ? 'week' : sort}
+          sort={sort}
+          onSort={setSort}
           canExpand={(id) => !!data.context[id]?.notes.length || (!!faab && gains[id] > 0)}
           expand={why}
           empty={query ? `Nobody available matches “${query}”.` : 'No one available at this position.'}

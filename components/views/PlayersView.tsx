@@ -304,7 +304,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name or team"
             aria-label="Search players"
-            className="h-8 min-w-[160px] rounded-sm md:max-w-[260px] md:flex-1 border border-ff-line bg-ff-panel px-2.5 text-[13px] text-ff-text outline-none placeholder:text-ff-muted focus-visible:ring-2 focus-visible:ring-ff-accent/40"
+            className="h-8 min-w-[160px] rounded-sm md:max-w-[260px] md:flex-1 border border-ff-line bg-ff-panel px-2.5 text-[13px] text-ff-text outline-none placeholder:text-ff-muted focus-visible:border-ff-accent focus-visible:ring-1 focus-visible:ring-ff-accent"
           />
         </div>
         {adjusted.length > 0 && (

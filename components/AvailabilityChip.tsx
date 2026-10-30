@@ -11,7 +11,9 @@ export const AvailabilityChip = ({ a, teamName, className, short }: { a: Availab
   if (a.kind === 'waivers')
     return (
       <Chip tone="warn" className={className} title={`Dropped lately: a waiver claim until he clears (${new Date(a.clears).toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' })})`}>
-        {short ? 'Waivers' : `On waivers · ${clearsLabel(a.clears)}`}
+        {/* "On waivers", never a bare "Waivers": that reads as a heading, not a state. Short drops only the day, which
+            the player's sheet and the Players page give in full. */}
+        {short ? 'On waivers' : `On waivers · ${clearsLabel(a.clears)}`}
       </Chip>
     )
   if (a.kind === 'mine') return <Chip tone="accent" className={className}>Your team</Chip>

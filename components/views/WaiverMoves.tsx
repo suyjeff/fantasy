@@ -392,7 +392,16 @@ const WaiverMoves = ({
       {(plan.stashes.length > 0 || plan.handcuffs.length > 0) && (
         <div className="ff-grid-gap grid items-start lg:grid-cols-2">
           {plan.stashes.length > 0 && (
-            <Panel title="Stash for later" actions={<span>{faab ? 'bid the minimum' : 'bench bets'}</span>} pad={false}>
+            <Panel
+              title="Stash for later"
+              actions={
+                // Ranked on value with a nudge for Sleeper buzz, so the figure on each row is not the whole order.
+                <span>
+                  value + buzz<span className="max-sm:hidden"> · {faab ? 'bid the minimum' : 'bench bets'}</span>
+                </span>
+              }
+              pad={false}
+            >
               <ol className="divide-y divide-ff-line">
                 {plan.stashes.map((s) => {
                   const ctx = contextReasons(data.context[s.id], players)[0]
@@ -441,7 +450,7 @@ const WaiverMoves = ({
           The best add is worth under <N>0.75</N> pts/wk to you: bid the minimum or hold. FAAB buys the most right after injuries.
         </Callout>
       )}
-      <Disclosure from="md" summary="How gain and bids work" className="text-[11.5px] leading-relaxed text-ff-muted">
+      <Disclosure from="md" summary="How gain and bids work" className="max-w-[75ch] text-[11.5px] leading-relaxed text-ff-muted">
         Gain for an upgrade: your best lineup re-solved each week with him in and the drop out. For a stream: his projection this
         week against the weakest starter you have at the spot. Bids weigh his worth to you against what this league pays for similar
         value

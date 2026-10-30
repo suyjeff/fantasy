@@ -795,6 +795,21 @@ html[data-ff-density="comfortable"] .ff .py-2:not([class*=":py-"]) { padding-top
 html[data-ff-density="comfortable"] .ff .py-2\.5:not([class*=":py-"]) { padding-top: 12px; padding-bottom: 12px; }
 html[data-ff-density="comfortable"] .ff .py-1\.5:not([class*=":py-"]) { padding-top: 7px; padding-bottom: 7px; }
 html[data-ff-density="comfortable"] .ff .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 16px; }
+/* The page rhythm (ff-stack, ff-grid-gap, ff-page-body) is the gutter, so comfortable opens the gutter and the gaps
+   between cards together, as space-y-3 did before the pages moved onto it. */
+html[data-ff-density="comfortable"] .ff {
+  --ff-gl: max(14px, env(safe-area-inset-left, 0px));
+  --ff-gr: max(14px, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 768px) {
+  html[data-ff-density="comfortable"] .ff {
+    --ff-gl: 12px;
+    --ff-gr: max(12px, env(safe-area-inset-right, 0px));
+  }
+  html[data-ff-density="comfortable"] .ff[data-sidebar='closed'] {
+    --ff-gl: max(12px, env(safe-area-inset-left, 0px));
+  }
+}
 html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px; }
 
 /* A player name opens his sheet. On hover the name takes the accent with a faint underline and the portrait

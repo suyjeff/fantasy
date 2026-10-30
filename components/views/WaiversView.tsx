@@ -320,7 +320,8 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             </div>
               <p className="text-[12px] leading-snug text-ff-muted md:max-w-[440px] md:text-right">
                 One-week pickups where the matchup moves the number most. For backs and receivers, see{' '}
-                <button type="button" onClick={() => onSub('available')} className="text-ff-accent underline-offset-2 hover:underline">
+                {/* Underlined at rest: in a sentence the accent alone sits too close to the text around it (1.4.1). */}
+                <button type="button" onClick={() => onSub('available')} className="text-ff-accent underline decoration-ff-accent/50 underline-offset-2 hover:decoration-current">
                   Free agents
                 </button>
                 .
@@ -369,7 +370,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                     <div className="p-4 text-[13px] text-ff-muted">No free agent at this position has a projection for week {week}.</div>
                   )}
                 </Panel>
-                <Disclosure from="md" summary="What the columns mean" className="text-[11.5px] leading-relaxed text-ff-muted">
+                <Disclosure from="md" summary="What the columns mean" className="max-w-[75ch] text-[11.5px] leading-relaxed text-ff-muted">
                   <span className="text-ff-text2">Proj</span> blends prop lines into next week. <span className="text-ff-text2">{pos === 'DEF' ? 'Opp total' : 'Team total'}</span>{' '}
                   {pos === 'DEF' ? 'is what the offense he faces should score' : 'is what his offense should score'} (<N>m</N> = from props, else Vegas via Sleeper).{' '}
                   <span className="text-ff-text2">Matchup</span> is what this opponent {pos === 'DEF' ? 'gives up to defenses' : `allows ${pos}s`} vs average

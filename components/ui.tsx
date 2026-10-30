@@ -1464,6 +1464,9 @@ export type Column<T> = {
 
 const HIDE: Record<string, string> = { sm: 'hidden sm:table-cell', md: 'hidden md:table-cell', lg: 'hidden lg:table-cell', xl: 'hidden xl:table-cell' }
 
+/** Which column a table is sorted on, and which way. */
+export type TableSort = { key?: string; desc: boolean }
+
 /** How many rows of a long table show, and how to ask for more. Made by `usePhoneCap`; `Table` reads it. */
 export type RowCap = { limit: number; step: number; more: () => void }
 
@@ -1490,6 +1493,8 @@ export function Table<T>({
   rowKey,
   defaultSort,
   defaultDesc = true,
+  sort: heldSort,
+  onSort,
   rowClass,
   onRowClick,
   empty = 'Nothing here yet.',
@@ -1519,14 +1524,21 @@ export function Table<T>({
   defaultOpen?: (row: T) => boolean
   defaultSort?: string
   defaultDesc?: boolean
+  /**
+   * The sort, held by the page instead: for a table whose sort is also set elsewhere (a Sort menu), so a header
+   * click and the menu are one choice. With it, `onSort` hears every header click and the defaults are ignored.
+   */
+  sort?: TableSort
+  onSort?: (s: TableSort) => void
   rowClass?: (row: T) => string
   onRowClick?: (row: T) => void
   empty?: ReactNode
   maxHeight?: number
   dense?: boolean
 }) {
-  const [sortKey, setSortKey] = useState<string | undefined>(defaultSort)
-  const [desc, setDesc] = useState(defaultDesc)
+  const [ownSort, setOwnSort] = useState<TableSort>({ key: defaultSort, desc: defaultDesc })
+  const { key: sortKey, desc } = heldSort ?? ownSort
+  const setSort = (s: TableSort) => (onSort ? onSort(s) : setOwnSort(s))
   // While columns hide past the right edge, a fade says so; it clears once scrolled to the end.
   const scroller = useRef<HTMLDivElement>(null)
   const [more, setMore] = useState(false)
@@ -1592,11 +1604,7 @@ export function Table<T>({
   }, [rows, columns, sortKey, desc])
   const toggle = (c: Column<T>) => {
     if (!c.sort) return
-    if (sortKey === c.key) setDesc((d) => !d)
-    else {
-      setSortKey(c.key)
-      setDesc(true)
-    }
+    setSort(sortKey === c.key ? { key: c.key, desc: !desc } : { key: c.key, desc: true })
   }
   const align = (c: Column<T>) => (c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left')
   // Cut after sorting: sorting a header reorders the whole list, not just the rows that happen to be showing.
@@ -1648,19 +1656,28 @@ export function Table<T>({
                 <th
                   key={c.key}
                   title={c.title}
-                  onClick={() => toggle(c)}
                   aria-sort={sortKey === c.key ? (desc ? 'descending' : 'ascending') : undefined}
                   className={cx(
                     'ff-label h-8 whitespace-nowrap border-b border-ff-line bg-ff-panel px-1.5 font-normal first:pl-2.5 last:pr-2.5 sm:px-2 sm:first:pl-3 sm:last:pr-3',
                     align(c),
-                    c.sort && 'cursor-pointer select-none hover:text-ff-text',
                     c.sticky && cx('sticky z-20', pin),
                     c.hideBelow && HIDE[c.hideBelow],
                     c.className,
                   )}
                 >
-                  {c.label}
-                  {sortKey === c.key && <span className="ml-0.5 text-ff-text">{desc ? '▾' : '▴'}</span>}
+                  {/* A sortable header is a button, so the keyboard sorts too (2.1.1); the header cell keeps aria-sort. */}
+                  {c.sort ? (
+                    <button
+                      type="button"
+                      onClick={() => toggle(c)}
+                      className="-mx-1 inline-flex h-8 select-none items-center whitespace-nowrap px-1 uppercase hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
+                    >
+                      {c.label}
+                      {sortKey === c.key && <span aria-hidden className="ml-0.5 text-ff-text">{desc ? '▾' : '▴'}</span>}
+                    </button>
+                  ) : (
+                    c.label
+                  )}
                 </th>
               ))}
             </tr>

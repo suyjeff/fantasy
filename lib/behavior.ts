@@ -152,6 +152,11 @@ export type Band = 'no chance' | 'long shot' | 'possible' | 'likely'
 /** The word for an index, the same everywhere a read is shown (and after your grades move it). */
 export const bandOf = (index: number): Band => (index >= 60 ? 'likely' : index >= 35 ? 'possible' : index >= 5 ? 'long shot' : 'no chance')
 
+/** The colour a band takes, the same on the trade cards, in the builder and in Compare: the word always comes with it. */
+export const bandTone = (band: Band): 'pos' | 'warn' | 'neg' => (band === 'likely' ? 'pos' : band === 'possible' ? 'warn' : 'neg')
+/** The tone for a chance from 0 to 1 (a joint "all say yes" included), by the band its index falls in. */
+export const oddsTone = (p: number) => bandTone(bandOf(Math.round(p * 100)))
+
 /**
  * The most each tier of lopsidedness may read, as a chance (currency.ts dealTier). A clear overpay falls off
  * steeply; a lopsided deal is near zero; one that would never happen is at most 1%, whatever else is true.
