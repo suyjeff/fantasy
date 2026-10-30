@@ -79,6 +79,23 @@
   margin-left: calc(-1 * var(--ff-gl));
   margin-right: calc(-1 * var(--ff-gr));
 }
+/* The page's rhythm: cards, panels and sections are spaced by exactly the left gutter, at every breakpoint, so the
+   space between two cards reads the same as the space between a card and the screen edge. ff-stack goes on a column
+   of page-level blocks, ff-grid-gap (or gap-[var(--ff-gl)]) on a grid of them, and ff-page-body on the wrapper right
+   under the page header, which also sets the gap above the first block. Flex gap, not sibling margins, so a hidden or
+   collapsed child never leaves a double gap. Spacing inside a card stays the card's own. These sit after Tailwind's
+   utilities, so keep a responsive display utility (hidden, md:hidden) off an element that is also an ff-stack. */
+.ff .ff-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ff-gl);
+}
+.ff .ff-grid-gap {
+  gap: var(--ff-gl);
+}
+.ff .ff-page-body {
+  margin-top: var(--ff-gl);
+}
 
 /* The app owns its scroll: pulling past the top never reloads the whole league (Android's pull-to-refresh). */
 html:has(body .ff),
@@ -505,8 +522,8 @@ html.ff-page body {
 /* Edit mode draws the twelve columns behind the widgets. */
 @media (min-width: 1280px) {
   .ff .ff-grid-guides {
-    background-image: linear-gradient(to right, rgb(var(--ff-accent) / 0.06) calc(100% - 8px), transparent 0);
-    background-size: calc((100% + 8px) / 12) 100%;
+    background-image: linear-gradient(to right, rgb(var(--ff-accent) / 0.06) calc(100% - var(--ff-gl)), transparent 0);
+    background-size: calc((100% + var(--ff-gl)) / 12) 100%;
   }
 }
 
@@ -778,6 +795,21 @@ html[data-ff-density="comfortable"] .ff .py-2:not([class*=":py-"]) { padding-top
 html[data-ff-density="comfortable"] .ff .py-2\.5:not([class*=":py-"]) { padding-top: 12px; padding-bottom: 12px; }
 html[data-ff-density="comfortable"] .ff .py-1\.5:not([class*=":py-"]) { padding-top: 7px; padding-bottom: 7px; }
 html[data-ff-density="comfortable"] .ff .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 16px; }
+/* The page rhythm (ff-stack, ff-grid-gap, ff-page-body) is the gutter, so comfortable opens the gutter and the gaps
+   between cards together, as space-y-3 did before the pages moved onto it. */
+html[data-ff-density="comfortable"] .ff {
+  --ff-gl: max(14px, env(safe-area-inset-left, 0px));
+  --ff-gr: max(14px, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 768px) {
+  html[data-ff-density="comfortable"] .ff {
+    --ff-gl: 12px;
+    --ff-gr: max(12px, env(safe-area-inset-right, 0px));
+  }
+  html[data-ff-density="comfortable"] .ff[data-sidebar='closed'] {
+    --ff-gl: max(12px, env(safe-area-inset-left, 0px));
+  }
+}
 html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px; }
 
 /* A player name opens his sheet. On hover the name takes the accent with a faint underline and the portrait

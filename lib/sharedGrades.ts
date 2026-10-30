@@ -118,6 +118,7 @@ export const pending = (grades: Grades, sent: Record<string, number>) => {
       ...(r.why ? { why: r.why } : {}),
       ...(r.why === 'untouchable' && r.player ? { player: r.player } : {}),
       x: Math.round(r.x * 1000) / 1000,
+      ...(r.capped ? { capped: true } : {}),
       ask: r.ask == null ? null : Math.round(r.ask * 1000) / 1000,
       ...(r.v != null ? { v: r.v } : {}),
       at: r.at,

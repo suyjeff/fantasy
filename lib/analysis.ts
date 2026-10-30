@@ -158,6 +158,7 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
     rosters: teams.map((t) => ({ rosterId: t.rosterId, players: t.players })),
     transactions: data.transactions,
     consensus: data.consensus,
+    starters: Object.fromEntries(Object.values(needs).map((n) => [n.rosterId, n.slots.map((x) => x.starter).filter((id): id is string => !!id)])),
   })
   const form = playerForms({
     players,

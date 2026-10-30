@@ -308,6 +308,7 @@ type RawTransaction = {
   drops?: Record<string, number> | null
   draft_picks?: unknown[] | null
   created?: number
+  status_updated?: number
   leg?: number
   settings?: { waiver_bid?: number } | null
   waiver_budget?: { sender: number; receiver: number; amount: number }[] | null
@@ -319,8 +320,8 @@ type RawTransaction = {
  */
 export const getTransactions = (leagueId: string, week: number, isPast: boolean) =>
   cachedGet<RawTransaction[], SleeperTransaction[]>(`/league/${leagueId}/transactions/${week}`, isPast ? 24 * HOUR : 10 * MINUTE, {
-    // v2: keeps FAAB bids and FAAB moved in trades.
-    key: `tx2:${leagueId}:${week}`,
+    // v2: keeps FAAB bids and FAAB moved in trades. v3: keeps when each went through.
+    key: `tx3:${leagueId}:${week}`,
     transform: (raw) =>
       (Array.isArray(raw) ? raw : []).map((t) => ({
         type: t.type,
@@ -330,6 +331,7 @@ export const getTransactions = (leagueId: string, week: number, isPast: boolean)
         drops: t.drops ?? null,
         picks: t.draft_picks?.length ?? 0,
         created: t.created ?? 0,
+        processed: t.status_updated ?? t.created ?? 0,
         leg: t.leg ?? week,
         bid: t.settings?.waiver_bid ?? null,
         faab: t.waiver_budget?.length ? t.waiver_budget : null,

@@ -7,11 +7,11 @@ import { ContextNotes, PlayoffSchedule, contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
 import PlayerName from '../PlayerName'
 import { ShowMore } from './ShowMore'
+import { AvailabilityChip } from '../AvailabilityChip'
+import { useAvailability } from '../useAvailability'
+import { clearsLabel, filterPlayers, POS_FILTERS, type Availability, type OwnFilter, type PosFilter } from '../../lib/availability'
 import { Badge, FadeStrip, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, PlayerAvatar, usePhone, type Column } from '../ui'
 
-const POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const
-type Pos = (typeof POSITIONS)[number]
-type Own = 'all' | 'fa' | 'rostered' | 'mine'
 type Basis = 'ahead' | 'todate'
 const PAGE = 60
 
@@ -31,8 +31,8 @@ const prominent = (notes: PlayerContext['notes'] | undefined) =>
 
 const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis: Analysis; sub: string | null; onSub: (s: string) => void }) => {
   const basis: Basis = sub === 'todate' ? 'todate' : 'ahead'
-  const [pos, setPos] = useState<Pos>('ALL')
-  const [own, setOwn] = useState<Own>('all')
+  const [pos, setPos] = useState<PosFilter>('ALL')
+  const [own, setOwn] = useState<OwnFilter>('all')
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(PAGE)
   const { values, rosteredBy, myRosterId, teamById, posRanks, market } = analysis
@@ -43,24 +43,21 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   const { adjust, openPlayer } = useFantasy()
   const phone = usePhone()
   const adjusted = Object.entries(adjust.all)
+  const { status } = useAvailability(data, analysis)
+  const positions = useMemo(() => [...new Set(analysis.slots.flatMap((s) => s.eligible))], [analysis.slots])
+  const flex = useMemo(() => analysis.slots.find((s) => s.name === 'FLEX')?.eligible ?? ['RB', 'WR', 'TE'], [analysis.slots])
 
+  // Everyone at a position this league starts: every rostered player (injured ones included), every free agent with a
+  // projection or a following, and anyone else a search names. Season to date lists those who have played.
   const ids = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const pool = basis === 'ahead' ? Object.keys(perWeek).filter((id) => perWeek[id] > 0.5) : Object.keys(values)
-    return pool
-      .filter((id) => {
-        const p = players[id]
-        if (!p) return false
-        if (pos !== 'ALL' && p.pos !== pos) return false
-        const owner = rosteredBy[id]
-        if (own === 'fa' && owner !== undefined) return false
-        if (own === 'rostered' && owner === undefined) return false
-        if (own === 'mine' && owner !== myRosterId) return false
-        if (q && !p.name.toLowerCase().includes(q) && !(p.team ?? '').toLowerCase().includes(q)) return false
-        return true
-      })
-      .sort((a, b) => (basis === 'ahead' ? (market[b] ?? -99) - (market[a] ?? -99) : (values[b]?.war ?? -99) - (values[a]?.war ?? -99)))
-  }, [basis, perWeek, values, players, pos, own, query, rosteredBy, myRosterId, market])
+    const relevant = (id: string) => (perWeek[id] ?? 0) > 0 || values[id] != null || (trending[id] ?? 0) > 0
+    const pool = basis === 'ahead' ? undefined : Object.keys(values)
+    // A player released since stays on the list his numbers belong to: his season so far, or a projection.
+    const keep = (id: string) => (basis === 'ahead' ? (perWeek[id] ?? 0) > 0 : values[id] != null)
+    return filterPlayers({ players, pool, pos, own, query, flex, positions, relevant, keep, status }).sort((a, b) =>
+      basis === 'ahead' ? (market[b] ?? -99) - (market[a] ?? -99) || (perWeek[b] ?? 0) - (perWeek[a] ?? 0) : (values[b]?.war ?? -99) - (values[a]?.war ?? -99),
+    )
+  }, [basis, perWeek, values, players, pos, own, query, flex, positions, status, trending, market])
 
   // Positional rank on the forward-looking number.
   const aheadRank = useMemo(() => {
@@ -85,12 +82,30 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
     return out
   }, [basis, myRosterId, data.horizon, teamById, analysis, players, visible.join(','), rosteredBy, perWeek]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const owner = (id: string) =>
-    rosteredBy[id] !== undefined ? (
-      <span className={rosteredBy[id] === myRosterId ? 'text-ff-accent' : ''}>{rosteredBy[id] === myRosterId ? 'you' : teamById[rosteredBy[id]]?.name}</span>
+  const teamName = (r: number) => teamById[r]?.name
+  // On a phone the standing rides under the name, in words; wider screens give it a column of its own.
+  const ownerText = (a: Availability) =>
+    a.kind === 'mine' ? (
+      <span className="text-ff-accent">your team</span>
+    ) : a.kind === 'team' ? (
+      teamName(a.rosterId)
+    ) : a.kind === 'waivers' ? (
+      <span className="text-ff-warn">on waivers · {clearsLabel(a.clears)}</span>
     ) : (
       <span className="text-ff-pos">free agent</span>
     )
+  const owner = (id: string) => (phone ? ownerText(status(id)) : undefined)
+  const availCol: Column<string> = {
+    key: 'own',
+    label: 'Availability',
+    hideBelow: 'md',
+    title: 'Free agent, on waivers (dropped lately: a claim until he clears), your team, or the team that has him',
+    sort: (id) => {
+      const a = status(id)
+      return a.kind === 'fa' ? 3 : a.kind === 'waivers' ? 2 : a.kind === 'mine' ? 1 : 0
+    },
+    render: (id) => <AvailabilityChip a={status(id)} teamName={teamName} />,
+  }
 
   const ahead: Column<string>[] = [
     {
@@ -105,6 +120,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       ),
     },
     { key: 'p', label: 'Player', sticky: true, sort: (id) => players[id].name, render: (id) => <PlayerName player={players[id]} id={id} sub={owner(id)} /> },
+    availCol,
     {
       key: 'hot',
       label: '',
@@ -222,6 +238,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       ),
     },
     { key: 'p', label: 'Player', sticky: true, sort: (id) => players[id].name, render: (id) => <PlayerName player={players[id]} id={id} sub={owner(id)} /> },
+    availCol,
     { key: 'g', label: 'G', align: 'right', sort: (id) => values[id].games, render: (id) => values[id].games },
     { key: 'ppg', label: 'PPG', align: 'right', sort: (id) => values[id].ppg, render: (id) => <span className="text-ff-text">{fmt(values[id].ppg)}</span> },
     {
@@ -254,7 +271,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
         title="Players"
         tabs={<div className="h-px" />}
       />
-      <div className="mt-4 space-y-3">
+      <div className="ff-page-body ff-stack">
         <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
           <FadeStrip className="no-scrollbar ff-bleed ff-gutter flex gap-2 overflow-x-auto md:!mx-0 md:flex-wrap md:overflow-visible md:!px-0">
             <Segmented<Basis>
@@ -266,14 +283,19 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                 { key: 'todate', label: 'Season to date' },
               ]}
             />
-            <Segmented<Pos> label="Position" value={pos} onChange={setPos} options={POSITIONS.map((p) => ({ key: p, label: p === 'ALL' ? 'All' : p }))} />
-            <Segmented<Own>
-              label="Ownership"
+            <Segmented<PosFilter>
+              label="Position"
+              value={pos}
+              onChange={setPos}
+              options={POS_FILTERS.filter((p) => p === 'ALL' || (p === 'FLEX' ? flex.length > 1 : positions.includes(p))).map((p) => ({ key: p, label: p === 'ALL' ? 'All' : p }))}
+            />
+            <Segmented<OwnFilter>
+              label="Availability"
               value={own}
               onChange={setOwn}
               options={[
                 { key: 'all', label: 'All' },
-                { key: 'fa', label: 'Free agents' },
+                { key: 'available', label: 'Available', title: 'Free agents and players on waivers' },
                 { key: 'rostered', label: 'Rostered' },
                 ...(myRosterId != null ? [{ key: 'mine' as const, label: 'Mine' }] : []),
               ]}
@@ -284,7 +306,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name or team"
             aria-label="Search players"
-            className="h-8 min-w-[160px] rounded-sm md:max-w-[260px] md:flex-1 border border-ff-line bg-ff-panel px-2.5 text-[13px] text-ff-text outline-none placeholder:text-ff-muted focus-visible:ring-2 focus-visible:ring-ff-accent/40"
+            className="h-8 min-w-[160px] rounded-sm md:max-w-[260px] md:flex-1 border border-ff-line bg-ff-panel px-2.5 text-[13px] text-ff-text outline-none placeholder:text-ff-muted focus-visible:border-ff-accent focus-visible:ring-1 focus-visible:ring-ff-accent"
           />
         </div>
         {adjusted.length > 0 && (

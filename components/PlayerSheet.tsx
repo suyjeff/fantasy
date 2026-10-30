@@ -7,9 +7,11 @@ import LinesBlock from './LinesBlock'
 import PlayerNews from './PlayerNews'
 import TeamName from './TeamName'
 import { SheetBody, SheetContent, SheetHeader, SheetSection } from './Sheet'
-import { Badge, PlayerAvatar, PosTag, Pts, ScoreDelta, ScoreState, Stat, ago, cx, fmt, fmtSigned, isOut, ownerLabel, pct } from './ui'
+import { Badge, PlayerAvatar, PosTag, Pts, ScoreDelta, ScoreState, Stat, ago, cx, fmt, fmtSigned, isOut, pct } from './ui'
 import { useSlate } from './useSlate'
 import { boxParts, useWeekNow, type PlayerWeek } from './useWeekNow'
+import { useAvailability } from './useAvailability'
+import { AvailabilityChip } from './AvailabilityChip'
 
 /**
  * His game this week once it has kicked off, apart from what was expected of him: the score in solid ink with its
@@ -94,6 +96,7 @@ const PlayerSheet = ({ id }: { id: string }) => {
   const p = data.players[id]
   const ctx = data.context[id]
   const owner = analysis.rosteredBy[id]
+  const standing = useAvailability(data, analysis).status(id)
   const ecr = data.consensus?.byId[id]
   const usage = data.usage[id]
   const perWeek = analysis.horizon.perWeek[id]
@@ -149,11 +152,8 @@ const PlayerSheet = ({ id }: { id: string }) => {
           title={p.name}
           sub={
             <>
-              {owner != null && owner !== analysis.myRosterId ? (
-                <TeamName id={owner} size={14} />
-              ) : (
-                <span className={owner === analysis.myRosterId ? 'text-ff-accent' : undefined}>{ownerLabel(analysis, id)}</span>
-              )}
+              {/* Where he stands, first: free to add, a waiver claim, yours, or another team's (by name, with its badge). */}
+              {owner != null && owner !== analysis.myRosterId ? <TeamName id={owner} size={14} /> : <AvailabilityChip a={standing} />}
               {p.newsAt ? <span>· Sleeper news {ago(p.newsAt)} ago</span> : null}
             </>
           }

@@ -1,5 +1,5 @@
 import React, { useDeferredValue, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { AcceptRead } from '../lib/behavior'
+import { bandTone, oddsTone, type AcceptRead } from '../lib/behavior'
 import {
   addDealTeam,
   dealActive,
@@ -97,7 +97,9 @@ export const acceptOf = (read: DealRead | null, me: number, tradeRead: (idea: Tr
       get: s.sends,
       shape: s.sends.length === s.receives.length ? 'swap' : s.sends.length > s.receives.length ? 'depth' : 'consolidate',
       myGain: mine?.lineup ?? 0,
-      theirGain: s.net.mid,
+      // Lineup alone: the read counts the FAAB once, in what the deal is worth to them (idea.faab), the way it counts
+      // a suggestion's sweetener, so a deal reads the same here as on its card.
+      theirGain: s.lineup,
       myCost: 0,
       valueAsk: -s.value,
       weeksBetter: s.weeksBetter,
@@ -105,8 +107,9 @@ export const acceptOf = (read: DealRead | null, me: number, tradeRead: (idea: Tr
       fills: null,
       myCuts: [],
       theirCuts: s.cuts,
-      mutual: Math.min(mine?.lineup ?? 0, s.net.mid),
+      mutual: Math.min(mine?.lineup ?? 0, s.lineup),
       perWeek: [],
+      faab: s.faab,
     }
     accept[s.rosterId] = tradeRead(idea, false)
   }
@@ -142,15 +145,14 @@ export const useDealPricing = (deal: Deal, on: boolean): DealPricing => {
 
 // ---- Small pieces ----
 
-type Tone = 'pos' | 'neg' | 'neutral'
+// Warn is for the odds alone: a "possible" deal reads amber here as it does on the trade cards (lib/behavior bandTone).
+type Tone = 'pos' | 'neg' | 'warn' | 'neutral'
 const toneOf = (v: number, edge = 0.25): Tone => (v > edge ? 'pos' : v < -edge ? 'neg' : 'neutral')
-const bandTone = (band: AcceptRead['band']): Tone => (band === 'likely' ? 'pos' : band === 'long shot' ? 'neg' : 'neutral')
-const oddsTone = (p: number): Tone => (p >= 0.5 ? 'pos' : p < 0.25 ? 'neg' : 'neutral')
 /** The odds of a yes, named as the trade cards name them: one partner's "Would they?", or every partner's. */
 const oddsLabel = (many: boolean) => (many ? 'All say yes' : 'Would they?')
-const TEXT: Record<Tone, string> = { pos: 'text-ff-pos', neg: 'text-ff-neg', neutral: 'text-ff-text' }
+const TEXT: Record<Tone, string> = { pos: 'text-ff-pos', neg: 'text-ff-neg', warn: 'text-ff-warn', neutral: 'text-ff-text' }
 /** Low-key washes for a status: a gain, a loss, or neither, at low alpha so the text on them stays plain. */
-const WASH: Record<Tone, string> = { pos: 'border-ff-pos/30 bg-ff-pos/[0.07]', neg: 'border-ff-neg/30 bg-ff-neg/[0.07]', neutral: 'border-ff-line2 bg-ff-sunken' }
+const WASH: Record<Tone, string> = { pos: 'border-ff-pos/30 bg-ff-pos/[0.07]', neg: 'border-ff-neg/30 bg-ff-neg/[0.07]', warn: 'border-ff-warn/30 bg-ff-warn/[0.08]', neutral: 'border-ff-line2 bg-ff-sunken' }
 
 /** The house's square, hairline glyphs for the builder's own controls. */
 export const Glyph = ({ d, size = 14 }: { d: string; size?: number }) => (
@@ -373,9 +375,10 @@ const RosterRow = React.memo(function RosterRow({
 
 /**
  * The rosters, one team at a time, behind large tabs fused into the top of the list. Changing team slides the list
- * the way the tabs went; a sideways swipe on the list does the same.
+ * the way the tabs went; a sideways swipe on the list does the same. The list is one column at every width: two
+ * columns under two tabs read as one roster per tab, so the column under "You" looked like the partner's players.
  */
-const Rosters = ({ deal, update, view, onView, cols }: { deal: Deal; update: DealUpdate; view: number; onView: (t: number) => void; /** Two columns of players, where there is room. */ cols?: boolean }) => {
+const Rosters = ({ deal, update, view, onView }: { deal: Deal; update: DealUpdate; view: number; onView: (t: number) => void }) => {
   const { data, analysis } = useFantasy()
   const me = analysis.myRosterId!
   const perWeek = analysis.horizon.perWeek
@@ -495,19 +498,11 @@ const Rosters = ({ deal, update, view, onView, cols }: { deal: Deal; update: Dea
         {single ? (
           <p className="px-3 py-6 text-center text-[12.5px] text-ff-muted">Pick a partner above and their roster opens here beside yours.</p>
         ) : (
-          <ul
-            key={shown}
-            className={cx(
-              'divide-y divide-ff-line',
-              cols && 'xl:grid xl:grid-cols-2 xl:gap-px xl:divide-y-0 xl:bg-ff-line xl:[&>li]:bg-ff-panel',
-              dir > 0 ? 'tb-slide-next' : 'tb-slide-prev',
-            )}
-          >
+          <ul key={shown} className={cx('divide-y divide-ff-line', dir > 0 ? 'tb-slide-next' : 'tb-slide-prev')}>
             {sorted.map((id) => {
               const to = moving.get(id)
               return <RosterRow key={id} id={id} movingTo={to == null ? null : name(to)} onToggle={toggle} />
             })}
-            {cols && sorted.length % 2 === 1 && <li aria-hidden className="hidden xl:block" />}
           </ul>
         )}
       </div>
@@ -1182,7 +1177,7 @@ const TradeBuilder = ({
             <TeamsSection deal={deal} update={update} onView={setView} onClear={onClear} />
             {deal.teams.length > 1 ? (
               <div className="px-4 pb-4 pt-3">
-                <Rosters deal={deal} update={update} view={view} onView={setView} cols />
+                <Rosters deal={deal} update={update} view={view} onView={setView} />
               </div>
             ) : (
               <div className="m-4 flex min-h-[160px] flex-1 items-center justify-center border border-dashed border-ff-line2 px-6 text-center text-[12.5px] text-ff-muted">

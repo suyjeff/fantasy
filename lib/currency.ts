@@ -36,6 +36,7 @@
 
 import { valueAtRank, valueCurve, perceivedValues, type Consensus } from './consensus'
 import { starterDemand } from './lineup'
+import { lastName } from './names'
 import type { DraftBoard, PlayerMap, SleeperTransaction } from './types'
 
 /** Positions nobody trades for: left out of the trade search. */
@@ -105,11 +106,102 @@ export const tradeMarket = (input: { market: Record<string, number>; consensus?:
   return out
 }
 
+/**
+ * What a player is to the room and to his own team, the way a manager sizes up an ask before any arithmetic:
+ *
+ *   star     near the top of his position (the top third of the league's starters there)
+ *   starter  a league starter at his position, or one of his own team's starters
+ *   useful   someone the consensus would roster in a league this size, or worth more than the wire
+ *   scrub    none of these: a cut candidate
+ *
+ * Kickers and defenses are always scrubs: they are streamed, not held.
+ */
+export type Role = 'star' | 'starter' | 'useful' | 'scrub'
+export type Standing = {
+  name: string
+  pos: string
+  /** Rank at his position: the consensus rank where there is one, else his rank by trade value. */
+  posRank: number
+  role: Role
+  /** Starts for the team holding him: in its lineup this week, or within its starting count at his position. */
+  starts: boolean
+}
+
 export type Currency = {
   /** Trade value per point of market value, by player. */
   factor: Record<string, number>
   /** Players their manager did not pick up off waivers this season. */
   attached: Set<string>
+  /** Each rostered player's standing (see `Standing`), when the league's rosters were read. */
+  standing?: Record<string, Standing>
+}
+
+export const ROLE_ORDER: Record<Role, number> = { scrub: 0, useful: 1, starter: 2, star: 3 }
+
+/**
+ * Every rostered player's standing. Ranks are the consensus's where it has the player (that is what the room
+ * reads), else his rank by trade value. "Starts for them" is this week's lineup when known, else whether he is
+ * inside his team's starting count at his position, so a starter on bye still counts as one.
+ */
+export const rosterStanding = (input: {
+  players: PlayerMap
+  market: Record<string, number>
+  rosterPositions: string[]
+  numTeams: number
+  rosters: { rosterId: number; players: string[] }[]
+  consensus?: Consensus | null
+  starters?: Record<number, string[]>
+}): Record<string, Standing> => {
+  const { players, market, rosters } = input
+  const demand = starterDemand(input.rosterPositions, input.numTeams)
+  const posOf = (id: string) => players[id]?.pos
+  // Rank by trade value at each position, for players the consensus does not rank.
+  const byValue: Record<string, string[]> = {}
+  for (const id of Object.keys(market)) {
+    const pos = posOf(id)
+    if (pos) (byValue[pos] ??= []).push(id)
+  }
+  const valueRank: Record<string, number> = {}
+  for (const ids of Object.values(byValue)) ids.sort((a, b) => (market[b] ?? 0) - (market[a] ?? 0)).forEach((id, i) => (valueRank[id] = i + 1))
+  const rankOf = (id: string) => input.consensus?.byId[id]?.posRank ?? valueRank[id] ?? Infinity
+  // How deep the league rosters: at each position, and skill players in all.
+  const rostered: Record<string, number> = {}
+  let skill = 0
+  for (const r of rosters)
+    for (const id of r.players) {
+      const pos = posOf(id)
+      if (!pos) continue
+      rostered[pos] = (rostered[pos] ?? 0) + 1
+      if (!UNTRADED_POSITIONS.has(pos)) skill++
+    }
+  const out: Record<string, Standing> = {}
+  for (const r of rosters) {
+    const lineup = new Set(input.starters?.[r.rosterId] ?? [])
+    const depth: Record<string, string[]> = {}
+    for (const id of r.players) {
+      const pos = posOf(id)
+      if (pos) (depth[pos] ??= []).push(id)
+    }
+    for (const ids of Object.values(depth)) ids.sort((a, b) => rankOf(a) - rankOf(b))
+    for (const id of r.players) {
+      const p = players[id]
+      if (!p) continue
+      const pos = p.pos
+      const d = demand[pos] ?? 0
+      const rank = rankOf(id)
+      const perTeam = Math.max(1, Math.round(d / Math.max(1, input.numTeams)))
+      const starts = lineup.has(id) || (d > 0 && depth[pos].indexOf(id) < perTeam)
+      const overall = input.consensus?.byId[id]?.rank
+      let role: Role = 'scrub'
+      if (UNTRADED_POSITIONS.has(pos)) role = 'scrub'
+      // A third of the league's starters at the position, and never fewer than three: RB1–RB10 in a 12-team league.
+      else if (d > 0 && rank <= Math.max(3, d / 3)) role = 'star'
+      else if ((d > 0 && rank <= d) || starts) role = 'starter'
+      else if ((overall != null && overall <= skill) || rank <= 0.85 * (rostered[pos] ?? 0) || (market[id] ?? 0) > 0.5) role = 'useful'
+      out[id] = { name: p.name, pos, posRank: Number.isFinite(rank) ? Math.round(rank) : 999, role, starts }
+    }
+  }
+  return out
 }
 
 /**
@@ -125,6 +217,8 @@ export const tradeCurrency = (input: {
   rosters: { rosterId: number; players: string[] }[]
   transactions: SleeperTransaction[]
   consensus?: Consensus | null
+  /** Each team's lineup this week, for who starts where (see `rosterStanding`). */
+  starters?: Record<number, string[]>
 }): Currency => {
   const { players, market } = input
   const demand = starterDemand(input.rosterPositions, input.numTeams)
@@ -166,12 +260,135 @@ export const tradeCurrency = (input: {
       if (!pickedUp) attached.add(id)
     }
   }
-  return { factor, attached }
+  return { factor, attached, standing: rosterStanding(input) }
+}
+
+/** One player's trade value (see `tradeValue`). */
+const playerValue = (id: string, market: Record<string, number>, currency: Currency | undefined, owned: boolean) => {
+  const v = starValue(Math.max(0, market[id] ?? 0)) * (currency?.factor[id] ?? 1)
+  return owned && currency?.attached.has(id) ? v * ATTACHMENT : v
 }
 
 /** A set's trade value: its market value, as people price it (stars dear, streamers cheap). `owned` adds the owner's attachment. */
 export const tradeValue = (ids: string[], market: Record<string, number>, currency: Currency | undefined, owned: boolean) =>
-  ids.reduce((a, id) => {
-    const v = starValue(Math.max(0, market[id] ?? 0)) * (currency?.factor[id] ?? 1)
-    return a + (owned && currency?.attached.has(id) ? v * ATTACHMENT : v)
-  }, 0)
+  ids.reduce((a, id) => a + playerValue(id, market, currency, owned), 0)
+
+// ---- How lopsided a deal reads ----
+//
+// The overpay term in the trade read (lib/behavior) is linear: every point a manager gives away costs the same.
+// People do not read offers that way. A small overpay is a negotiation; a big one is an insult; and some offers are
+// not offers at all: a star for nothing, a starter for a deep bench body. Those get declined on sight however
+// active or desperate the manager is, so the read sorts each deal into a tier first, judged from the side giving:
+//
+//   fair      within reach of even, or a slight overpay: the read's own terms decide
+//   overpay   asks clearly more than it gives back, by share and by size
+//   lopsided  gives back well under half, and a lot in absolute terms: no manager takes it
+//   nonsense  something for nothing (no players and no FAAB worth counting), a star for spare parts, or a
+//             starter for a bench scrap: it would never happen
+//
+// Values are what managers price (`tradeValue`), with each player's standing as a floor: a starter counts as at
+// least a starter, however low the consensus ranks his position overall (a top-10 tight end ranks around 100th
+// on the overall board, where his price is read). A cut candidate for nothing is only an overpay: managers do
+// occasionally free a dead roster spot.
+
+export type DealTier = 'fair' | 'overpay' | 'lopsided' | 'nonsense'
+
+export const LOPSIDED = {
+  /** The least a player counts for, by standing, in trade-value points. A starter is worth at least a low-end starter. */
+  floor: { star: 5, starter: 1.5, useful: 0.5, scrub: 0 } as Record<Role, number>,
+  /** Overpay: the gap at least this big, and what comes back under this share of what goes. */
+  overpay: { gap: 2.5, share: 0.6 },
+  /** Lopsided: a bigger gap and a smaller share; for a star, a big gap at a share that would pass for anyone else. */
+  lopsided: { gap: 3, share: 0.4 },
+  star: { gap: 6, share: 0.5 },
+  /** Nonsense: a star back for under this share, or a starter for a scrub at under this share. */
+  nonsense: { star: 0.25, starter: 0.3 },
+  /** FAAB alone counts as something back once it covers this share of what goes. */
+  faab: 0.5,
+}
+
+export type TierRead = {
+  tier: DealTier
+  /** What they give and what they get back, priced as they price it with standing as a floor, pts/wk. */
+  gives: number
+  gets: number
+  /** No players back and no FAAB worth counting. */
+  nothingBack: boolean
+  /** The headline player they would give, when there is one. */
+  headline: string | null
+  /** The reason, in a short line, when the tier is not fair. */
+  text: string | null
+}
+
+const BUCKETS = [3, 5, 10, 12, 15, 20, 24, 30, 36, 40, 50]
+/** "the RB1", "a top-10 RB", "their starting TE", "WR62 depth": how the room would describe him. A star reads by his rank. */
+export const describeStanding = (st: Standing) => {
+  if (st.role === 'scrub') return 'a cut candidate'
+  if (st.role === 'useful') return `${st.pos}${st.posRank} depth`
+  if (st.posRank <= 1) return `the ${st.pos}1`
+  if (st.role === 'starter' && st.starts) return `their starting ${st.pos}`
+  const b = BUCKETS.find((x) => st.posRank <= x)
+  return b ? `a top-${b} ${st.pos}` : `a starting ${st.pos}`
+}
+
+/**
+ * Sort a deal into a tier, from the side of the team giving `gives` and getting `gets` (plus `faab`, in dollars and
+ * its worth to them in pts/wk; negative when they pay it). `prices` are the values the read is on, or null to judge
+ * on standing alone.
+ */
+export const dealTier = (input: {
+  gives: string[]
+  gets: string[]
+  prices: Record<string, number> | null
+  currency?: Currency
+  faab?: { dollars: number; value: number } | null
+}): TierRead => {
+  const { gives, gets, prices, currency } = input
+  const standing = currency?.standing ?? {}
+  const price = (id: string, owned: boolean) => (prices ? playerValue(id, prices, currency, owned) : 0)
+  // Without a standing, a player is judged by his price alone: worth something, or a cut candidate.
+  const roleOf = (id: string): Role => standing[id]?.role ?? (price(id, true) >= LOPSIDED.floor.useful ? 'useful' : 'scrub')
+  // Each player's worth worked out once, not again in every comparison: the trade search runs this on every package.
+  const worth = (ids: string[], owned: boolean) => ids.map((id) => Math.max(price(id, owned), LOPSIDED.floor[roleOf(id)]))
+  const giveW = worth(gives, true)
+  const getW = worth(gets, false)
+  const faabIn = Math.max(0, input.faab?.value ?? 0)
+  const faabOut = Math.max(0, -(input.faab?.value ?? 0))
+  const giveV = giveW.reduce((a, w) => a + w, 0) + faabOut
+  const getV = getW.reduce((a, w) => a + w, 0) + faabIn
+  const nothingBack = gives.length > 0 && !gets.length && (faabIn <= 0 || faabIn < LOPSIDED.faab * giveV)
+  // The headline: the best standing they give, the dearest among equals, the first among those.
+  let head: string | null = null
+  for (let i = 0, rank = -1, best = -1; i < gives.length; i++) {
+    const r = ROLE_ORDER[roleOf(gives[i])]
+    if (head != null && (r - rank || giveW[i] - best) <= 0) continue
+    head = gives[i]
+    rank = r
+    best = giveW[i]
+  }
+  const out = (tier: DealTier, text: string | null): TierRead => ({ tier, gives: Math.round(giveV * 100) / 100, gets: Math.round(getV * 100) / 100, nothingBack, headline: head, text })
+  if (!head) return out('fair', null)
+  const role = roleOf(head)
+  const st = standing[head]
+  const name = st ? lastName(st.name) : 'he'
+  const who = st ? `${name}, ${describeStanding(st)},` : 'a player'
+  const share = giveV > 0 ? getV / giveV : 1
+  const gap = giveV - getV
+  const back = gets.length ? 'spare parts' : `$${Math.max(0, input.faab?.dollars ?? 0)} FAAB`
+  const bestBack = gets.reduce((a, id) => Math.max(a, ROLE_ORDER[roleOf(id)]), 0)
+
+  if (nothingBack) {
+    const none = (input.faab?.dollars ?? 0) > 0 ? `$${input.faab!.dollars} FAAB` : 'nothing'
+    return role === 'scrub' ? out('overpay', st ? `nothing back for ${name}, a cut candidate` : 'nothing back') : out('nonsense', `would never happen: ${who} for ${none}`)
+  }
+  // A star for bench pieces, or a starter for a cut candidate.
+  if (role === 'star' && bestBack <= ROLE_ORDER.useful && share < LOPSIDED.nonsense.star) return out('nonsense', `would never happen: ${who} for ${back}`)
+  if (ROLE_ORDER[role] >= ROLE_ORDER.starter && (st?.starts ?? true) && bestBack === 0 && share < LOPSIDED.nonsense.starter)
+    return out('nonsense', `would never happen: ${who} for ${gets.length ? 'a bench scrap' : back}`)
+  // Lopsided only when nothing as good comes back: a star for a lesser star is a steep ask, not an insult.
+  const { lopsided: lop, star, overpay } = LOPSIDED
+  if (bestBack < ROLE_ORDER[role] && ((gap >= lop.gap && share < lop.share) || (role === 'star' && gap >= star.gap && share < star.share)))
+    return out('lopsided', st && ROLE_ORDER[role] >= ROLE_ORDER.starter ? `no manager takes this: ${name} is ${describeStanding(st)} for little back` : 'no manager takes this: far less back than it asks')
+  if (gap >= overpay.gap && share < overpay.share) return out('overpay', 'asks a lot more than it gives')
+  return out('fair', null)
+}

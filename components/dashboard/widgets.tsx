@@ -16,6 +16,7 @@ import TeamName from '../TeamName'
 import { MoveList, useMoves } from '../Moves'
 import { ruledOutBy } from '../../lib/grades'
 import PlayerName from '../PlayerName'
+import { useAvailability } from '../useAvailability'
 import { Avatar, Badge, CenterMeter, RowCover, WinBar, Empty, Num, PlayerAvatar, PosTag, Pts, ScoreState, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, odds, ownerLabel, simOdds, pct } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
@@ -554,6 +555,7 @@ const Waivers = ({ sel, select }: WidgetProps) => {
 
 const PlayerCard = ({ sel }: WidgetProps) => {
   const { data, analysis, openPlayer } = useFantasy()
+  const { status } = useAvailability(data, analysis)
   const fallback = useMemo(() => {
     const me = analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
     return me ? [...me.players].sort((a, b) => (analysis.market[b] ?? -99) - (analysis.market[a] ?? -99))[0] : Object.keys(analysis.market)[0]
@@ -583,7 +585,7 @@ const PlayerCard = ({ sel }: WidgetProps) => {
             {p.name}
           </button>
           <div className="mt-0.5 flex items-baseline justify-between gap-2 text-[11.5px] text-ff-muted">
-            <span className={cx('truncate', analysis.rosteredBy[id] === analysis.myRosterId && 'text-ff-accent')}>{ownerLabel(analysis, id)}</span>
+            <span className={cx('truncate', analysis.rosteredBy[id] === analysis.myRosterId && 'text-ff-accent')}>{ownerLabel(status(id), analysis.teamById)}</span>
             <button onClick={() => openPlayer(id)} className="shrink-0 font-mono text-[10.5px] text-ff-accent hover:underline">
               Details →
             </button>

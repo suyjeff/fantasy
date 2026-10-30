@@ -313,3 +313,134 @@ export const streamReasons = (r: StreamRow, pos: StreamPos, teamCount = 32): Str
   if (r.trending >= 500) out.push({ text: `${r.trending.toLocaleString()} Sleeper adds in the last day`, tone: r.trending >= 5000 ? 'warn' : 'neutral' })
   return out
 }
+
+// ---- The waiver plan: every move worth making, grouped by what it is for ----
+//
+// One ranked list mixes up decisions that are made differently. A lineup upgrade is a rest-of-season call worth
+// real FAAB; a stream is one week's matchup at a position you churn anyway; a stash is a bench bet on later weeks;
+// a handcuff insures a starter you already have. Each group is ranked on its own number.
+
+/** Positions streamed week to week: the matchup moves them more than the player does. */
+export const WEEKLY_STREAM: StreamPos[] = ['QB', 'TE', 'K', 'DEF']
+/** Injury statuses that keep a player off the field: IR, Out, PUP, suspended. */
+const OUT = /^(IR|Out|PUP|Sus)/i
+
+export type PlanTarget = { id: string; add: number; slot: string | null }
+/** The least a free agent must add to your lineup, pts/wk, to count as one who would start for you. */
+export const STARTS_FOR_YOU = 0.3
+
+export type PlanUpgrade = { id: string; pos: string; gain: number; slot: string | null; drop: string | null; alts: PlanTarget[] }
+export type PlanStream = { id: string; pos: string; proj: number; gain: number; vs: string | null; drop: string | null; alts: { id: string; proj: number }[] }
+export type PlanStash = { id: string; pos: string; value: number; trend: number }
+export type PlanHandcuff = { id: string; starter: string; value: number }
+export type WaiverPlan = { upgrades: PlanUpgrade[]; streams: PlanStream[]; stashes: PlanStash[]; handcuffs: PlanHandcuff[] }
+
+export const planWaivers = (input: {
+  /** Free agents with their lineup gain over the horizon, best first (search.waiverTargets). */
+  targets: PlanTarget[]
+  players: PlayerMap
+  rosteredBy: Record<string, number>
+  myPlayers: string[]
+  /** Your best lineup's starters now. */
+  myStarters: string[]
+  /** Bench players to cut, first to go first. */
+  drops: string[]
+  /** This week's projections, and expected points a week over the horizon. */
+  weekPts: Record<string, number>
+  perWeek: Record<string, number>
+  /** Points a week over replacement: rest-of-season value. */
+  value: Record<string, number>
+  trending: Record<string, number>
+  /** Positions this league starts, and how many of each in their own slots. */
+  startable: string[]
+  starts: Record<string, number>
+  limits?: { upgrades?: number; perPos?: number; stashes?: number; handcuffs?: number }
+}): WaiverPlan => {
+  const { targets, players, rosteredBy, myPlayers, weekPts, perWeek, value, trending } = input
+  const lim = { upgrades: 6, perPos: 2, stashes: 6, handcuffs: 4, ...input.limits }
+  const used = new Set<string>()
+  const cut = new Set<string>()
+  const posOf = (id: string) => players[id]?.pos ?? ''
+  // A kicker or defense replaces yours at the spot; anyone else costs the next bench player on the list.
+  const dropFor = (pos: string) => {
+    if (pos === 'K' || pos === 'DEF') {
+      const same = myPlayers.filter((id) => posOf(id) === pos && !cut.has(id)).sort((a, b) => (perWeek[a] ?? 0) - (perWeek[b] ?? 0))[0]
+      if (same) return same
+    }
+    return input.drops.find((id) => !cut.has(id)) ?? null
+  }
+
+  // Lineup upgrades: up to two a position, kickers and defenses left to the weekly streams.
+  const upgrades: PlanUpgrade[] = []
+  const perPos: Record<string, number> = {}
+  const real = targets.filter((t) => t.add >= STARTS_FOR_YOU)
+  for (const t of real) {
+    const pos = posOf(t.id)
+    if (!pos || pos === 'K' || pos === 'DEF' || (perPos[pos] ?? 0) >= lim.perPos) continue
+    perPos[pos] = (perPos[pos] ?? 0) + 1
+    used.add(t.id)
+    const drop = dropFor(pos)
+    if (drop) cut.add(drop)
+    upgrades.push({ id: t.id, pos, gain: t.add, slot: t.slot, drop, alts: [] })
+    if (upgrades.length >= lim.upgrades) break
+  }
+  // The next ones at the same position ride along as alternatives, each under one move only.
+  for (const u of upgrades) {
+    u.alts = real.filter((t) => !used.has(t.id) && posOf(t.id) === u.pos).slice(0, 2)
+    for (const a of u.alts) used.add(a.id)
+  }
+
+  // This week's streams: the best free agent at each streamed position, against the weakest starter you have there.
+  const streams: PlanStream[] = []
+  for (const pos of WEEKLY_STREAM) {
+    if (!input.startable.includes(pos)) continue
+    const mine = myPlayers.filter((id) => posOf(id) === pos).sort((a, b) => (weekPts[b] ?? 0) - (weekPts[a] ?? 0))
+    const vs = mine[Math.min(Math.max(1, input.starts[pos] ?? 1), mine.length) - 1] ?? null
+    const base = vs ? (weekPts[vs] ?? 0) : 0
+    const free = Object.keys(weekPts)
+      .filter((id) => posOf(id) === pos && rosteredBy[id] == null && !used.has(id) && (weekPts[id] ?? 0) > 0)
+      .sort((a, b) => weekPts[b] - weekPts[a])
+    const top = free[0]
+    if (!top) continue
+    const gain = weekPts[top] - base
+    // Worth a claim only when it beats what you would start by a real margin.
+    if (gain < 0.5) continue
+    used.add(top)
+    // Streaming a kicker or defense swaps yours out; a quarterback or tight end stream costs a bench spot.
+    const drop = dropFor(pos)
+    if (drop) cut.add(drop)
+    streams.push({ id: top, pos, proj: weekPts[top], gain, vs, drop, alts: free.slice(1, 3).map((id) => ({ id, proj: weekPts[id] })) })
+  }
+  streams.sort((a, b) => b.gain - a.gain)
+
+  // Handcuffs: the free backup on the same NFL team as each running back you start, the next man up on the depth chart.
+  const handcuffs: PlanHandcuff[] = []
+  const starterRbs = input.myStarters.filter((id) => posOf(id) === 'RB' && players[id]?.team).sort((a, b) => (perWeek[b] ?? 0) - (perWeek[a] ?? 0))
+  for (const s of starterRbs) {
+    const team = players[s].team
+    const backup = Object.values(players)
+      // A backup who is out himself insures nothing.
+      .filter((p) => p.pos === 'RB' && p.team === team && p.id !== s && rosteredBy[p.id] == null && !used.has(p.id) && (perWeek[p.id] ?? 0) > 0 && !OUT.test(p.injury ?? ''))
+      .sort((a, b) => (a.depth ?? 99) - (b.depth ?? 99) || (perWeek[b.id] ?? 0) - (perWeek[a.id] ?? 0))[0]
+    if (!backup) continue
+    used.add(backup.id)
+    handcuffs.push({ id: backup.id, starter: s, value: value[backup.id] ?? 0 })
+    if (handcuffs.length >= lim.handcuffs) break
+  }
+
+  // Stashes: the most rest-of-season value left on the wire among players who would not start for you now, with a
+  // nudge for the ones the rest of Sleeper is grabbing. One who would start, but missed the upgrades for their limits,
+  // is no bench bet: he is an upgrade, and not one to be told he would not start.
+  const starter = new Set(real.map((t) => t.id))
+  const stashScore = (id: string) => (value[id] ?? 0) + Math.min(1, Math.log10(1 + (trending[id] ?? 0)) / 5)
+  const stashes: PlanStash[] = Object.keys(value)
+    .filter((id) => {
+      const pos = posOf(id)
+      return rosteredBy[id] == null && !used.has(id) && !starter.has(id) && !!players[id]?.team && pos !== 'K' && pos !== 'DEF' && input.startable.includes(pos)
+    })
+    .sort((a, b) => stashScore(b) - stashScore(a))
+    .slice(0, lim.stashes)
+    .map((id) => ({ id, pos: posOf(id), value: value[id] ?? 0, trend: trending[id] ?? 0 }))
+
+  return { upgrades, streams, stashes, handcuffs }
+}

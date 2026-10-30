@@ -11,7 +11,7 @@
 // optimal starting lineup over the weeks ahead — so both halves of a deal are
 // priced on the same scale.
 
-import { tradeValue, UNTRADED_POSITIONS, type Currency } from './currency'
+import { dealTier, tradeValue, UNTRADED_POSITIONS, type Currency } from './currency'
 import { optimalLineup, starterDemand, type LineupPlayer, type Slot } from './lineup'
 import type { PlayerMap } from './types'
 
@@ -559,6 +559,8 @@ export type TradeIdea = {
   mutual: number
   /** Your gain in each horizon week. */
   perWeek: { week: number; mine: number; theirs: number }[]
+  /** FAAB they receive in the deal, in dollars (negative when they pay it): the builder's deals only. */
+  faab?: number
 }
 
 export type TradeSearchInput = {
@@ -586,6 +588,13 @@ export type TradeSearchInput = {
    * and the value filters stay on `tradeMarket`, so a card's numbers match the builder's.
    */
   form?: Record<string, number>
+  /**
+   * What the room reads each player at (the consensus priced on the value curve, as the trade read uses it). A deal
+   * that reads past fair on it (on `tradeMarket` without it), moved by `form`, with each player's standing counted
+   * (currency.ts dealTier), is not suggested: a clear overpay only when `maxValueAsk` is raised to show lowballs, a lopsided deal or one that
+   * would never happen never.
+   */
+  perceived?: Record<string, number> | null
   config?: Partial<TradeConfig>
   /** Optional hook for inspecting the search. */
   onFunnel?: (f: TradeFunnel) => void
@@ -599,6 +608,8 @@ export type TradeFunnel = {
   scored: number
   /** Packages screened out for being lopsided in trade value, either way; exact already, so cut before the exact pass. */
   rejectedValueAsk: number
+  /** Packages screened out because their side would read them as a clear overpay or worse (currency.ts dealTier). */
+  rejectedLopsided: number
   /** Deals that only help in a week or so of the horizon. */
   rejectedBye: number
   rejectedMyGain: number
@@ -757,7 +768,16 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   const tradeable = (id: string) => !!players[id] && !UNTRADED_POSITIONS.has(players[id].pos)
   const mine = me.players.filter(tradeable)
 
-  const funnel: TradeFunnel = { combinations: 0, scored: 0, rejectedValueAsk: 0, rejectedBye: 0, rejectedMyGain: 0, rejectedTheirGain: 0, kept: 0 }
+  const funnel: TradeFunnel = { combinations: 0, scored: 0, rejectedValueAsk: 0, rejectedLopsided: 0, rejectedBye: 0, rejectedMyGain: 0, rejectedTheirGain: 0, kept: 0 }
+  // Whether they would read it as past fair (a clear overpay or worse, where the read's odds collapse), on the prices
+  // the trade read judges it on (behavior.ts acceptRead): the room's where there are some, else the trade market,
+  // each moved by recent form, so a deal that passes here is not capped there. Raising `maxValueAsk` asks to see
+  // lowballs, so a clear overpay passes then; a lopsided deal or one that would never happen never does.
+  const form = input.form ?? {}
+  const judged = { ...(input.perceived ?? market) }
+  for (const id of Object.keys(form)) judged[id] = Math.max(0, judged[id] ?? 0) * form[id]
+  const passes = cfg.maxValueAsk > DEFAULT_TRADE_CONFIG.maxValueAsk ? ['fair', 'overpay'] : ['fair']
+  const hopeless = (give: string[], get: string[]) => !passes.includes(dealTier({ gives: get, gets: give, prices: judged, currency: input.currency }).tier)
 
   type State = { give: string[]; get: string[]; my: number; their: number; ask: number; imbalance: number; objective: number }
   /**
@@ -773,7 +793,6 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
   // Buying a player the room has marked down off a dud, or selling one it has marked up off a spike, is value
   // the price does not show. Per player, in trade-value points: what you save getting him, or gain sending him.
   // Bounded, so it breaks near-ties rather than making a deal.
-  const form = input.form ?? {}
   const edgeGet: Record<string, number> = {}
   const edgeGive: Record<string, number> = {}
   for (const id of Object.keys(form)) {
@@ -805,13 +824,16 @@ export const findTrades = (input: TradeSearchInput): TradeIdea[] => {
       const my = screen.total(applyTrade(me.players, give, get, capacity, pts)) - myScreenBase
       const their = screen.total(applyTrade(them.players, get, give, capacity, pts)) - theirScreenBase
       const ask = valueOf(get, true) - valueOf(give, false)
-      const imbalance = valueImbalance(valueOf(get, true), valueOf(give, false), cfg)
+      const lopsided = hopeless(give, get)
+      // A hopeless deal is steered away from like a big value gap, so the search grows toward offers they could take.
+      const imbalance = valueImbalance(valueOf(get, true), valueOf(give, false), cfg) + (lopsided ? 2 : 0)
       const state = { give, get, my, their, ask, imbalance, objective: objective(my, their, imbalance, give.length + get.length, edgeOf(give, get)) }
       seen.set(key, state)
       // Anything within a point of the gain bars goes to the exact pass: the
       // screen misses in both directions by up to a point or so. The value
       // balance is already exact, so it is cut here rather than wasting a slot.
-      if (imbalance > 0) funnel.rejectedValueAsk++
+      if (lopsided) funnel.rejectedLopsided++
+      else if (imbalance > 0) funnel.rejectedValueAsk++
       else if (my >= cfg.minMyGain - 1 && their >= cfg.minTheirGain - 1) pool.set(key, state)
       return state
     }

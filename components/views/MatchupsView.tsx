@@ -138,7 +138,7 @@ const MatchupsView = () => {
     return (
       <>
         <PageHeader title="Matchups" />
-        <div className="mt-4">
+        <div className="ff-page-body">
           <Empty title="No matchups this week">They show here once {providerName(data.provider)} sets the week&apos;s pairings during the regular season.</Empty>
         </div>
       </>
@@ -161,7 +161,7 @@ const MatchupsView = () => {
   return (
     <>
       <PageHeader title="Matchups" meta={`week ${week}${close ? ` · ${close} close` : ''}`} actions={<PtsKey className="hidden sm:inline-flex" />} />
-      <div className="mt-4 space-y-4">
+      <div className="ff-page-body ff-stack">
         {mine && (
           <section aria-label="Your matchup" className="border border-ff-accent/40 bg-ff-panel">
             <header className="flex h-9 items-center justify-between gap-3 border-b border-ff-line px-3">
@@ -202,7 +202,7 @@ const MatchupsView = () => {
               ))}
             </ul>
           ) : (
-            <ul className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="ff-grid-gap grid grid-cols-1 p-[var(--ff-gl)] sm:grid-cols-2 xl:grid-cols-3">
               {(mine ? rest : all).map((m) => (
                 <Card key={`${m.a.rosterId}-${m.b.rosterId}`} m={m} mine={false} surname={surname} open={() => open(m)} />
               ))}

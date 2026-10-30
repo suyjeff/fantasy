@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../lib/analysis'
-import type { AcceptRead } from '../lib/behavior'
+import { bandTone, type AcceptRead } from '../lib/behavior'
 import { leverageOf, leverageRun, type Forecast, type ForecastInput, type Leverage, type TradeSides } from '../lib/forecast'
 import { runSim } from '../lib/simRunner'
 import { applyTrade, type TradeIdea } from '../lib/trades'
@@ -193,9 +193,9 @@ const GradeBar = ({ idea, base, nm, posOf }: { idea: TradeIdea; base: AcceptRead
   const rec = grades.all[ideaKey(idea)]
   const pick = (g: Grade) =>
     // Picking the grade you already gave takes it back.
-    rec?.grade === g ? grades.set(idea, null) : grades.set(idea, { grade: g, x: base.logit, ask: base.perceivedAsk, v: PRICING_VERSION, why: g === 'yes' ? undefined : rec?.why, player: g === 'yes' ? undefined : rec?.player })
+    rec?.grade === g ? grades.set(idea, null) : grades.set(idea, { grade: g, x: base.logit, capped: base.capped || undefined, ask: base.perceivedAsk, v: PRICING_VERSION, why: g === 'yes' ? undefined : rec?.why, player: g === 'yes' ? undefined : rec?.player })
   const because = (why: GradeWhy, player?: string) =>
-    rec && grades.set(idea, { grade: rec.grade, x: rec.x, ask: rec.ask, v: rec.v, ...(rec.why === why && rec.player === player ? {} : { why, player }) })
+    rec && grades.set(idea, { grade: rec.grade, x: rec.x, capped: rec.capped, ask: rec.ask, v: rec.v, ...(rec.why === why && rec.player === player ? {} : { why, player }) })
   const givePos = [...new Set(idea.give.map(posOf).filter(Boolean))].join('/')
   const reasons: { why: GradeWhy; player?: string; label: string }[] = [
     ...idea.get.map((id) => ({ why: 'untouchable' as const, player: id, label: `won't move ${nm(id).split(' ').slice(-1)[0]}` })),
@@ -300,7 +300,7 @@ const TradeCard = ({
   if (lev && Math.abs(lev.partner.playoffs) >= 0.005) signals.push({ text: `their playoff odds ${pt(lev.partner.playoffs)}pt`, tone: lev.partner.playoffs > 0 ? 'pos' : 'neg' })
   signals.push(...read.signals)
   const shown = open ? signals : signals.slice(0, 3)
-  const bandTone = read.band === 'likely' ? 'pos' : read.band === 'possible' ? 'warn' : 'neg'
+  const tone = bandTone(read.band)
   const playoffTone = lev && lev.me.playoffs > 0.002 ? 'pos' : lev && lev.me.playoffs < -0.002 ? 'neg' : undefined
 
   return (
@@ -390,13 +390,13 @@ const TradeCard = ({
             title="Change in your playoff odds: the same simulated seasons, before and after"
           />
         </div>
-        <div className={cx('min-w-0 px-3 py-2.5', WASH[bandTone])} title={`Yes-odds ${read.index}/100: their gain, how the deal looks by consensus, and how they trade`}>
+        <div className={cx('min-w-0 px-3 py-2.5', WASH[tone])} title={`Yes-odds ${read.index}/100: their gain, how the deal looks by consensus, and how they trade`}>
           <div className="ff-label">{read.graded ? 'You said' : 'Will they'}</div>
-          <div className={cx('mt-1 text-[16px] font-medium leading-none', bandTone === 'pos' ? 'text-ff-pos' : bandTone === 'warn' ? 'text-ff-warn' : 'text-ff-neg')}>
+          <div className={cx('mt-1 text-[16px] font-medium leading-none', tone === 'pos' ? 'text-ff-pos' : tone === 'warn' ? 'text-ff-warn' : 'text-ff-neg')}>
             {read.graded ? GRADE_LABEL[read.graded].toLowerCase() : read.band}
           </div>
           <span className="mt-2 block h-1 w-full max-w-[72px] bg-ff-text/10">
-            <span className={cx('block h-full', bandTone === 'pos' ? 'bg-ff-pos' : bandTone === 'warn' ? 'bg-ff-warn' : 'bg-ff-neg')} style={{ width: `${Math.max(4, read.index)}%` }} />
+            <span className={cx('block h-full', tone === 'pos' ? 'bg-ff-pos' : tone === 'warn' ? 'bg-ff-warn' : 'bg-ff-neg')} style={{ width: `${Math.max(4, read.index)}%` }} />
           </span>
         </div>
       </div>
@@ -404,7 +404,8 @@ const TradeCard = ({
       {shown.length > 0 && (
         <div className="flex flex-wrap gap-1 px-3 py-2">
           {shown.map((r, i) => (
-            <Chip key={i} tone={r.tone} className={cx(!open && i >= 2 && 'max-sm:hidden')}>
+            // A reason wraps rather than cut off: the long ones ("would never happen: …") are the ones that matter.
+            <Chip key={i} tone={r.tone} className={cx('[&>span]:whitespace-normal', !open && i >= 2 && 'max-sm:hidden')}>
               {r.tone === 'pos' ? '+ ' : r.tone === 'neg' ? '− ' : ''}
               {r.text}
             </Chip>

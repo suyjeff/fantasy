@@ -1,4 +1,5 @@
 import React, { Children, createContext, isValidElement, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { clearsLabel, type Availability } from '../lib/availability'
 import type { TrimmedPlayer } from '../lib/types'
 import { chance, share } from '../lib/format'
 import { ShowMore } from './views/ShowMore'
@@ -332,10 +333,10 @@ export const TabSection = ({
   const phone = usePhone()
   if (!active) return null
   // A phone page replaces the last at once, so it fades up (120ms, opacity only; reduced motion skips it in CSS).
-  // Keyed by the tab so each pick plays it. The wrapper takes over the page's `space-y-3`, which no longer reaches
+  // Keyed by the tab so each pick plays it. The wrapper takes over the page's `ff-stack`, which no longer reaches
   // the panels inside it; wide screens keep the bare content, so nothing changes there.
   return phone ? (
-    <div key={id} className="ff-page-in space-y-3">
+    <div key={id} className="ff-page-in ff-stack">
       {children}
     </div>
   ) : (
@@ -1131,11 +1132,10 @@ export const N = ({ children, tone }: { children: ReactNode; tone?: 'pos' | 'neg
 /** Injury statuses that mean he does not play: IR, Out, PUP, suspended, not active. */
 export const isOut = (injury?: string | null) => !!injury && /^(IR|Out|PUP|Sus|NA)/i.test(injury)
 
-/** Who holds a player, for a detail card: "Free agent", "Your roster", or the team's name. */
-export const ownerLabel = (a: { rosteredBy: Record<string, number>; myRosterId: number | null; teamById: Record<number, { name: string } | undefined> }, id: string) => {
-  const owner = a.rosteredBy[id]
-  return owner === undefined ? 'Free agent' : owner === a.myRosterId ? 'Your roster' : (a.teamById[owner]?.name ?? '—')
-}
+/** Who holds a player, for a detail card, in the words every list uses (lib/availability): "Free agent", "On waivers ·
+ *  clears Thu", "Your roster", or the team's name. */
+export const ownerLabel = (a: Availability, teamById: Record<number, { name: string } | undefined>) =>
+  a.kind === 'fa' ? 'Free agent' : a.kind === 'waivers' ? `On waivers · ${clearsLabel(a.clears)}` : a.kind === 'mine' ? 'Your roster' : (teamById[a.rosterId]?.name ?? '—')
 
 export const PosTag = ({ pos, className }: { pos: string; className?: string }) => (
   <span
@@ -1464,6 +1464,9 @@ export type Column<T> = {
 
 const HIDE: Record<string, string> = { sm: 'hidden sm:table-cell', md: 'hidden md:table-cell', lg: 'hidden lg:table-cell', xl: 'hidden xl:table-cell' }
 
+/** Which column a table is sorted on, and which way. */
+export type TableSort = { key?: string; desc: boolean }
+
 /** How many rows of a long table show, and how to ask for more. Made by `usePhoneCap`; `Table` reads it. */
 export type RowCap = { limit: number; step: number; more: () => void }
 
@@ -1490,6 +1493,8 @@ export function Table<T>({
   rowKey,
   defaultSort,
   defaultDesc = true,
+  sort: heldSort,
+  onSort,
   rowClass,
   onRowClick,
   empty = 'Nothing here yet.',
@@ -1519,14 +1524,21 @@ export function Table<T>({
   defaultOpen?: (row: T) => boolean
   defaultSort?: string
   defaultDesc?: boolean
+  /**
+   * The sort, held by the page instead: for a table whose sort is also set elsewhere (a Sort menu), so a header
+   * click and the menu are one choice. With it, `onSort` hears every header click and the defaults are ignored.
+   */
+  sort?: TableSort
+  onSort?: (s: TableSort) => void
   rowClass?: (row: T) => string
   onRowClick?: (row: T) => void
   empty?: ReactNode
   maxHeight?: number
   dense?: boolean
 }) {
-  const [sortKey, setSortKey] = useState<string | undefined>(defaultSort)
-  const [desc, setDesc] = useState(defaultDesc)
+  const [ownSort, setOwnSort] = useState<TableSort>({ key: defaultSort, desc: defaultDesc })
+  const { key: sortKey, desc } = heldSort ?? ownSort
+  const setSort = (s: TableSort) => (onSort ? onSort(s) : setOwnSort(s))
   // While columns hide past the right edge, a fade says so; it clears once scrolled to the end.
   const scroller = useRef<HTMLDivElement>(null)
   const [more, setMore] = useState(false)
@@ -1592,11 +1604,7 @@ export function Table<T>({
   }, [rows, columns, sortKey, desc])
   const toggle = (c: Column<T>) => {
     if (!c.sort) return
-    if (sortKey === c.key) setDesc((d) => !d)
-    else {
-      setSortKey(c.key)
-      setDesc(true)
-    }
+    setSort(sortKey === c.key ? { key: c.key, desc: !desc } : { key: c.key, desc: true })
   }
   const align = (c: Column<T>) => (c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left')
   // Cut after sorting: sorting a header reorders the whole list, not just the rows that happen to be showing.
@@ -1648,19 +1656,28 @@ export function Table<T>({
                 <th
                   key={c.key}
                   title={c.title}
-                  onClick={() => toggle(c)}
                   aria-sort={sortKey === c.key ? (desc ? 'descending' : 'ascending') : undefined}
                   className={cx(
                     'ff-label h-8 whitespace-nowrap border-b border-ff-line bg-ff-panel px-1.5 font-normal first:pl-2.5 last:pr-2.5 sm:px-2 sm:first:pl-3 sm:last:pr-3',
                     align(c),
-                    c.sort && 'cursor-pointer select-none hover:text-ff-text',
                     c.sticky && cx('sticky z-20', pin),
                     c.hideBelow && HIDE[c.hideBelow],
                     c.className,
                   )}
                 >
-                  {c.label}
-                  {sortKey === c.key && <span className="ml-0.5 text-ff-text">{desc ? '▾' : '▴'}</span>}
+                  {/* A sortable header is a button, so the keyboard sorts too (2.1.1); the header cell keeps aria-sort. */}
+                  {c.sort ? (
+                    <button
+                      type="button"
+                      onClick={() => toggle(c)}
+                      className="-mx-1 inline-flex h-8 select-none items-center whitespace-nowrap px-1 uppercase hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
+                    >
+                      {c.label}
+                      {sortKey === c.key && <span aria-hidden className="ml-0.5 text-ff-text">{desc ? '▾' : '▴'}</span>}
+                    </button>
+                  ) : (
+                    c.label
+                  )}
                 </th>
               ))}
             </tr>

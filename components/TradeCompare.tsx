@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { AcceptRead } from '../lib/behavior'
+import { oddsTone, type AcceptRead } from '../lib/behavior'
 import { bestOf, slotLetter, staleFaab, staleMoves, verdictText, type CompareItem } from '../lib/compare'
 import { rostersOf, type Deal, type DealFaab, type DealMove, type DealRead, type DealSide } from '../lib/deal'
 import type { Leverage, TradeSides } from '../lib/forecast'
@@ -40,11 +40,13 @@ type Col = {
   two: boolean
 }
 
-type Tone = 'pos' | 'neg' | 'neutral'
+// Warn is for the odds alone: a "possible" deal reads amber here as on the trade cards and in the builder.
+type Tone = 'pos' | 'neg' | 'warn' | 'neutral'
 const toneOf = (v: number, edge = 0.25): Tone => (v > edge ? 'pos' : v < -edge ? 'neg' : 'neutral')
 const TEXT: Record<Tone, string> = {
   pos: 'text-ff-pos',
   neg: 'text-ff-neg',
+  warn: 'text-ff-warn',
   neutral: 'text-ff-text',
 }
 // The chart-series set each theme carries (--ff-k1..4, validated per theme in lib/themes), one per comparison slot: a
@@ -712,7 +714,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
         const why = a[0]?.signals[0]?.text
         return (
           <>
-            <Figure value={pct(col.odds)} tone={col.odds >= 0.5 ? 'pos' : col.odds < 0.25 ? 'neg' : 'neutral'} best={best.odds.includes(i) ? 'likeliest' : null} sub={band} />
+            <Figure value={pct(col.odds)} tone={oddsTone(col.odds)} best={best.odds.includes(i) ? 'likeliest' : null} sub={band} />
             {why && <span className="mt-0.5 block text-[11px] leading-snug text-ff-text2">{why}</span>}
           </>
         )
@@ -883,7 +885,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
     }))
 
   return (
-    <div className="space-y-3">
+    <div className="ff-stack">
       <section aria-label="Verdict" className="flex items-start gap-3 border border-ff-line bg-ff-panel px-3 py-2.5 md:px-4">
         <span className="ff-label mt-[3px] shrink-0">Verdict</span>
         <p aria-live="polite" className="min-w-0 text-[13.5px] leading-snug text-ff-text">

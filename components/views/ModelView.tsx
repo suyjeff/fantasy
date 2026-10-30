@@ -235,7 +235,7 @@ const ModelView = ({ mode, data, analysis, sub, onSub, model, setModel, weights,
           />
         }
       />
-      <div className="mt-4 space-y-3">
+      <div className="ff-page-body ff-stack">
         {subs.map((k) => {
           const base = INTRO[k]
           // With shared grades on, the yes-odds also learn from the league's other managers.
@@ -415,7 +415,7 @@ Value  = perActive − repl_horizon(pos)`}</Code>
     </Panel>
   )
   const spread = (
-    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+    <div className="ff-grid-gap grid grid-cols-1 xl:grid-cols-2">
       <Panel title="WAR distribution" actions={<span className="num">{withGames.length} players</span>}>
         <Histogram values={withGames.map((v) => v.war)} bins={24} marker={0} markerLabel="replacement" format={(v) => fmt(v, 1)} />
       </Panel>
@@ -457,11 +457,11 @@ Value  = perActive − repl_horizon(pos)`}</Code>
   // On a phone the sliders and what they did come first; the definitions and the distributions fold away.
   if (phone)
     return (
-      <div className="space-y-3">
+      <div className="ff-stack">
         {params}
         {effect}
         {levels}
-        <Disclosure summary="The working: definitions, WAR distribution, top players" className="space-y-3">
+        <Disclosure summary="The working: definitions, WAR distribution, top players" className="ff-stack">
           {definitions}
           {spread}
         </Disclosure>
@@ -469,12 +469,12 @@ Value  = perActive − repl_horizon(pos)`}</Code>
     )
 
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
-      <div className="space-y-3">
+    <div className="ff-grid-gap grid grid-cols-1 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+      <div className="ff-stack">
         {params}
         {definitions}
       </div>
-      <div className="min-w-0 space-y-3">
+      <div className="min-w-0 ff-stack">
         {effect}
         {levels}
         {spread}
@@ -551,7 +551,7 @@ power  = 100 · Φ(margin / (σ√2))`}</Code>
   )
 
   return (
-    <div className="space-y-3">
+    <div className="ff-stack">
       <Panel title="Weights" pad={false} actions={<span className="font-mono text-[10.5px]">power.ts</span>}>
         <div className="space-y-2 border-b border-ff-line px-3 py-2.5">
           <div className="flex h-3 gap-[2px] overflow-hidden rounded-[3px]" role="img" aria-label="Normalized weights">
@@ -578,7 +578,7 @@ power  = 100 · Φ(margin / (σ√2))`}</Code>
           ))}
         </div>
       </Panel>
-      <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="ff-grid-gap grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <Panel title="Rankings at these weights" pad={false} actions={changed ? <span className="num">{moved} teams moved</span> : <span>defaults</span>}>
           <Table rows={analysis.power} rowKey={(p) => p.rosterId} columns={columns} defaultSort="rk" defaultDesc rowClass={(p) => cx(p.rosterId === analysis.myRosterId && 'ff-mine')} />
         </Panel>
@@ -618,7 +618,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
 
   const pricing = (
     <>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="ff-grid-gap grid grid-cols-1 lg:grid-cols-2">
         <Panel title="P(play) for a healthy player, by weeks ahead">
           <MiniLines
             xs={weeksAhead}
@@ -640,7 +640,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="ff-grid-gap grid grid-cols-1 lg:grid-cols-3">
         <Panel title="Constants" pad={false} actions={<span className="font-mono text-[10.5px]">context.ts</span>}>
           <Spec
             stacked
@@ -707,7 +707,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
   )
 
   return (
-    <div className="space-y-3">
+    <div className="ff-stack">
       <StatGrid>
         <Stat label="League prior" value={pct(BASE_AVAILABILITY)} sub="share of games suited up" />
         <Stat label="Rostered median" value={rates.length ? pct([...rates].sort((a, b) => a - b)[Math.floor(rates.length / 2)]) : '–'} sub={`${rates.length} skill players`} />
@@ -718,7 +718,7 @@ const AvailabilityTab = ({ data, analysis }: { data: LeagueData; analysis: Analy
       {phone ? (
         <>
           {adjustments}
-          <Disclosure summary="How availability is priced" className="space-y-3">
+          <Disclosure summary="How availability is priced" className="ff-stack">
             {pricing}
           </Disclosure>
         </>
@@ -835,7 +835,7 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
   )
 
   return (
-    <div className="space-y-3">
+    <div className="ff-stack">
       <StatGrid>
         <Stat label="Pricing horizon" value={`${data.horizon.length} wk`} sub={modeLabel} />
         <Stat
@@ -877,7 +877,7 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
       {phone ? (
         <>
           {posPricing}
-          <Disclosure summary="How the search works" className="space-y-3">
+          <Disclosure summary="How the search works" className="ff-stack">
             {config}
             {objective}
             {pipeline}
@@ -885,11 +885,11 @@ const EngineTab = ({ data, analysis, baseline }: { data: LeagueData; analysis: A
         </>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="ff-grid-gap grid grid-cols-1 lg:grid-cols-2">
             {posPricing}
             {config}
           </div>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="ff-grid-gap grid grid-cols-1 lg:grid-cols-2">
             {objective}
             {pipeline}
           </div>
@@ -928,7 +928,7 @@ const DataTab = ({ data, analysis, reload }: { data: LeagueData; analysis: Analy
     { src: 'github:dynastyprocess/…/db_fpecr_latest.csv', what: `FantasyPros ECR ${data.consensus?.date ?? ''}`, n: data.consensus ? `${data.consensus.matched} matched` : 'unavailable', ttl: '12h' },
   ]
   return (
-    <div className="space-y-3">
+    <div className="ff-stack">
       <StatGrid>
         <Stat label="Week" value={data.state.week ?? '–'} sub={`${data.state.season} ${data.state.season_type}`} />
         <Stat label="Points source" value={<span className="text-[15px]">{data.pointsSource}</span>} sub="for player value" />

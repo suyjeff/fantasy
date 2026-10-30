@@ -1,32 +1,34 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import type { Analysis } from '../../lib/analysis'
 import { waiverTargets } from '../../lib/search'
-import { dropCandidate as dropCandidateFor } from '../../lib/moves'
-import type { TradeTarget } from '../../lib/trades'
+import { dropCandidates } from '../../lib/moves'
 import type { LeagueData } from '../../lib/useLeagueData'
 import {
   impliedTotals,
   pointsAllowed,
   positionSpread,
-  STREAM_POSITIONS,
   streamReasons,
   streamRows,
+  WEEKLY_STREAM,
   type Allowed,
   type StreamPos,
   type StreamRow,
   type TeamTotal,
 } from '../../lib/waivers'
-import { suggestBid, type BidAdvice } from '../../lib/faab'
-import { ContextNotes, contextReasons } from '../ContextNotes'
+import { contextReasons } from '../ContextNotes'
 import { useFantasy } from '../FantasyContext'
-import WaiverMoves, { TrendingFree } from './WaiverMoves'
+import WaiverMoves from './WaiverMoves'
+import FreeAgentBrowser from './FreeAgentBrowser'
 import { Disclosure } from '../Disclosure'
 import { useStatLines } from '../useStatLines'
 import PlayerName from '../PlayerName'
-import { DeltaChip, Badge, Button, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, TabSection, Tabs, usePhone, usePhoneCap, compact, cx, fmt, pct, type Column, type Reason } from '../ui'
+import { DeltaChip, Badge, CenterMeter, Empty, N, Num, PageHeader, Panel, Reasons, Segmented, Stat, StatGrid, Table, TabSection, Tabs, usePhone, usePhoneCap, cx, fmt, pct, type Column, type PageChange, type Reason } from '../ui'
 
-type Sub = 'moves' | 'stream' | 'adds'
-const SUBS: Sub[] = ['moves', 'stream', 'adds']
+// Moves: what to do, grouped. Free agents: everyone you can add, to browse. Streamers: this week's matchups at the
+// positions you churn. The old "All adds" page (#waivers/adds) is the free-agent browser now.
+type Sub = 'moves' | 'available' | 'stream'
+const SUBS: Sub[] = ['moves', 'available', 'stream']
+const MOVED: Record<string, Sub> = { adds: 'available' }
 const AHEAD = 3
 const POS_LABEL: Record<StreamPos, string> = { QB: 'quarterback', RB: 'running back', WR: 'receiver', TE: 'tight end', K: 'kicker', DEF: 'defense' }
 
@@ -62,19 +64,24 @@ const TotalCell = ({ t, low }: { t: TeamTotal | null; low?: boolean }) =>
     <span className="text-ff-muted">–</span>
   )
 
-const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis: Analysis; sub: string | null; onSub: (s: string) => void }) => {
-  const tab: Sub = SUBS.includes(sub as Sub) ? (sub as Sub) : 'moves'
+const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysis: Analysis; sub: string | null; onSub: PageChange }) => {
+  const moved = sub ? MOVED[sub] : undefined
+  const tab: Sub = moved ?? (SUBS.includes(sub as Sub) ? (sub as Sub) : 'moves')
+  // An old link to a page that moved lands on its new name, without leaving the old one in history.
+  useEffect(() => {
+    if (moved) onSub(moved, { replace: true })
+  }, [moved]) // eslint-disable-line react-hooks/exhaustive-deps
   // On a phone each tab is its own page, so pages are kept short and the small print folds away.
   const phone = usePhone()
   const { models } = useFantasy()
   const { players } = data
   const me = analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
   const startable = useMemo(() => new Set(analysis.slots.flatMap((s) => s.eligible)), [analysis.slots])
-  const positions = STREAM_POSITIONS.filter((p) => startable.has(p))
+  // Streaming is a weekly call at the spots the matchup moves most; backs and receivers are found in Free agents.
+  const positions = WEEKLY_STREAM.filter((p) => startable.has(p))
   const [pos, setPos] = useState<StreamPos>(positions[positions.length - 1] ?? 'DEF')
   // A phone gets the top of each long table, and asks for more; a new position starts the streamers over.
   const streamCap = usePhoneCap(12, pos)
-  const addsCap = usePhoneCap(12)
   const weeks = useMemo(
     () =>
       data.horizon
@@ -146,11 +153,17 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
     }
   }, [stream.rows])
 
-  // Everyone off the wire who would start for you, with the cut it forces already priced in.
-  const adds = useMemo(() => ((tab === 'adds' || tab === 'moves') && me ? waiverTargets(data, analysis) : []), [tab, me, data, analysis])
+  // Everyone off the wire who would start for you, with the cut it forces already priced in. Every free agent with a
+  // projection, not just the top of the pool: the browser's "For you" column reads a blank as "would not start", so
+  // it must be one. The cheap screen drops nearly all of them first, so the whole pool costs a few milliseconds.
+  const adds = useMemo(
+    () => ((tab === 'available' || tab === 'moves') && me ? waiverTargets(data, analysis, { pool: Infinity, limit: Infinity }) : []),
+    [tab, me, data, analysis],
+  )
+  const gains = useMemo(() => Object.fromEntries(adds.map((t) => [t.id, t.add])) as Record<string, number>, [adds])
   const trending = useMemo(() => Object.fromEntries(data.trending.map((t) => [t.player_id, t.count])), [data.trending])
-  // The weakest bench player, with the consensus price as a floor (lib/moves).
-  const dropCandidate = useMemo(() => (me ? dropCandidateFor(analysis, me.rosterId, models.perceived) : null), [me, analysis, models.perceived])
+  // Bench players to cut, weakest first, with the consensus price as a floor (lib/moves).
+  const drops = useMemo(() => (me ? dropCandidates(analysis, me.rosterId, models.perceived) : []), [me, analysis, models.perceived])
 
   const posLabel = POS_LABEL[pos]
   const myProj = stream.mine
@@ -257,95 +270,6 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
     },
   ]
 
-  // A suggested bid for every listed add. Moves prices its own few.
-  const bids = useMemo(() => {
-    const f = models.faab
-    if (!f || !me || tab !== 'adds') return {} as Record<string, BidAdvice>
-    const out: Record<string, BidAdvice> = {}
-    for (const t of adds) out[t.id] = suggestBid(f, me.rosterId, { gain: t.add, value: analysis.market[t.id] ?? 0, trending: trending[t.id] ?? 0, pos: players[t.id]?.pos ?? '' })
-    return out
-  }, [models.faab, me, tab, adds, analysis.market, players, trending])
-  const addWhy = (t: TradeTarget) => {
-    const items: Reason[] = [...contextReasons(data.context[t.id], players), ...(bids[t.id]?.reasons ?? [])]
-    return items.length ? <Reasons items={items} /> : null
-  }
-
-  const addCols: Column<TradeTarget>[] = [
-    {
-      key: 'p',
-      label: 'Player',
-      sticky: true,
-      sort: (t) => players[t.id]?.name ?? t.id,
-      render: (t) => <PlayerName player={players[t.id]} id={t.id} size={24} />,
-    },
-    {
-      key: 'trend',
-      label: '',
-      hideBelow: 'sm',
-      render: (t) =>
-        trending[t.id] ? (
-          <Badge tone="pos" title={`${trending[t.id].toLocaleString()} Sleeper managers added him in the last 24 hours`}>
-            ↑{compact(trending[t.id])}
-          </Badge>
-        ) : null,
-    },
-    {
-      key: 'slot',
-      label: 'Starts at',
-      render: (t) => <span className="font-mono text-[11px] text-ff-text2">{t.slot ?? '—'}</span>,
-    },
-    {
-      key: 'add',
-      label: 'Gain/wk',
-      align: 'right',
-      title: 'Points per week your best lineup gains over the horizon, after cutting your least useful player',
-      sort: (t) => t.add,
-      render: (t) => <Num value={t.add} signed digits={2} />,
-    },
-    {
-      key: 'exp',
-      label: 'Exp/wk',
-      align: 'right',
-      hideBelow: 'sm',
-      sort: (t) => analysis.horizon.perWeek[t.id] ?? 0,
-      render: (t) => fmt(analysis.horizon.perWeek[t.id]),
-    },
-    {
-      key: 'value',
-      label: 'Value',
-      align: 'right',
-      hideBelow: 'sm',
-      title: 'Points per week over a replacement player: what the league at large would pay',
-      sort: (t) => analysis.market[t.id] ?? 0,
-      render: (t) => <Num value={analysis.market[t.id] ?? 0} signed />,
-    },
-    {
-      key: 'play',
-      label: 'Plays',
-      align: 'right',
-      hideBelow: 'md',
-      render: (t) => pct(data.context[t.id]?.play),
-    },
-    ...(models.faab && me
-      ? [
-          {
-            key: 'bid',
-            label: 'Bid',
-            align: 'right' as const,
-            title: 'Suggested FAAB bid: the lower of what he is worth to you and what this league pays for his value, capped one dollar over the richest rival',
-            sort: (t: TradeTarget) => bids[t.id]?.bid ?? 0,
-            render: (t: TradeTarget) => (bids[t.id] ? <span className="text-ff-text">${bids[t.id].bid}</span> : <span className="text-ff-muted">–</span>),
-          },
-        ]
-      : []),
-    {
-      key: 'why',
-      label: 'Context',
-      hideBelow: 'lg',
-      render: (t) => <ContextNotes context={data.context[t.id]} players={players} max={2} />,
-    },
-  ]
-
   return (
     <>
       <PageHeader
@@ -354,8 +278,8 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
           <Tabs<Sub>
             items={[
               { key: 'moves', label: 'Moves' },
+              { key: 'available', label: 'Free agents' },
               { key: 'stream', label: 'Streamers' },
-              { key: 'adds', label: 'All adds' },
             ]}
             value={tab}
             onChange={onSub}
@@ -363,12 +287,18 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
           />
         }
       />
-      <div className="mt-4 space-y-3">
+      <div className="ff-page-body ff-stack">
         {!me && <Empty title="You are not in this league">Waiver picks are read against your roster.</Empty>}
 
         {me && (
           <TabSection id="moves" active={tab === 'moves'}>
-            <WaiverMoves data={data} analysis={analysis} adds={adds} trending={trending} drop={dropCandidate} />
+            <WaiverMoves data={data} analysis={analysis} adds={adds} trending={trending} drops={drops} onBrowse={() => onSub('available')} onStream={() => onSub('stream')} />
+          </TabSection>
+        )}
+
+        {me && (
+          <TabSection id="available" active={tab === 'available'}>
+            <FreeAgentBrowser data={data} analysis={analysis} gains={gains} trending={trending} />
           </TabSection>
         )}
 
@@ -377,7 +307,8 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             {data.horizonSource !== 'projections' ? (
               <Empty title="No projections to stream from">Streaming reads Sleeper&apos;s projections for the weeks ahead, and there are none right now (the season may be over).</Empty>
             ) : (
-          <>
+          <div className="ff-stack">
+            <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <Segmented<StreamPos> label="Position" value={pos} onChange={setPos} options={positions.map((p) => ({ key: p, label: p }))} />
               {weeks.length > 1 && (
@@ -391,6 +322,15 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                   }))}
                 />
               )}
+            </div>
+              <p className="text-[12px] leading-snug text-ff-muted md:max-w-[440px] md:text-right">
+                One-week pickups where the matchup moves the number most. For backs and receivers, see{' '}
+                {/* Underlined at rest: in a sentence the accent alone sits too close to the text around it (1.4.1). */}
+                <button type="button" onClick={() => onSub('available')} className="text-ff-accent underline decoration-ff-accent/50 underline-offset-2 hover:decoration-current">
+                  Free agents
+                </button>
+                .
+              </p>
             </div>
             {!positions.length ? (
               <Empty title="No positions to stream">This league&apos;s lineup has no slot these positions fill.</Empty>
@@ -435,7 +375,7 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                     <div className="p-4 text-[13px] text-ff-muted">No free agent at this position has a projection for week {week}.</div>
                   )}
                 </Panel>
-                <Disclosure from="md" summary="What the columns mean" className="text-[11.5px] leading-relaxed text-ff-muted">
+                <Disclosure from="md" summary="What the columns mean" className="max-w-[75ch] text-[11.5px] leading-relaxed text-ff-muted">
                   <span className="text-ff-text2">Proj</span> blends prop lines into next week. <span className="text-ff-text2">{pos === 'DEF' ? 'Opp total' : 'Team total'}</span>{' '}
                   {pos === 'DEF' ? 'is what the offense he faces should score' : 'is what his offense should score'} (<N>m</N> = from props, else Vegas via Sleeper).{' '}
                   <span className="text-ff-text2">Matchup</span> is what this opponent {pos === 'DEF' ? 'gives up to defenses' : `allows ${pos}s`} vs average
@@ -444,46 +384,11 @@ const WaiversView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
                 </Disclosure>
               </>
             )}
-          </>
+          </div>
             )}
           </TabSection>
         )}
 
-        {me && (
-          <TabSection id="adds" active={tab === 'adds'}>
-          <>
-            <StatGrid>
-              <Stat
-                label="Best add"
-                value={adds[0] ? <Num value={adds[0].add} signed /> : '–'}
-                sub={adds[0] ? `${players[adds[0].id]?.name} · pts/wk to your lineup` : 'nobody cracks your lineup'}
-              />
-              {!phone && <Stat
-                label="Hottest add"
-                value={data.trending[0] ? data.trending[0].count.toLocaleString() : '–'}
-                sub={
-                  data.trending[0]
-                    ? `${players[data.trending[0].player_id]?.name ?? '–'} · Sleeper adds, last 24h${analysis.rosteredBy[data.trending[0].player_id] != null ? ' · rostered here' : ''}`
-                    : 'no trend data'
-                }
-              />}
-              <Stat
-                label="Drop candidate"
-                value={dropCandidate ? (players[dropCandidate]?.name.split(' ').slice(-1)[0] ?? '–') : '–'}
-                sub={dropCandidate ? `lowest value on your bench · ${fmt(analysis.market[dropCandidate] ?? 0)}/wk` : '–'}
-              />
-            </StatGrid>
-            <Panel title={`Free agents who would start for you · wks ${data.horizon[0]?.week ?? ''}–${data.horizon[data.horizon.length - 1]?.week ?? ''}`} pad={false}>
-              <Table rows={adds} cap={addsCap} rowKey={(t) => t.id} columns={addCols} defaultSort="add" empty="No free agent would crack your lineup." expand={addWhy} canExpand={(t) => !!bids[t.id]?.reasons.length || !!data.context[t.id]?.notes.length} />
-            </Panel>
-            {/* Moves holds this list on wide screens; on a phone it lives here, with the other free-agent lists. */}
-            {phone && <TrendingFree data={data} analysis={analysis} adds={adds} />}
-            <Disclosure from="md" summary="How gain is figured" className="text-[11.5px] leading-relaxed text-ff-muted">
-              Gain: your best lineup with him in and your weakest player out, against today&apos;s, week by week. Any positive gain is an upgrade. Value: what the league would pay.
-            </Disclosure>
-          </>
-          </TabSection>
-        )}
       </div>
     </>
   )

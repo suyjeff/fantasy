@@ -5,7 +5,7 @@
 
 import type { Analysis } from './analysis'
 import { leagueBehavior, type LeagueBehavior } from './behavior'
-import { perceivedValues } from './consensus'
+import { roomPrices } from './consensus'
 import { backtest, buildForecast, divisionsOf, ELO, gamesFrom, lineupEdge, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
 import { faabState, type Faab } from './faab'
 import { teamMoods, type Momentum } from './momentum'
@@ -162,7 +162,7 @@ export const buildModels = (data: LeagueData, analysis: Analysis, history: Histo
 
   // A player the consensus does not rank (or the matcher missed) is read at the
   // model's own value rather than zero, so a miss never looks like a free player.
-  const perceived = data.consensus ? { ...Object.fromEntries(Object.entries(analysis.market).map(([id, v]) => [id, Math.max(0, v)])), ...perceivedValues(data.consensus, analysis.market) } : null
+  const perceived = data.consensus ? roomPrices(data.consensus, analysis.market) : null
 
   const momentum: Momentum = { form: analysis.form, teams: teamMoods(analysis.seasons, forecast?.sim, data.futureWeeks.length), market: analysis.tradeMarket }
 

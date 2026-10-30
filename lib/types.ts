@@ -148,6 +148,8 @@ export type SleeperTransaction = {
   /** Draft picks moved in a trade. */
   picks: number
   created: number
+  /** When it went through (Sleeper's `status_updated`): for a waiver claim, when claims ran, not when it was put in. */
+  processed?: number
   /** Week (Sleeper calls it the leg) the move was processed in. */
   leg: number
   /** FAAB bid on a waiver claim, in dollars. */

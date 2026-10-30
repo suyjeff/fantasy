@@ -173,7 +173,7 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
   return (
     <>
       <PageHeader title="Teams" meta={`${analysis.teams.length} teams${next[0] ? ` · wk ${next[0].week}` : ''}`} />
-      <div className="mt-4 space-y-3">
+      <div className="ff-page-body ff-stack">
         <Panel title="League" pad={false} actions={<span>by power · <span className="max-md:hidden">click</span><span className="md:hidden">tap</span> a team for its summary</span>}>
           <Table rows={rows} rowKey={(t) => t.rosterId} columns={columns} dense onRowClick={(t) => openTeam(t.rosterId)} rowClass={(t) => (t.rosterId === myRosterId ? 'ff-mine' : '')} />
         </Panel>
@@ -285,7 +285,7 @@ const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<Teams
           </>
         }
       />
-      <div className="mt-4 space-y-3">
+      <div className="ff-page-body ff-stack">
         {stacked && switcher}
         {(!stacked || tab === 'overview') && (
           <>
