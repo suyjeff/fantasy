@@ -512,7 +512,7 @@ export const OddsGrid = ({ onTeam }: { onTeam?: (id: number) => void }) => {
       </div>
       <p className="border-t border-ff-line px-3 py-2 text-[11.5px] leading-snug text-ff-muted">
         Scores ~ <N>N(rating, σ={fmt(f.sigma)})</N> around a season level (<N>τ={fmt(f.tau)}</N>), <N>{Math.round(SIM.persistence * 100)}%</N> of edges persisting, then the bracket. Fitted on{' '}
-        <N>148</N> finished leagues. <N>100%</N> and <N>0%</N> only once clinched. The rule after seed <N>{cut}</N> is the playoff line.
+        <N>1,040</N> finished league-seasons. <N>100%</N> and <N>0%</N> only once clinched. The rule after seed <N>{cut}</N> is the playoff line.
       </p>
     </Panel>
   )

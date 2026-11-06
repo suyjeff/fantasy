@@ -13,3 +13,4 @@ next-env.d.ts
 # Research data (pulled by research/scripts, large)
 /research/data/
 /research/*.log
+__pycache__/

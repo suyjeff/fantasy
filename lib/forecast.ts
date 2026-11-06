@@ -168,20 +168,27 @@ export const preseasonElo = (lastSeason: Record<number, number>) => {
 // ---------- Lineup ratings ----------
 
 /**
- * Prior strength, in games, for a manager's efficiency (points per projected
- * point). Heavy on the evidence: at 8 games, per-manager efficiency graded
- * slightly worse than the raw projection in both leagues tested (Brier 0.213
- * vs 0.192 on 15 games; 0.247 vs 0.242 on 18), so a manager needs most of a
- * season before their own number carries half the weight.
+ * Prior strength, in games, for a manager's efficiency (points per projected point), now shown rather than rated on
+ * (see LINEUP_PRIOR_GAMES). Refitted on 48,556 walk-forward games (688 Sleeper league-seasons, 2022–24): 24 is still
+ * the best of 0–96 (log loss 0.6037; 16 and 48 within 0.0006).
  */
 export const EFFICIENCY_PRIOR_GAMES = 24
+/**
+ * Prior strength, in games, for a manager's lineup habit: projected points a week the starters they actually use fall
+ * short of the best lineup their roster projected (an empty slot or a starter on bye counts zero), shrunk toward the
+ * league's. This is what the rating carries forward, added to the projected optimum. Fitted by walk-forward log loss
+ * on 48,556 games (688 Sleeper league-seasons, 2022–24; best of 0–16 and no shrinkage at all) and confirmed on 2025's
+ * 25,225, which no fit saw (research/RESULTS.md): 0.5915 against the multiplicative efficiency's 0.6120, a gain of
+ * 0.020 (95% interval 0.016–0.025, resampling leagues). The habit is that persistent (a team's gap correlates 0.76 with
+ * its own past average) because it is mostly managers who leave slots empty or starters on bye week after week, which
+ * a share of points cannot see. One game of evidence weighs as much as the league.
+ */
+export const LINEUP_PRIOR_GAMES = 1
 export const FORM_PRIOR_GAMES = 8
 /**
- * How much form counts in the rating. Zero, on the evidence: in both leagues
- * tested, adding form made next-week predictions worse (Brier 0.204 → 0.224
- * on 15 games, 0.248 → 0.253 on 18). Points beyond projection are mostly noise
- * the projections already absorb. It is still computed and shown, and the
- * backtest keeps grading it, so the call can be revisited as games accrue.
+ * How much form counts in the rating. Zero, on the evidence: on 48,556 walk-forward games every weight above zero
+ * graded worse, monotonically (log loss 0.6037 at 0, 0.6041 at ¼, 0.6052 at ½, 0.6092 at 1). Points beyond projection
+ * are mostly noise the projections already absorb. It is still computed and shown, and the backtest keeps grading it.
  */
 export const FORM_WEIGHT = 0
 
@@ -189,11 +196,16 @@ export type TeamRating = {
   rosterId: number
   /** Projected optimal lineup, points per week over the horizon (adjusted for injury odds and byes). */
   projected: number
-  /** Share of the optimum this manager starts, shrunk toward the league. */
+  /** Share of the optimum this manager scores, shrunk toward the league. Shown; the rating uses lineupGap. */
   efficiency: number
+  /**
+   * Projected points a week this manager's starters fall short of the projected best lineup (≤ 0 for nearly
+   * everyone), shrunk toward the league's: empty slots and starters left on bye count. Added to the projection.
+   */
+  lineupGap: number
   /** Shrunk points per week beyond projections, from results. */
   form: number
-  /** What the model expects per week: projected × efficiency (+ form × FORM_WEIGHT). */
+  /** What the model expects per week: projected + lineupGap (+ form × FORM_WEIGHT). */
   rating: number
   elo: number
   /** Expected weekly points, keyed by week, for the weeks ahead. */
@@ -261,17 +273,50 @@ export const managedByWeek = (input: Pick<ForecastInput, 'slots' | 'floor' | 'pa
   return out
 }
 
+/** Projected points of the starters each team actually used in every completed week with projections. */
+export const startedByWeek = (input: Pick<ForecastInput, 'pastProjections' | 'teamWeeks'>, past: Record<number, Record<number, number>>) => {
+  const out: Record<number, Record<number, number>> = {}
+  for (const w of Object.keys(past).map(Number)) {
+    const pts = input.pastProjections[w] ?? {}
+    out[w] = {}
+    for (const t of input.teamWeeks[w] ?? []) out[w][t.rosterId] = t.starters.reduce((a, id) => a + (pts[id] ?? 0), 0)
+  }
+  return out
+}
+
+/** Each team's lineup habit (see LINEUP_PRIOR_GAMES) from the weeks played, and the league's. */
+export const lineupGaps = (teams: number[], teamWeeks: ForecastInput['teamWeeks'], past: Record<number, Record<number, number>>, started: Record<number, Record<number, number>>) => {
+  const own: Record<number, { sum: number; n: number }> = {}
+  let sum = 0
+  let n = 0
+  for (const w of Object.keys(past).map(Number)) {
+    for (const t of teamWeeks[w] ?? []) {
+      const proj = past[w][t.rosterId]
+      if (!(proj > 0)) continue
+      const gap = (started[w]?.[t.rosterId] ?? 0) - proj
+      const o = (own[t.rosterId] ??= { sum: 0, n: 0 })
+      o.sum += gap
+      o.n++
+      sum += gap
+      n++
+    }
+  }
+  const league = n ? sum / n : 0
+  const gap: Record<number, number> = {}
+  for (const t of teams) gap[t] = ((own[t]?.sum ?? 0) + LINEUP_PRIOR_GAMES * league) / ((own[t]?.n ?? 0) + LINEUP_PRIOR_GAMES)
+  return { gap, league, n: own }
+}
+
 /**
- * Weekly noise around a team's expectation: the spread of (actual − projected
- * × efficiency) across every team-week we can measure. Falls back to a share
- * of the league's score spread before any week has both.
+ * Weekly noise around a team's expectation: the spread of (points − (projected + lineup gap)) across every team-week
+ * we can measure, at today's gaps. Falls back to a share of the league's score spread before any week has both.
  */
-export const measureNoise = (input: ForecastInput, efficiency: Record<number, number>, past = pastByWeek(input), managed = managedByWeek(input, past)) => {
+export const measureNoise = (input: ForecastInput, gap: Record<number, number>, past = pastByWeek(input)) => {
   const resid: number[] = []
   for (const w of Object.keys(past).map(Number)) {
     for (const t of input.teamWeeks[w] ?? []) {
       const proj = past[w][t.rosterId]
-      if (proj > 0) resid.push(managed[w][t.rosterId] - proj * (efficiency[t.rosterId] ?? 1))
+      if (proj > 0) resid.push(t.points - proj - (gap[t.rosterId] ?? 0))
     }
   }
   if (resid.length < 8) return { sigma: input.sigmaFallback, n: resid.length, bias: 0 }
@@ -312,18 +357,20 @@ export const teamRatings = (input: ForecastInput, past = pastByWeek(input)) => {
     const n = g?.n ?? 0
     efficiency[t.rosterId] = (n * own + EFFICIENCY_PRIOR_GAMES * leagueEff) / (n + EFFICIENCY_PRIOR_GAMES)
   }
-  const noise = measureNoise(input, efficiency, past, managed)
+  const ids = teams.map((t) => t.rosterId)
+  const lineup = lineupGaps(ids, teamWeeks, past, startedByWeek(input, past))
+  const noise = measureNoise(input, lineup.gap, past)
 
-  // Form: points beyond the team's own projection, per game, shrunk hard.
+  // Form: points beyond the team's own expectation, per game, shrunk hard.
   const form: Record<number, number> = {}
   for (const t of teams) {
     let sum = 0
     let n = 0
     for (const w of Object.keys(past).map(Number)) {
-      const pts = managed[w][t.rosterId]
+      const tw = (teamWeeks[w] ?? []).find((x) => x.rosterId === t.rosterId)
       const proj = past[w][t.rosterId]
-      if (pts === undefined || !(proj > 0)) continue
-      sum += pts - proj * efficiency[t.rosterId] - noise.bias
+      if (!tw || !(proj > 0)) continue
+      sum += tw.points - proj - lineup.gap[t.rosterId] - noise.bias
       n++
     }
     form[t.rosterId] = n ? sum / (n + FORM_PRIOR_GAMES) : 0
@@ -332,19 +379,21 @@ export const teamRatings = (input: ForecastInput, past = pastByWeek(input)) => {
   const ratings: TeamRating[] = teams.map((t) => {
     const perWeek = evalH ? evalH.perWeek(t.players) : []
     const byWeek: Record<number, number> = {}
-    input.horizon.forEach((h, i) => (byWeek[h.week] = perWeek[i] * efficiency[t.rosterId] + FORM_WEIGHT * form[t.rosterId]))
+    const gap = lineup.gap[t.rosterId]
+    input.horizon.forEach((h, i) => (byWeek[h.week] = perWeek[i] + gap + FORM_WEIGHT * form[t.rosterId]))
     const projected = perWeek.length ? perWeek.reduce((a, b) => a + b, 0) / perWeek.length : 0
     return {
       rosterId: t.rosterId,
       projected: round2(projected),
       efficiency: round3(efficiency[t.rosterId]),
+      lineupGap: round2(gap),
       form: round2(form[t.rosterId]),
-      rating: round2(projected * efficiency[t.rosterId] + FORM_WEIGHT * form[t.rosterId]),
+      rating: round2(projected + gap + FORM_WEIGHT * form[t.rosterId]),
       elo: Math.round(input.elo[t.rosterId] ?? ELO.base),
       byWeek,
     }
   })
-  return { ratings, noise, leagueEff }
+  return { ratings, noise, leagueEff, leagueGap: lineup.league }
 }
 
 // ---------- Simulation ----------
@@ -511,8 +560,9 @@ export type SimInput = {
 export const lockKey = (g: { week: number; a: number; b: number }) => `${g.week}:${Math.min(g.a, g.b)}:${Math.max(g.a, g.b)}`
 
 /**
- * Season-simulation settings, fitted on how 148 real 2025 Sleeper leagues
- * (1,722 teams) actually finished, simulating from week 4 and from week 6.
+ * Season-simulation settings, fitted on how 688 real Sleeper league-seasons (2022–24, 7,700 teams) finished, simulated
+ * from the end of weeks 3, 5, 7, 9 and 11 on the lineup-gap ratings, over a grid of 6 × 6, and confirmed on 352 from
+ * 2025 that no fit saw (research/RESULTS.md).
  *
  *   tauShare     Spread of each team's season-long level around its rating,
  *                as a share of weekly σ: how wrong a rating can be.
@@ -520,13 +570,9 @@ export const lockKey = (g: { week: number; a: number; b: number }) => `${g.week}
  *                through the rest of the season. Rosters drift (injuries,
  *                trades, waiver pickups), and that pulls teams toward the middle.
  *
- * The earlier settings (0.3, 1.0) were a little overconfident: teams given
- * 95–99% made it 96.4% of the time against 97.2% predicted. These score
- * best on log loss at both start weeks (0.4544 vs 0.4575 at week 4; 0.3990
- * vs 0.4042 at week 6). Every team either setting put at 99% or higher did
- * make the playoffs (34 of 34 and 92 of 92), so a very high number for a
- * team that is far ahead is earned; what it never is, until the arithmetic
- * says so, is 100%.
+ * (0.3, 0.7) beat the earlier (0.4, 0.85) on 2025 playoff odds by 0.0015 log loss (95% interval 0.0004–0.0025). On
+ * 2025, teams given 20–80% made it 51.6% of the time against 51.6% predicted, and of the 2,412 put at 99% or more,
+ * 12 missed: a very high number for a team far ahead is earned, but it is never 100% until the arithmetic says so.
  *
  *   sims, seed   Every playoff number in the app is read off the same 4,000
  *                seasons of the same stream: the forecast itself, and every
@@ -535,7 +581,7 @@ export const lockKey = (g: { week: number; a: number; b: number }) => `${g.week}
  *                its inputs do. 4,000 puts the standard error of a 50% chance at
  *                0.8 points.
  */
-export const SIM = { sims: 4000, seed: 20240917, tauShare: 0.4, persistence: 0.85 }
+export const SIM = { sims: 4000, seed: 20240917, tauShare: 0.3, persistence: 0.7 }
 
 /** A team's expectation pulled toward the week's league average by SIM.persistence, for simulating weeks ahead. */
 export const persistMean = (mean: (t: number, w: number) => number, teams: number[], persistence = SIM.persistence) => {
@@ -872,6 +918,8 @@ export type Forecast = {
   noiseN: number
   tau: number
   leagueEff: number
+  /** The league's lineup habit: projected points a week its managers' starters fall short of the best lineup. */
+  leagueGap: number
   sims: number
   /** Next week's pairings with win probabilities. */
   nextWeek: { week: number; a: number; b: number; muA: number; muB: number; pA: number }[]
@@ -880,7 +928,7 @@ export type Forecast = {
 }
 
 export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = pastByWeek(input)): Forecast => {
-  const { ratings, noise, leagueEff } = teamRatings(input, past)
+  const { ratings, noise, leagueEff, leagueGap } = teamRatings(input, past)
   const byId = Object.fromEntries(ratings.map((r) => [r.rosterId, r])) as Record<number, TeamRating>
   const mean = (t: number, w: number) => byId[t]?.byWeek[w] ?? byId[t]?.rating ?? 0
   const tau = SIM.tauShare * noise.sigma
@@ -912,7 +960,7 @@ export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = past
       const muB = mean(g.b, g.week)
       return { week: g.week, a: g.a, b: g.b, muA: round2(muA), muB: round2(muB), pA: clampOdds(round3(winProb(muA, muB, noise.sigma))) }
     })
-  return { ratings, byId, sim, simInput, sigma: round2(noise.sigma), noiseN: noise.n, tau: round2(tau), leagueEff: round3(leagueEff), sims, nextWeek, mean }
+  return { ratings, byId, sim, simInput, sigma: round2(noise.sigma), noiseN: noise.n, tau: round2(tau), leagueEff: round3(leagueEff), leagueGap: round2(leagueGap), sims, nextWeek, mean }
 }
 
 /** What a team's odds are in one outcome of its game; `clinch` is that outcome's settled status, if any. */
@@ -969,7 +1017,7 @@ export const leverageRun = (input: ForecastInput, base: Forecast, trade: TradeSi
     const r = base.byId[rid]
     const perWeek = evalH.perWeek(roster)
     after[rid] = {}
-    input.horizon.forEach((h, i) => (after[rid][h.week] = perWeek[i] * r.efficiency + FORM_WEIGHT * r.form))
+    input.horizon.forEach((h, i) => (after[rid][h.week] = perWeek[i] + r.lineupGap + FORM_WEIGHT * r.form))
     const xs = Object.values(after[rid])
     afterRating[rid] = xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
   }
@@ -1089,8 +1137,8 @@ export const backtest = (
       const mean = (xs: number[] | undefined) => (xs?.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
       const power = ctx.powerMargin(s.teamWeeks, prior)
       const proj = s.pastProjections?.[week]
-      // Efficiency and form going into the week, both against each roster's own projection in earlier weeks.
-      const formSum: Record<number, { sum: number; n: number; actual: number; proj: number }> = {}
+      // Lineup habit and form going into the week, both against each roster's own projection in earlier weeks.
+      const formSum: Record<number, { sum: number; n: number; actual: number; proj: number; gap: number; raw: number }> = {}
       for (const w of prior) {
         const pw = s.pastProjections?.[w]
         if (!pw) continue
@@ -1098,24 +1146,25 @@ export const backtest = (
         for (const t of s.teamWeeks[w] ?? []) {
           const proj = lineup.total(t.players)
           if (!(proj > 0)) continue
-          const f = (formSum[t.rosterId] ??= { sum: 0, n: 0, actual: 0, proj: 0 })
+          const f = (formSum[t.rosterId] ??= { sum: 0, n: 0, actual: 0, proj: 0, gap: 0, raw: 0 })
           const pts = managedPoints(t, ctx.slots, pw, ctx.floor)
           f.sum += pts - proj
           f.n++
           f.actual += pts
           f.proj += proj
+          f.gap += t.starters.reduce((a, id) => a + (pw[id] ?? 0), 0) - proj
+          f.raw += t.points - proj
         }
       }
       const formAll = Object.values(formSum)
-      const formBias = formAll.reduce((a, f) => a + f.sum, 0) / Math.max(1, formAll.reduce((a, f) => a + f.n, 0))
+      const nAll = Math.max(1, formAll.reduce((a, f) => a + f.n, 0))
+      const leagueGap = formAll.reduce((a, f) => a + f.gap, 0) / nAll
+      const gapOf = (rid: number) => ((formSum[rid]?.gap ?? 0) + LINEUP_PRIOR_GAMES * leagueGap) / ((formSum[rid]?.n ?? 0) + LINEUP_PRIOR_GAMES)
+      const formBias = Object.entries(formSum).reduce((a, [rid, f]) => a + f.raw - f.n * gapOf(Number(rid)), 0) / nAll
       const form = (rid: number) => {
         const f = formSum[rid]
-        return f ? (f.sum - f.n * formBias) / (f.n + FORM_PRIOR_GAMES) : 0
+        return f ? (f.raw - f.n * gapOf(rid) - f.n * formBias) / (f.n + FORM_PRIOR_GAMES) : 0
       }
-      const leagueEff = (() => {
-        const p = formAll.reduce((a, f) => a + f.proj, 0)
-        return p ? formAll.reduce((a, f) => a + f.actual, 0) / p : 1
-      })()
       for (const g of games.filter((x) => x.week === week)) {
         const p: Partial<Record<BacktestModel, number>> = { coin: 0.5 }
         const ma = mean(pts[g.a])
@@ -1142,15 +1191,8 @@ export const backtest = (
             const pb = lineup.total(twB.players)
             if (pa > 0 && pb > 0) {
               p.projection = winProb(pa, pb, ctx.sigma)
-              const k = EFFICIENCY_PRIOR_GAMES
-              const shrink = (rid: number) => {
-                const f = formSum[rid]
-                const n = f?.n ?? 0
-                const own = f && f.proj ? f.actual / f.proj : leagueEff
-                return (n * own + k * leagueEff) / (n + k)
-              }
-              p.forecast = winProb(pa * shrink(g.a), pb * shrink(g.b), ctx.sigma)
-              p.form = winProb(pa * shrink(g.a) + form(g.a), pb * shrink(g.b) + form(g.b), ctx.sigma)
+              p.forecast = winProb(pa + gapOf(g.a), pb + gapOf(g.b), ctx.sigma)
+              p.form = winProb(pa + gapOf(g.a) + form(g.a), pb + gapOf(g.b) + form(g.b), ctx.sigma)
             }
           }
         }

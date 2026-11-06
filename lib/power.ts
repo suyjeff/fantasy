@@ -275,15 +275,14 @@ export type PowerRow = {
 }
 
 /**
- * Games of results that carry as much weight as the league mean. Weekly
- * fantasy scores are mostly noise: a team's own week-to-week spread is about
- * three times the spread in true strength between teams, which puts the
- * break-even near ten games. So four weeks in, a team's results count for
- * 4 / (4 + 10) ≈ 30% and the rest is pulled back to average; by week 14 it is
- * nearly 60%. Roster strength is a current read, not a sample, and is never
- * regressed.
+ * Games of results that carry as much weight as the league mean. Fitted on the composite's next-week log loss over
+ * 48,556 walk-forward games (688 Sleeper league-seasons, 2022–24): best of 2–20 at 3.6, and on 2025's 25,225 games it
+ * beat the earlier 10 by 0.009 (95% interval 0.007–0.011). Method of moments on the same seasons agrees: a team's
+ * week-to-week spread (σ ≈ 40) is about 1.7 times the spread in true strength between teams (≈ 24), which puts the
+ * break-even near three games. So four weeks in, a team's results already count for about half; by week 14 nearly
+ * 80%. Roster strength is a current read, not a sample, and is never regressed.
  */
-export const RESULTS_PRIOR_GAMES = 10
+export const RESULTS_PRIOR_GAMES = 3.6
 /** Persistent team-level spread as a share of weekly score σ, the same prior the season simulation uses. */
 export const TALENT_SHARE = 0.3
 

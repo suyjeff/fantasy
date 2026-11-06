@@ -142,7 +142,7 @@ it('plays every league-season forward', () => {
       console.error('league failed', id, (e as Error).message)
     }
   }
-  const out = join(DATA, 'harness')
+  const out = join(DATA, process.env.OUT ?? 'harness')
   mkdirSync(out, { recursive: true })
   writeFileSync(join(out, `team_week_${SHARD}.csv`), 'league_id,season,week,rid,opp,points,opp_points,proj_opt,proj_st,managed,optimal,n_teams,made\n' + csv(teamWeekRows))
   writeFileSync(join(out, `player_${SHARD}.csv`), 'league_id,season,week,rid,player_id,pos,proj,actual,started,in_opt\n' + csv(playerRows))

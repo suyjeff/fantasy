@@ -31,8 +31,8 @@ export type Models = {
   perceived: Record<string, number> | null
   /**
    * What each team was expected to score in each completed week, before it
-   * kicked off: its best projected lineup from the roster it had then, times
-   * the manager's efficiency. Keyed rosterId → week.
+   * kicked off: its best projected lineup from the roster it had then, plus
+   * the manager's lineup habit (lib/forecast lineupGap). Keyed rosterId → week.
    */
   expectedPast: Record<number, Record<number, number>>
   /** The league's FAAB picture, when it bids for waivers. */
@@ -157,7 +157,7 @@ export const buildModels = (data: LeagueData, analysis: Analysis, history: Histo
   const expectedPast: Models['expectedPast'] = {}
   for (const r of ratings) {
     const byWeek: Record<number, number> = {}
-    for (const w of Object.keys(past).map(Number)) if (past[w][r.rosterId] > 0) byWeek[w] = past[w][r.rosterId] * r.efficiency
+    for (const w of Object.keys(past).map(Number)) if (past[w][r.rosterId] > 0) byWeek[w] = past[w][r.rosterId] + r.lineupGap
     expectedPast[r.rosterId] = byWeek
   }
 

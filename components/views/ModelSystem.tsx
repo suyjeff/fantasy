@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ELO, EFFICIENCY_PRIOR_GAMES, FORM_PRIOR_GAMES, FORM_WEIGHT, SIM, type BacktestModel, type BacktestScore } from '../../lib/forecast'
+import { ELO, EFFICIENCY_PRIOR_GAMES, FORM_PRIOR_GAMES, FORM_WEIGHT, LINEUP_PRIOR_GAMES, SIM, type BacktestModel, type BacktestScore } from '../../lib/forecast'
 import { gradeSnapshots, loadSnapshots, MARKET_WEIGHT, MEDIAN_TO_MEAN } from '../../lib/lines'
 import { useFantasy } from '../FantasyContext'
 import { MONKE } from '../Shell'
@@ -241,7 +241,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
     { id: 'market', col: 2, label: 'Market value', stat: `${Object.keys(analysis.market).length} priced`, tab: 'value', note: 'Points per week above positional replacement.' },
     { id: 'war', col: 2, label: 'WAR (to date)', stat: `σ ${fmt(analysis.sigma)}`, tab: 'value', note: 'Points above replacement converted to wins.' },
     { id: 'trades', col: 3, label: 'Trade search', stat: `${analysis.teams.length - 1} partners`, tab: 'engine', note: 'Beam search over packages, scored week by week.' },
-    { id: 'rating', col: 3, label: 'Forecast rating', stat: f ? `eff ${pct(f.leagueEff)} · form ×${FORM_WEIGHT}` : 'off', tab: 'forecast', note: 'Projected lineup × efficiency: points per projected point (ELWAY’s lineup weights).' },
+    { id: 'rating', col: 3, label: 'Forecast rating', stat: f ? `gap ${fmt(f.leagueGap)} · form ×${FORM_WEIGHT}` : 'off', tab: 'forecast', note: 'Projected best lineup + the manager’s lineup habit: points a week their starters fall short of it (ELWAY’s lineup weights).' },
     { id: 'elo', col: 3, label: 'Elo', stat: `K ${ELO.k} · prior ${models.lastSeasonGames ? 'carried' : 'flat'}`, tab: 'forecast', note: 'Results judged against both lineups, margin-aware, regressed between seasons.' },
     { id: 'composite', col: 3, label: 'Composite', stat: 'win % vs avg', tab: 'power', note: 'All-play, scoring, form, roster, efficiency; results regressed by games played.' },
     { id: 'sim', col: 3, label: 'Season sim', stat: f ? `${f.sims.toLocaleString()} × σ ${fmt(f.sigma)}` : 'off', tab: 'forecast', note: 'Week-by-week seasons with a persistent team level, then the bracket.' },
@@ -391,13 +391,13 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
               Yardage lines are medians: rec <N>×{MEDIAN_TO_MEAN.rec_yd}</N> rush <N>×{MEDIAN_TO_MEAN.rush_yd}</N> pass <N>×{MEDIAN_TO_MEAN.pass_yd}</N>
             </li>
             <li>
-              Season drift <N>τ = {SIM.tauShare}σ</N>, <N>{Math.round(SIM.persistence * 100)}%</N> of edges persist (fitted, 148 leagues)
+              Season drift <N>τ = {SIM.tauShare}σ</N>, <N>{Math.round(SIM.persistence * 100)}%</N> of edges persist (fitted, 1,040 league-seasons)
             </li>
             <li>
               Elo <N>K={ELO.k}</N>, <N>⅓</N> regressed each summer (538)
             </li>
             <li>
-              Priors: <N>{EFFICIENCY_PRIOR_GAMES}</N> games on efficiency, <N>{FORM_PRIOR_GAMES}</N> on form
+              Priors: <N>{LINEUP_PRIOR_GAMES}</N> game on lineup habit, <N>{EFFICIENCY_PRIOR_GAMES}</N> on efficiency (shown), <N>{FORM_PRIOR_GAMES}</N> on form
             </li>
           </Sentences>
         </Panel>
