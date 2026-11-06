@@ -1,5 +1,5 @@
-// Leagues that also play the week's median (Sleeper's league_average_match): about one Sleeper league in eight of the
-// 1,300 pulled for the model audit. Every team gets a second result each week, so records, the simulation and the
+// Leagues that also play the week's median (Sleeper's league_average_match): 128 of the 1,365 Sleeper league-seasons
+// pulled for the model audit, about one in eleven. Every team gets a second result each week, so records, the simulation and the
 // clinch arithmetic all have to count it, or a team two games clear reads as clinched when it is not.
 import { describe, expect, it } from 'vitest'
 import { clinchStatus, rng, seedOrder, simulateSeason } from '../forecast'

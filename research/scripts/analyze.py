@@ -426,6 +426,7 @@ def main():
             continue
         cand[name] = {
             "logloss": {m: boot(d, f"p_{m}") for m in ["monke", "proj", "gap", "sleeper", "sleeper_hetero", "power", "power_fit", "elo"]},
+            "accuracy": {m: round(float(((d[f"p_{m}"] > 0.5) == (d.y == 1)).mean()), 4) for m in ["monke", "proj", "gap", "sleeper", "power", "power_fit", "elo"]},
             "gap_minus_monke": boot(d, "p_gap", "p_monke"),
             "gap_minus_proj": boot(d, "p_gap", "p_proj"),
             "hetero_minus_sleeper": boot(d, "p_sleeper_hetero", "p_sleeper"),

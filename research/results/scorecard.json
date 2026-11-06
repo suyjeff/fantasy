@@ -1271,6 +1271,15 @@
      "leagues": 688
     }
    },
+   "accuracy": {
+    "monke": 0.6612,
+    "proj": 0.6613,
+    "gap": 0.675,
+    "sleeper": 0.6972,
+    "power": 0.6241,
+    "power_fit": 0.6245,
+    "elo": 0.6446
+   },
    "gap_minus_monke": {
     "est": -0.01552,
     "lo": -0.01765,
@@ -1510,6 +1519,15 @@
      "leagues": 353
     }
    },
+   "accuracy": {
+    "monke": 0.654,
+    "proj": 0.6533,
+    "gap": 0.6713,
+    "sleeper": 0.6987,
+    "power": 0.6214,
+    "power_fit": 0.6213,
+    "elo": 0.644
+   },
    "gap_minus_monke": {
     "est": -0.02045,
     "lo": -0.02489,
@@ -1748,6 +1766,15 @@
      "n": 308,
      "leagues": 8
     }
+   },
+   "accuracy": {
+    "monke": 0.6364,
+    "proj": 0.6299,
+    "gap": 0.6429,
+    "sleeper": 0.6266,
+    "power": 0.5552,
+    "power_fit": 0.5552,
+    "elo": 0.5844
    },
    "gap_minus_monke": {
     "est": -0.00778,
