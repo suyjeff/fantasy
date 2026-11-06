@@ -9,3 +9,7 @@ next-env.d.ts
 
 .DS_Store
 .env*.local
+
+# Research data (pulled by research/scripts, large)
+/research/data/
+/research/*.log

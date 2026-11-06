@@ -11,6 +11,11 @@ export type TeamWeek = {
   opponentId: number | null
   opponentPoints: number | null
   result: 'W' | 'L' | 'T' | null
+  /**
+   * The week's game against the league median, in a league that plays one (Sleeper's league_average_match): a win for
+   * the top half of the week's scores, a loss for the bottom half. Absent in a league without it.
+   */
+  median?: 'W' | 'L' | 'T'
   optimalPoints: number
   starters: string[]
   /** Starters exactly as Sleeper has them, aligned to the league's slots, with '0' for an empty slot. */
@@ -62,15 +67,40 @@ export const streakOf = (results: (string | null | undefined)[]): number => {
 /** A run as the standings show it: "W3", "L2", or nothing. */
 export const streakText = (n: number) => (n > 0 ? `W${n}` : n < 0 ? `L${-n}` : '')
 
+/** Whether the league plays every team against the week's median as well as its opponent. */
+export const hasMedianGame = (league: { settings?: { league_average_match?: number | unknown } | null } | null | undefined) =>
+  Number(league?.settings?.league_average_match ?? 0) === 1
+
+/**
+ * Each team's result against the week's median: the top half of the week's scores win it, the bottom half lose it
+ * (Sleeper's rule; with an odd count the middle score loses). A score level with the cut on both sides of it ties.
+ */
+export const medianResults = (scores: { rosterId: number; points: number }[]): Record<number, 'W' | 'L' | 'T'> => {
+  const sorted = [...scores].sort((a, b) => b.points - a.points)
+  const half = Math.floor(sorted.length / 2)
+  const out: Record<number, 'W' | 'L' | 'T'> = {}
+  if (!half) return out
+  // The cut falls between the lowest winning score and the highest losing one; scores level across it tie.
+  const lastIn = sorted[half - 1].points
+  const firstOut = sorted[half].points
+  for (const s of sorted) {
+    if (lastIn > firstOut) out[s.rosterId] = s.points >= lastIn ? 'W' : 'L'
+    else out[s.rosterId] = s.points > lastIn ? 'W' : s.points < lastIn ? 'L' : 'T'
+  }
+  return out
+}
+
 /**
  * Turn raw weekly matchup payloads into per-team week records. A week counts
- * as played when any team posted points.
+ * as played when any team posted points. With `median` (a league that plays the
+ * week's median too; see hasMedianGame) each team-week also carries that result.
  */
 export const buildTeamWeeks = (
   matchupsByWeek: Record<number, SleeperMatchup[]>,
   playedWeeks: number[],
   slots: Slot[],
   players: PlayerMap,
+  opts: { median?: boolean } = {},
 ): Record<number, TeamWeek[]> => {
   const out: Record<number, TeamWeek[]> = {}
   for (const week of playedWeeks) {
@@ -100,6 +130,10 @@ export const buildTeamWeeks = (
         players: m.players ?? [],
         playersPoints,
       })
+    }
+    if (opts.median && out[week]?.length) {
+      const res = medianResults(out[week].map((t) => ({ rosterId: t.rosterId, points: t.points })))
+      for (const t of out[week]) if (res[t.rosterId]) t.median = res[t.rosterId]
     }
   }
   return out
@@ -154,9 +188,11 @@ export const buildTeamSeasons = (
     let allPlayLosses = 0
     let optimalSum = 0
     for (const tw of weeks) {
-      if (tw.result === 'W') wins++
-      else if (tw.result === 'L') losses++
-      else if (tw.result === 'T') ties++
+      for (const r of tw.median ? [tw.result, tw.median] : [tw.result]) {
+        if (r === 'W') wins++
+        else if (r === 'L') losses++
+        else if (r === 'T') ties++
+      }
       optimalSum += tw.optimalPoints
       for (const other of teamWeeks[tw.week] ?? []) {
         if (other.rosterId === rosterId) continue

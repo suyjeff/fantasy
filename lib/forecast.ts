@@ -224,6 +224,8 @@ export type ForecastInput = {
   weeksLeft?: number
   /** Each team's division, when the league has divisions (see seedOrder). */
   divisions?: Record<number, number>
+  /** The league also plays every team against the week's median: two results a week (see lib/power hasMedianGame). */
+  median?: boolean
 }
 
 /** Each team's projected optimal lineup in every completed week that has projections, from the roster it had then. */
@@ -426,6 +428,8 @@ export const clinchStatus = (
   divisions?: Record<number, number>,
   /** Games of those weeks already decided for each team (locked results, counted in `record`). */
   decided?: Record<number, number>,
+  /** Games against the median each team still has, in a league that plays them: one more result a week left. */
+  medianLeft = 0,
 ): Record<number, 'in' | 'out' | null> => {
   const left: Record<number, number> = {}
   for (const g of schedule) {
@@ -433,7 +437,7 @@ export const clinchStatus = (
     left[g.b] = (left[g.b] ?? 0) + 1
   }
   const now = (t: number) => (record[t]?.wins ?? 0) + 0.5 * (record[t]?.ties ?? 0)
-  const games = (t: number) => Math.max(left[t] ?? 0, weeksLeft - (decided?.[t] ?? 0))
+  const games = (t: number) => Math.max(left[t] ?? 0, weeksLeft - (decided?.[t] ?? 0)) + medianLeft
   const max = (t: number) => now(t) + games(t)
   const out: Record<number, 'in' | 'out' | null> = {}
   const div = (t: number) => divisions?.[t]
@@ -499,6 +503,8 @@ export type SimInput = {
   locks?: Record<string, number>
   /** Each team's division, when the league has divisions: their winners take the top seeds (see seedOrder). */
   divisions?: Record<number, number>
+  /** Every simulated week also has a game against the week's median: the top half of the week's scores win it. */
+  median?: boolean
 }
 
 /** A regular-season game's key for `locks`, the same whichever side is listed first. */
@@ -671,10 +677,15 @@ const compile = (input: SimInput) => {
       decided[g.b] = (decided[g.b] ?? 0) + 1
     } else open.push(g)
   }
-  const clinch = clinchStatus(teams, decidedRecord, open, nPlayoff, input.weeksLeft ?? 0, input.divisions, decided)
+  // Median games are never locked: a locked result fixes the head-to-head game only, so every week ahead still has one.
+  const medianLeft = input.median ? Math.max(input.weeksLeft ?? 0, new Set(games.map((g) => g.week)).size) : 0
+  const clinch = clinchStatus(teams, decidedRecord, open, nPlayoff, input.weeksLeft ?? 0, input.divisions, decided, medianLeft)
+  // Each week's games as a run of indices into `games` (sorted by week), for settling the week's median game.
+  const weekEnds: number[] = []
+  for (let i = 0; i < games.length; i++) if (i === games.length - 1 || games[i + 1].week !== games[i].week) weekEnds.push(i + 1)
   // Each round's expectation per team: the sum over its weeks.
   const roundMean = rounds.map((ws) => Float64Array.from(teams, (t) => ws.reduce((a, w) => a + input.mean(t, w), 0)))
-  return { n, nPlayoff, size, order: size ? bracketOrder(size) : [], byes: size - nPlayoff, rounds, roundMean, games, clinch }
+  return { n, nPlayoff, size, order: size ? bracketOrder(size) : [], byes: size - nPlayoff, rounds, roundMean, games, clinch, weekEnds }
 }
 
 type Compiled = ReturnType<typeof compile>
@@ -704,7 +715,10 @@ const playSeason = (
     pf[i] = r.pf
     level[i] = tau * simNormal(seed, s, LEVEL_SLOT, teams[i])
   }
-  for (const g of c.games) {
+  let start = 0
+  const week: { i: number; x: number }[] = []
+  for (let gi = 0; gi < c.games.length; gi++) {
+    const g = c.games[gi]
     let sa = g.ma + level[g.ia] + sigma * simNormal(seed, s, g.week, g.a)
     let sb = g.mb + level[g.ib] + sigma * simNormal(seed, s, g.week, g.b)
     if (g.lock !== undefined) [sa, sb] = lockedScores(g.lock === g.a, sa, sb, g.ma + level[g.ia] - g.mb - level[g.ib], sd)
@@ -713,6 +727,16 @@ const playSeason = (
     if (sa > sb) wins[g.ia]++
     else wins[g.ib]++
     trace?.regular.push({ sa, sb })
+    if (input.median) {
+      week.push({ i: g.ia, x: sa }, { i: g.ib, x: sb })
+      if (gi + 1 === c.weekEnds[start]) {
+        // The week's median game: the top half of its scores win it (see lib/power medianResults).
+        week.sort((p, q) => q.x - p.x)
+        for (let k = 0; k < Math.floor(week.length / 2); k++) wins[week[k].i]++
+        week.length = 0
+        start++
+      }
+    }
   }
   const standings = seedOrder(
     teams.map((_, i) => i),
@@ -872,6 +896,7 @@ export const buildForecast = (input: ForecastInput, sims = SIM.sims, past = past
     sigma: noise.sigma,
     weeksLeft: input.weeksLeft,
     divisions: input.divisions,
+    median: input.median || undefined,
     tau,
     sims,
     seed: SIM.seed,

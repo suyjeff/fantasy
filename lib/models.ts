@@ -9,7 +9,7 @@ import { roomPrices } from './consensus'
 import { backtest, buildForecast, divisionsOf, ELO, gamesFrom, lineupEdge, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
 import { faabState, type Faab } from './faab'
 import { teamMoods, type Momentum } from './momentum'
-import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS, type TeamWeek } from './power'
+import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS, hasMedianGame, type TeamWeek } from './power'
 import type { LeagueData } from './useLeagueData'
 
 export type Models = {
@@ -92,6 +92,7 @@ const forecastInputFor = (data: LeagueData, analysis: Analysis, elo: Record<numb
     sigmaFallback: analysis.sigma * 0.9,
     weeksLeft: data.futureWeeks.length,
     divisions: divisionsOf(data.rosters, data.league.settings?.divisions as number | undefined),
+    median: hasMedianGame(data.league) || undefined,
   }
 }
 

@@ -51,7 +51,7 @@ describe.each(config.leagues)('$name', ({ id }) => {
     expect(simulated.sort((a, b) => a - b)).toEqual(data.futureWeeks.filter((w) => (data.matchupsByWeek[w] ?? []).some((m) => m.matchup_id != null)))
     expect(input.weeksLeft).toBe(data.futureWeeks.length)
     // Records are the matchups' own, ties as half a win.
-    const teamWeeks = buildTeamWeeks(data.matchupsByWeek, data.regularWeeks, input.slots, data.players)
+    const teamWeeks = buildTeamWeeks(data.matchupsByWeek, data.regularWeeks, input.slots, data.players, { median: input.median })
     for (const s of buildTeamSeasons(Object.keys(input.record).map(Number), teamWeeks, data.regularWeeks, {})) {
       const r = input.record[s.rosterId]
       expect([r.wins, r.losses, r.ties]).toEqual([s.wins, s.losses, s.ties])

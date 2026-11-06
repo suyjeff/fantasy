@@ -43,6 +43,8 @@ export type SleeperLeague = {
     waiver_budget?: number
     waiver_bid_min?: number
     trade_deadline?: number
+    /** 1 when every team also plays the league median each week: a second win or loss a week. */
+    league_average_match?: number
     [k: string]: unknown
   }
   previous_league_id?: string | null

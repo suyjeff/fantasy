@@ -1,0 +1,355 @@
+{
+ "season": "2026",
+ "week": 9,
+ "loggedAt": "2026-11-06T20:04:03.471Z",
+ "leagues": [
+  {
+   "id": "1398004152843419648",
+   "name": "NYC Fantasy Football",
+   "sigma": 20.19,
+   "games": [
+    {
+     "a": 1,
+     "b": 4,
+     "nameA": "Madagascar Cookies",
+     "nameB": "visheshshah00",
+     "monke": {
+      "muA": 104.08,
+      "muB": 97.95,
+      "pA": 0.585
+     },
+     "sleeper": {
+      "projA": 106.21,
+      "projB": 86.35,
+      "pA": 0.757
+     },
+     "kickedOff": {
+      "a": 1,
+      "b": 1
+     }
+    },
+    {
+     "a": 2,
+     "b": 6,
+     "nameA": "chode",
+     "nameB": "Emillionaires",
+     "monke": {
+      "muA": 106.69,
+      "muB": 108.69,
+      "pA": 0.472
+     },
+     "sleeper": {
+      "projA": 103.48,
+      "projB": 89.81,
+      "pA": 0.684
+     },
+     "kickedOff": {
+      "a": 1,
+      "b": 0
+     }
+    },
+    {
+     "a": 3,
+     "b": 10,
+     "nameA": "bababanik",
+     "nameB": "joshuagans",
+     "monke": {
+      "muA": 124.29,
+      "muB": 110.71,
+      "pA": 0.683
+     },
+     "sleeper": {
+      "projA": 126.89,
+      "projB": 114.18,
+      "pA": 0.672
+     },
+     "kickedOff": {
+      "a": 0,
+      "b": 0
+     }
+    },
+    {
+     "a": 5,
+     "b": 8,
+     "nameA": "Show me your TDs",
+     "nameB": "Wasian invasion",
+     "monke": {
+      "muA": 112.65,
+      "muB": 101.58,
+      "pA": 0.651
+     },
+     "sleeper": {
+      "projA": 118.62,
+      "projB": 110.15,
+      "pA": 0.617
+     },
+     "kickedOff": {
+      "a": 1,
+      "b": 0
+     }
+    },
+    {
+     "a": 7,
+     "b": 9,
+     "nameA": "matyyice",
+     "nameB": "vinnyk1122",
+     "monke": {
+      "muA": 115.56,
+      "muB": 100.29,
+      "pA": 0.704
+     },
+     "sleeper": {
+      "projA": 121.78,
+      "projB": 100.58,
+      "pA": 0.771
+     },
+     "kickedOff": {
+      "a": 1,
+      "b": 0
+     }
+    }
+   ],
+   "odds": {
+    "1": {
+     "playoffs": 0.633,
+     "title": 0.077,
+     "clinch": null
+    },
+    "2": {
+     "playoffs": 0.654,
+     "title": 0.071,
+     "clinch": null
+    },
+    "3": {
+     "playoffs": 0.858,
+     "title": 0.232,
+     "clinch": null
+    },
+    "4": {
+     "playoffs": 0.027,
+     "title": 0.001,
+     "clinch": null
+    },
+    "5": {
+     "playoffs": 0.999,
+     "title": 0.249,
+     "clinch": null
+    },
+    "6": {
+     "playoffs": 0.68,
+     "title": 0.068,
+     "clinch": null
+    },
+    "7": {
+     "playoffs": 0.936,
+     "title": 0.166,
+     "clinch": null
+    },
+    "8": {
+     "playoffs": 0.757,
+     "title": 0.061,
+     "clinch": null
+    },
+    "9": {
+     "playoffs": 0.025,
+     "title": 0.004,
+     "clinch": null
+    },
+    "10": {
+     "playoffs": 0.433,
+     "title": 0.072,
+     "clinch": null
+    }
+   }
+  },
+  {
+   "id": "1383663532456833024",
+   "name": "Monke Football League (MFL)",
+   "sigma": 21.53,
+   "games": [
+    {
+     "a": 1,
+     "b": 3,
+     "nameA": "Madagascar Cookies",
+     "nameB": "Longshanksv5",
+     "monke": {
+      "muA": 98.02,
+      "muB": 106.38,
+      "pA": 0.392
+     },
+     "sleeper": {
+      "projA": 105.56,
+      "projB": 109.17,
+      "pA": 0.453
+     },
+     "kickedOff": {
+      "a": 0,
+      "b": 0
+     }
+    },
+    {
+     "a": 2,
+     "b": 12,
+     "nameA": "Gibby & Bibby",
+     "nameB": "sirthatsfoul",
+     "monke": {
+      "muA": 114.73,
+      "muB": 96.2,
+      "pA": 0.729
+     },
+     "sleeper": {
+      "projA": 118.73,
+      "projB": 102.55,
+      "pA": 0.702
+     },
+     "kickedOff": {
+      "a": 2,
+      "b": 1
+     }
+    },
+    {
+     "a": 4,
+     "b": 9,
+     "nameA": "Kisma Nuts",
+     "nameB": "lildeesh",
+     "monke": {
+      "muA": 104.24,
+      "muB": 114.66,
+      "pA": 0.366
+     },
+     "sleeper": {
+      "projA": 99.86,
+      "projB": 116.56,
+      "pA": 0.292
+     },
+     "kickedOff": {
+      "a": 0,
+      "b": 1
+     }
+    },
+    {
+     "a": 5,
+     "b": 11,
+     "nameA": "The East India Company",
+     "nameB": "Crank Hog FC ",
+     "monke": {
+      "muA": 97.69,
+      "muB": 97.72,
+      "pA": 0.5
+     },
+     "sleeper": {
+      "projA": 99.5,
+      "projB": 104.46,
+      "pA": 0.435
+     },
+     "kickedOff": {
+      "a": 1,
+      "b": 1
+     }
+    },
+    {
+     "a": 6,
+     "b": 7,
+     "nameA": "Monketonio Brown",
+     "nameB": "BBG Tee Baggin The League",
+     "monke": {
+      "muA": 128.83,
+      "muB": 100.38,
+      "pA": 0.825
+     },
+     "sleeper": {
+      "projA": 130.43,
+      "projB": 106.29,
+      "pA": 0.786
+     },
+     "kickedOff": {
+      "a": 1,
+      "b": 0
+     }
+    },
+    {
+     "a": 8,
+     "b": 10,
+     "nameA": "FUCK THE BEARS FUCK",
+     "nameB": "Mind Goblins",
+     "monke": {
+      "muA": 113.93,
+      "muB": 86,
+      "pA": 0.82
+     },
+     "sleeper": {
+      "projA": 120.56,
+      "projB": 87.6,
+      "pA": 0.86
+     },
+     "kickedOff": {
+      "a": 0,
+      "b": 1
+     }
+    }
+   ],
+   "odds": {
+    "1": {
+     "playoffs": 0.172,
+     "title": 0.014,
+     "clinch": null
+    },
+    "2": {
+     "playoffs": 0.881,
+     "title": 0.16,
+     "clinch": null
+    },
+    "3": {
+     "playoffs": 0.215,
+     "title": 0.017,
+     "clinch": null
+    },
+    "4": {
+     "playoffs": 0.643,
+     "title": 0.044,
+     "clinch": null
+    },
+    "5": {
+     "playoffs": 0.083,
+     "title": 0.008,
+     "clinch": null
+    },
+    "6": {
+     "playoffs": 0.971,
+     "title": 0.33,
+     "clinch": null
+    },
+    "7": {
+     "playoffs": 0.819,
+     "title": 0.178,
+     "clinch": null
+    },
+    "8": {
+     "playoffs": 0.804,
+     "title": 0.111,
+     "clinch": null
+    },
+    "9": {
+     "playoffs": 0.858,
+     "title": 0.102,
+     "clinch": null
+    },
+    "10": {
+     "playoffs": 0.006,
+     "title": 0,
+     "clinch": null
+    },
+    "11": {
+     "playoffs": 0.442,
+     "title": 0.031,
+     "clinch": null
+    },
+    "12": {
+     "playoffs": 0.109,
+     "title": 0.007,
+     "clinch": null
+    }
+   }
+  }
+ ]
+}
