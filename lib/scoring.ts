@@ -150,6 +150,9 @@ export const SLEEPER_HALF_PPR: Record<string, number> = {
   pts_allow_0: 10, pts_allow_1_6: 7, pts_allow_7_13: 4, pts_allow_14_20: 1, pts_allow_21_27: 0, pts_allow_28_34: -1, pts_allow_35p: -4,
 }
 
-/** How far a score of a published line can sit from Sleeper's own: each stat is rounded to 0.01 in the line. */
+/**
+ * How far a score of a published line can sit from Sleeper's own: each stat is rounded to 0.01 in the line, and both
+ * totals are rounded to the cent, Sleeper's pts_* and ours (scoreStatLine), half a cent each.
+ */
 export const roundingTolerance = (line: StatLine, scoring: Record<string, number>) =>
-  0.005 + Object.keys(line).reduce((a, k) => a + Math.abs(scoring[k] ?? 0) * 0.005, 0)
+  0.01 + Object.keys(line).reduce((a, k) => a + Math.abs(scoring[k] ?? 0) * 0.005, 0)

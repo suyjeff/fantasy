@@ -53,7 +53,11 @@ describe('projection lines in league scoring', () => {
     expect(deriveProjectionLine(DAL, NYC)).toEqual(DAL)
   })
   it('scores Sleeper’s default half-PPR to its own pts_half_ppr, to the line’s rounding', () => {
-    for (const line of [AUBREY, DAL, GOFF, MCBRIDE]) {
+    // Jonathan Mingo, 2026 week 9: the stats sum to 3.526, which we round to 3.53, against Sleeper's 3.49. Both totals
+    // are rounded to the cent, so the gap the line's own rounding allows has to count ours as well as Sleeper's.
+    const MINGO = { rec: 1.44, rec_yd: 21.46, rec_td: 0.11, rec_tgt: 3.56, bonus_rec_wr: 1.44, gp: 1, pts_half_ppr: 3.49, pts_ppr: 4.21, pts_std: 2.78 }
+    expect(scoreStatLine(MINGO, SLEEPER_HALF_PPR)).toBe(3.53)
+    for (const line of [AUBREY, DAL, GOFF, MCBRIDE, MINGO]) {
       expect(Math.abs(scoreStatLine(line, SLEEPER_HALF_PPR) - line.pts_half_ppr)).toBeLessThanOrEqual(roundingTolerance(line, SLEEPER_HALF_PPR))
     }
   })
