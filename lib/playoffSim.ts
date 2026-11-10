@@ -71,6 +71,15 @@ export const simulateOnce = (input: SimInput, seed: number): Trace => {
     }
     return { week: g.week, a: g.a, b: g.b, sa, sb, locked: g.lock !== undefined }
   })
+  // The week's median game, as the simulation played it (lib/forecast playSeason): top half of the week's scores win.
+  if (input.median) {
+    const byWeek = new Map<number, { t: number; x: number }[]>()
+    for (const g of regular) byWeek.set(g.week, [...(byWeek.get(g.week) ?? []), { t: g.a, x: g.sa }, { t: g.b, x: g.sb }])
+    for (const week of byWeek.values()) {
+      week.sort((p, q) => q.x - p.x)
+      week.forEach((s, k) => (k < Math.floor(week.length / 2) ? rows[s.t].wins++ : rows[s.t].losses++))
+    }
+  }
   const standings = played.standings.map((i) => rows[teams[i]])
   standings.forEach((r, i) => (r.seed = i + 1))
 

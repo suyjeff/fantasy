@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Analysis } from '../lib/analysis'
 import type { Models } from '../lib/models'
-import type { PowerWeights } from '../lib/power'
+import { hasMedianGame, type PowerWeights } from '../lib/power'
 import { buildRecap, dropsLabel, revealSeenKey, revealStale, revealState, weeksBefore, type Recap } from '../lib/recap'
 import type { SleeperMatchup } from '../lib/types'
 import type { LeagueData } from '../lib/useLeagueData'
@@ -82,6 +82,7 @@ export const recapSource = (data: LeagueData, analysis: Analysis, models: Models
     sigma: analysis.sigma,
     proj: weekProjections(data, week),
     expected,
+    median: hasMedianGame(data.league),
   })
   return { recap, priorWeeks, matchupsByWeek }
 }

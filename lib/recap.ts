@@ -132,6 +132,8 @@ export type RecapInput = {
   proj?: Record<string, number> | null
   /** Each team's pre-game expected score, when the model kept one; else the projected starters are summed. */
   expected?: Record<number, number> | null
+  /** The league also plays the week's median (lib/power hasMedianGame): records count that result too. */
+  median?: boolean
 }
 
 const record = (s: TeamSeason | undefined) => ({ wins: s?.wins ?? 0, losses: s?.losses ?? 0, ties: s?.ties ?? 0 })
@@ -171,7 +173,7 @@ export const normalWeights = (w: PowerWeights, active: (keyof PowerWeights)[]): 
 export const buildRecap = (input: RecapInput): Recap => {
   const { week, priorWeeks, slots, players, rosterIds, strength, weights, sigma } = input
   const weeks = [...priorWeeks, week]
-  const teamWeeks = buildTeamWeeks(input.matchupsByWeek, weeks, slots, players)
+  const teamWeeks = buildTeamWeeks(input.matchupsByWeek, weeks, slots, players, { median: input.median })
   const seasonsBefore = buildTeamSeasons(rosterIds, teamWeeks, priorWeeks, {})
   const seasonsAfter = buildTeamSeasons(rosterIds, teamWeeks, weeks, {})
   const before = computePower(seasonsBefore, input.strengthBefore ?? strength, weights, sigma)
@@ -380,7 +382,7 @@ export type RecapOddsInput = {
 export const recapOddsRuns = (opts: RecapOddsInput) => {
   const { recap, rosterIds, forecast } = opts
   const weeks = [...opts.priorWeeks, recap.week]
-  const teamWeeks = buildTeamWeeks(opts.matchupsByWeek, weeks, opts.slots, opts.players)
+  const teamWeeks = buildTeamWeeks(opts.matchupsByWeek, weeks, opts.slots, opts.players, { median: forecast.simInput.median })
   const rec = (ws: number[]) => {
     const out: Record<number, { wins: number; losses: number; ties: number; pf: number }> = {}
     for (const s of buildTeamSeasons(rosterIds, teamWeeks, ws, {})) out[s.rosterId] = { wins: s.wins, losses: s.losses, ties: s.ties, pf: s.pf }

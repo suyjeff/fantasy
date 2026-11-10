@@ -1,0 +1,39 @@
+name: MONKE live test
+
+# The model's live record, kept by git. Thursday afternoon (before the first kickoff of the week) the week's
+# predictions for the leagues in tests/accuracy/leagues.json are written to research/live/<season>/w<week>.json; a
+# later run that week never overwrites them. Tuesday, once Monday night is final, every logged week is scored against
+# the results and against Sleeper's own matchup projection (research/live/<season>/scores.json). Commits carry
+# [skip ci], so a log never redeploys the site.
+on:
+  schedule:
+    - cron: "0 20 * * 4" # Thursday 20:00 UTC, before Thursday Night Football
+    - cron: "0 15 * * 0" # Sunday 15:00 UTC, a second chance before the early games if Thursday's run failed
+    - cron: "0 15 * * 2" # Tuesday 15:00 UTC: score
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "log or score"
+        default: "log"
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      LIVE: ${{ github.event.inputs.mode || (github.event.schedule == '0 15 * * 2' && 'score' || 'log') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Log or score
+        run: npx vitest run --config research/vitest.config.ts research/harness/live.test.ts
+      - name: Commit
+        run: |
+          git config user.name "monke-live"
+          git config user.email "monke-live@users.noreply.github.com"
+          git add research/live
+          git diff --cached --quiet || (git commit -m "Live test: $LIVE $(date -u +%FT%TZ) [skip ci]" && git push)

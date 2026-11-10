@@ -5,6 +5,6 @@ export default defineConfig({
     environment: 'jsdom',
     // The grades worker has its own install and runs on Cloudflare; its pure logic is tested from lib/__tests__.
     // The live accuracy suite reads Sleeper's API on its own schedule: npm run test:accuracy.
-    exclude: [...configDefaults.exclude, 'workers/**', 'tests/accuracy/**'],
+    exclude: [...configDefaults.exclude, 'workers/**', 'tests/accuracy/**', 'research/**'],
   },
 })

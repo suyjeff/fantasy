@@ -5,6 +5,7 @@ import {
   buildTeamSeasons,
   buildTeamWeeks,
   computePower,
+  hasMedianGame,
   futureOpponents,
   type PowerRow,
   type PowerWeights,
@@ -123,7 +124,7 @@ export const analyze = (data: LeagueData, model: ModelConfig, weights: PowerWeig
   const rosteredBy: Record<string, number> = {}
   teams.forEach((t) => t.players.forEach((id) => (rosteredBy[id] = t.rosterId)))
 
-  const teamWeeks = buildTeamWeeks(matchupsByWeek, regularWeeks, slots, players)
+  const teamWeeks = buildTeamWeeks(matchupsByWeek, regularWeeks, slots, players, { median: hasMedianGame(league) })
   const teamScores = regularWeeks.flatMap((w) => (teamWeeks[w] ?? []).map((t) => t.points))
   const levels = replacementLevels(weekPoints, valueWeeks, players, league.roster_positions ?? [], numTeams, model.benchFactor)
   const sigma = teamScoreSigma(teamScores, weekPoints, valueWeeks, players, league.roster_positions ?? [], numTeams)

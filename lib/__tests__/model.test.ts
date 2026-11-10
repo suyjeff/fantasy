@@ -165,8 +165,10 @@ describe('power', () => {
     const early = computePower([team(1, 140, 2), team(2, 100, 2), team(3, 100, 2)], {}, DEFAULT_POWER_WEIGHTS, 25)
     const late = computePower([team(1, 140, 12), team(2, 100, 12), team(3, 100, 12)], {}, DEFAULT_POWER_WEIGHTS, 25)
     expect(early[0].margin).toBeGreaterThan(0)
-    // Same gap in points per game, but six times the games behind it.
-    expect(late[0].margin).toBeGreaterThan(early[0].margin * 2)
+    // Same gap in points per game, but six times the games behind it. At the fitted prior (RESULTS_PRIOR_GAMES 3.6)
+    // two games count 36% and twelve 77% (the recent-form part is capped at three games), so 1.78× the margin.
+    expect(late[0].margin).toBeGreaterThan(early[0].margin * 1.6)
+    expect(late[0].margin).toBeLessThan(early[0].margin * 2)
   })
 })
 

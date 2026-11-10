@@ -1,5 +1,5 @@
 import React from 'react'
-import { ELO, EFFICIENCY_PRIOR_GAMES, SIM } from '../lib/forecast'
+import { ELO, LINEUP_PRIOR_GAMES, SIM } from '../lib/forecast'
 import { RESULTS_PRIOR_GAMES } from '../lib/power'
 import { Disclosure } from './Disclosure'
 import { N } from './ui'
@@ -12,12 +12,13 @@ const TEXT: Record<RankingModel, { title: string; body: React.ReactNode }> = {
     body: (
       <>
         <p>
-          Rating = each week&apos;s best projected lineup × how well the manager turns projections into points. That efficiency is shrunk toward the league&apos;s, as if every
-          manager had <N>{EFFICIENCY_PRIOR_GAMES}</N> average games behind them.
+          Rating = each week&apos;s best projected lineup, plus the manager&apos;s lineup habit: how many projected points a week the starters they actually use fall
+          short of it, empty slots and players left on bye included. The habit is shrunk toward the league&apos;s as if every manager had <N>{LINEUP_PRIOR_GAMES}</N>{' '}
+          average game behind them, since it repeats week after week.
         </p>
         <p>
           Playoff odds replay the season <N>{SIM.sims.toLocaleString()}</N> times, carrying <N>{Math.round(SIM.persistence * 100)}%</N> of each team&apos;s edge forward. Both
-          settings were fitted on <N>148</N> finished 2025 leagues. It predicts single games best of the three models.
+          settings were fitted on <N>688</N> finished Sleeper league-seasons and checked on <N>352</N> more. It predicts single games best of the three models.
         </p>
       </>
     ),

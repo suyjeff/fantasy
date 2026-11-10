@@ -9,7 +9,7 @@ import { roomPrices } from './consensus'
 import { backtest, buildForecast, divisionsOf, ELO, gamesFrom, lineupEdge, pastByWeek, preseasonElo, runElo, SIM, teamRatings, type EloRun, type Forecast, type ForecastInput } from './forecast'
 import { faabState, type Faab } from './faab'
 import { teamMoods, type Momentum } from './momentum'
-import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS, type TeamWeek } from './power'
+import { buildTeamSeasons, buildTeamWeeks, computePower, DEFAULT_POWER_WEIGHTS, hasMedianGame, type TeamWeek } from './power'
 import type { LeagueData } from './useLeagueData'
 
 export type Models = {
@@ -31,8 +31,8 @@ export type Models = {
   perceived: Record<string, number> | null
   /**
    * What each team was expected to score in each completed week, before it
-   * kicked off: its best projected lineup from the roster it had then, times
-   * the manager's efficiency. Keyed rosterId → week.
+   * kicked off: its best projected lineup from the roster it had then, plus
+   * the manager's lineup habit (lib/forecast lineupGap). Keyed rosterId → week.
    */
   expectedPast: Record<number, Record<number, number>>
   /** The league's FAAB picture, when it bids for waivers. */
@@ -92,6 +92,7 @@ const forecastInputFor = (data: LeagueData, analysis: Analysis, elo: Record<numb
     sigmaFallback: analysis.sigma * 0.9,
     weeksLeft: data.futureWeeks.length,
     divisions: divisionsOf(data.rosters, data.league.settings?.divisions as number | undefined),
+    median: hasMedianGame(data.league) || undefined,
   }
 }
 
@@ -156,7 +157,7 @@ export const buildModels = (data: LeagueData, analysis: Analysis, history: Histo
   const expectedPast: Models['expectedPast'] = {}
   for (const r of ratings) {
     const byWeek: Record<number, number> = {}
-    for (const w of Object.keys(past).map(Number)) if (past[w][r.rosterId] > 0) byWeek[w] = past[w][r.rosterId] * r.efficiency
+    for (const w of Object.keys(past).map(Number)) if (past[w][r.rosterId] > 0) byWeek[w] = past[w][r.rosterId] + r.lineupGap
     expectedPast[r.rosterId] = byWeek
   }
 

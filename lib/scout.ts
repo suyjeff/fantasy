@@ -104,14 +104,14 @@ export const scoutTeam = (data: LeagueData, analysis: Analysis, models: Models, 
   // Lineup calls, against the league's own rate.
   const rating = models.forecast?.byId[rosterId]
   if (rating && models.forecast) {
-    const edge = (rating.efficiency - models.forecast.leagueEff) * rating.projected
+    const edge = rating.lineupGap - models.forecast.leagueGap
     if (Math.abs(edge) >= MIN.efficiency) {
       facts.push({
         key: 'efficiency',
         label: 'Lineup calls',
         value: edge,
         unit: '/wk',
-        detail: `scores ${Math.round(rating.efficiency * 100)}% of the projected best lineup, league ${Math.round(models.forecast.leagueEff * 100)}%`,
+        detail: `starts ${Math.abs(rating.lineupGap).toFixed(1)} projected points a week below its best lineup, league ${Math.abs(models.forecast.leagueGap).toFixed(1)}`,
         weight: Math.abs(edge),
       })
     }
