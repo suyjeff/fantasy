@@ -1,0 +1,143 @@
+{
+ "scoredAt": "2026-11-10T21:13:44.198Z",
+ "all": {
+  "monke": {
+   "games": 11,
+   "logLoss": 0.6128663054374154,
+   "brier": 0.214091,
+   "right": 7
+  },
+  "sleeper": {
+   "games": 11,
+   "logLoss": 0.6017778163694927,
+   "brier": 0.21177427272727273,
+   "right": 6
+  }
+ },
+ "preKickoff": {
+  "monke": {
+   "games": 2,
+   "logLoss": 0.6588769293015106,
+   "brier": 0.23507649999999997,
+   "right": 1
+  },
+  "sleeper": {
+   "games": 2,
+   "logLoss": 0.5946800459790452,
+   "brier": 0.20339649999999995,
+   "right": 1
+  }
+ },
+ "games": [
+  {
+   "week": 9,
+   "league": "NYC Fantasy Football",
+   "a": 1,
+   "b": 4,
+   "y": 1,
+   "monke": 0.585,
+   "sleeper": 0.757,
+   "preKickoff": false
+  },
+  {
+   "week": 9,
+   "league": "NYC Fantasy Football",
+   "a": 2,
+   "b": 6,
+   "y": 0,
+   "monke": 0.472,
+   "sleeper": 0.684,
+   "preKickoff": false
+  },
+  {
+   "week": 9,
+   "league": "NYC Fantasy Football",
+   "a": 3,
+   "b": 10,
+   "y": 1,
+   "monke": 0.683,
+   "sleeper": 0.672,
+   "preKickoff": true
+  },
+  {
+   "week": 9,
+   "league": "NYC Fantasy Football",
+   "a": 5,
+   "b": 8,
+   "y": 0,
+   "monke": 0.651,
+   "sleeper": 0.617,
+   "preKickoff": false
+  },
+  {
+   "week": 9,
+   "league": "NYC Fantasy Football",
+   "a": 7,
+   "b": 9,
+   "y": 1,
+   "monke": 0.704,
+   "sleeper": 0.771,
+   "preKickoff": false
+  },
+  {
+   "week": 9,
+   "league": "Monke Football League (MFL)",
+   "a": 1,
+   "b": 3,
+   "y": 1,
+   "monke": 0.392,
+   "sleeper": 0.453,
+   "preKickoff": true
+  },
+  {
+   "week": 9,
+   "league": "Monke Football League (MFL)",
+   "a": 2,
+   "b": 12,
+   "y": 0,
+   "monke": 0.729,
+   "sleeper": 0.702,
+   "preKickoff": false
+  },
+  {
+   "week": 9,
+   "league": "Monke Football League (MFL)",
+   "a": 4,
+   "b": 9,
+   "y": 0,
+   "monke": 0.366,
+   "sleeper": 0.292,
+   "preKickoff": false
+  },
+  {
+   "week": 9,
+   "league": "Monke Football League (MFL)",
+   "a": 5,
+   "b": 11,
+   "y": 1,
+   "monke": 0.5,
+   "sleeper": 0.435,
+   "preKickoff": false
+  },
+  {
+   "week": 9,
+   "league": "Monke Football League (MFL)",
+   "a": 6,
+   "b": 7,
+   "y": 1,
+   "monke": 0.825,
+   "sleeper": 0.786,
+   "preKickoff": false
+  },
+  {
+   "week": 9,
+   "league": "Monke Football League (MFL)",
+   "a": 8,
+   "b": 10,
+   "y": 1,
+   "monke": 0.82,
+   "sleeper": 0.86,
+   "preKickoff": false
+  }
+ ]
+}
