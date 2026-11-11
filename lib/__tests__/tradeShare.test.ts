@@ -82,18 +82,20 @@ describe('what a pitch may show', () => {
   it('hides a lineup that gets worse or barely moves, and the strip with it, saying why', () => {
     const worse = byKey(facts({ read: read({}, { lineup: -1.2, perWeek: weeks([-1, -1, -1, -1]) }) }))
     expect(worse.lineup).toMatchObject({ available: false, reason: 'their lineup gets worse', stats: [] })
-    expect(worse.weeks).toMatchObject({ available: false, reason: 'needs a lineup gain to show' })
+    expect(worse.weeks).toMatchObject({ available: false, reason: 'shown only with a lineup gain' })
     expect(byKey(facts({ read: read({}, { lineup: 0.05, perWeek: weeks([0, 0, 0, 0.2]) }) })).lineup.reason).toBe('their lineup barely moves')
-    expect(byKey(facts({ read: read({}, { lineup: 2, perWeek: weeks([2]), weeksBetter: 1 }) })).weeks.reason).toBe('only one week left to show')
+    expect(byKey(facts({ read: read({}, { lineup: 2, perWeek: weeks([2]), weeksBetter: 1 }) })).weeks.reason).toBe('only one week left')
   })
   it('shows their playoff odds only when they rise, in a two-team deal, once simulated', () => {
-    expect(byKey(facts()).odds.stats[0]).toMatchObject({ label: 'Playoff odds', value: '+4.1', unit: 'pts', sub: 'title +1.2 pts' })
+    expect(byKey(facts()).odds.stats[0]).toMatchObject({ label: 'Playoff odds', value: '+4.1', unit: 'pt', sub: 'title +1.2 pt' })
+    // With the odds after the trade, the odds themselves lead the note, so the change never reads as fantasy points.
+    expect(byKey(facts({ leverage: { playoffs: 0.116, title: 0.03, after: 0.6 } })).odds.stats[0]).toMatchObject({ value: '+11.6', unit: 'pt', sub: '48% → 60% · title +3.0 pt' })
     expect(byKey(facts({ leverage: { playoffs: -0.03, title: 0 } })).odds).toMatchObject({ available: false, reason: 'their playoff odds drop' })
     expect(byKey(facts({ leverage: { playoffs: 0.001, title: 0 } })).odds.reason).toBe('their playoff odds hold steady')
     // A title bump alone still helps them.
     expect(byKey(facts({ leverage: { playoffs: 0, title: 0.02 } })).odds.stats[0]).toMatchObject({ label: 'Title odds', value: '+2.0' })
-    expect(byKey(facts({ leverage: undefined })).odds.reason).toBe('still simulating')
-    expect(byKey(facts({ leverage: null })).odds.reason).toBe('no season forecast to run')
+    expect(byKey(facts({ leverage: undefined })).odds.reason).toBe('still working out the odds')
+    expect(byKey(facts({ leverage: null })).odds.reason).toBe('no season forecast for this league')
     const three = { ...deal, teams: [1, 2, 3] }
     expect(byKey(facts({ deal: three })).odds.reason).toBe('two-team trades only')
   })
@@ -145,6 +147,8 @@ describe('the card a pitch sends', () => {
     ])
     expect(c.stats.map((s) => s.key)).toEqual(['lineup', 'odds', 'need', 'value', 'momentum'])
     expect(c.strip).toEqual(weeks([3, 2, 4, -0.5]))
+    // The strip's dashed line is the Lineup figure, not the plain average of its bars.
+    expect(c.net).toBe(2.25)
     expect(c.sides[0].players[0]).toMatchObject({ ppw: 16.2, tag: 'buy low' })
   })
   it('never carries your own gain, ask, odds of a yes or the model’s internals', () => {

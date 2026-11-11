@@ -40,6 +40,7 @@ import { Avatar, Segmented, cx, usePhone } from './ui'
 // (workers/grades/src/trade.ts) whose preview is the wide card and which opens the deal in the app.
 
 const SHARE = 'M7 9V1.5M4 4.25 7 1.25l3 3M2.5 7v5.5h9V7'
+const TICK = 'M3.5 7.2l2.4 2.4 4.6-5'
 
 /** Everything known about the deal for one recipient: the read, their odds, the slot it fills, value and timing. */
 const useShareFacts = (deal: Deal, audience: Audience): ShareFacts | null => {
@@ -78,18 +79,24 @@ const useShareFacts = (deal: Deal, audience: Audience): ShareFacts | null => {
         : null
     const perceived = models.perceived
     const consensus = side && perceived ? Math.round((tradeValue(side.receives, perceived, analysis.currency, false) - tradeValue(side.sends, perceived, analysis.currency, true)) * 100) / 100 : null
-    const leverage = rid != null && rid === partner ? (lev === undefined ? undefined : lev ? { playoffs: lev.partner.playoffs, title: lev.partner.title } : null) : null
+    const leverage = rid != null && rid === partner ? (lev === undefined ? undefined : lev ? { playoffs: lev.partner.playoffs, title: lev.partner.title, after: lev.after.partner.playoffs } : null) : null
     return { deal, read, leverage, fill, consensus, form }
   }, [read, audience, analysis, data, models.perceived, lev, partner, deal, form])
 }
 
 // ---- Small controls ----
 
-/** A labelled on/off switch: a native checkbox, so keys and screen readers get it for free. */
+/**
+ * A labelled on/off switch: a native checkbox with the switch role, so keys and screen readers get it for free. Its
+ * name is the label and the figure it would put on the card ("Lineup gain +0.4/wk"); the line under it is its
+ * description. One that cannot be switched on keeps its words at full strength, since they say why: only the track
+ * is drawn faint and dashed.
+ */
 const Switch = ({ label, detail, checked, disabled, onChange, value }: { label: string; detail?: ReactNode; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void; value?: ReactNode }) => {
   const id = useId()
+  const on = checked && !disabled
   return (
-    <div className={cx('flex min-h-11 items-start gap-3 py-1.5 md:min-h-9', disabled && 'opacity-60')}>
+    <label htmlFor={id} className={cx('flex min-h-11 items-start gap-3 py-1.5 md:min-h-9', disabled ? 'cursor-default' : 'cursor-pointer')}>
       <input
         id={id}
         type="checkbox"
@@ -97,32 +104,37 @@ const Switch = ({ label, detail, checked, disabled, onChange, value }: { label: 
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
+        aria-labelledby={value != null ? `${id}-l ${id}-v` : `${id}-l`}
         aria-describedby={detail ? `${id}-d` : undefined}
         className="peer sr-only"
       />
-      <label htmlFor={id} className={cx('flex min-w-0 flex-1 cursor-pointer items-start gap-3', disabled && 'cursor-default')}>
-        <span
-          aria-hidden
-          className={cx(
-            'relative mt-0.5 flex h-[18px] w-8 shrink-0 items-center border transition-colors duration-150',
-            checked && !disabled ? 'border-ff-accent bg-ff-accent/15' : 'border-ff-line2 bg-ff-sunken',
-          )}
-        >
-          <span className={cx('absolute top-[2px] h-3 w-3 transition-[left] duration-150 motion-reduce:transition-none', checked && !disabled ? 'left-[16px] bg-ff-accent' : 'left-[2px] bg-ff-muted')} />
-        </span>
-        <span className="min-w-0 flex-1 leading-tight">
-          <span className="flex items-baseline justify-between gap-2">
-            <span className="text-[13px] text-ff-text">{label}</span>
-            {value != null && <span className={cx('num shrink-0 truncate text-[12px]', checked && !disabled ? 'text-ff-pos' : 'text-ff-muted')}>{value}</span>}
+      <span
+        aria-hidden
+        className={cx(
+          'relative mt-0.5 flex h-[18px] w-8 shrink-0 items-center border transition-colors duration-150 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ff-accent',
+          on ? 'border-ff-accent bg-ff-accent/15' : disabled ? 'border-dashed border-ff-line2 bg-transparent' : 'border-ff-line2 bg-ff-sunken',
+        )}
+      >
+        <span className={cx('absolute top-[2px] h-3 w-3 transition-[left] duration-150 motion-reduce:transition-none', on ? 'left-[16px] bg-ff-accent' : disabled ? 'left-[2px] bg-ff-line2' : 'left-[2px] bg-ff-muted')} />
+      </span>
+      <span className="min-w-0 flex-1 leading-tight">
+        <span className="flex items-baseline justify-between gap-2">
+          <span id={`${id}-l`} className={cx('text-[13px]', disabled ? 'text-ff-text2' : 'text-ff-text')}>
+            {label}
           </span>
-          {detail && (
-            <span id={`${id}-d`} className="mt-0.5 block font-mono text-[10.5px] text-ff-muted">
-              {detail}
+          {value != null && (
+            <span id={`${id}-v`} className={cx('num shrink-0 whitespace-nowrap text-[12px]', on ? 'text-ff-pos' : 'text-ff-muted')}>
+              {value}
             </span>
           )}
         </span>
-      </label>
-    </div>
+        {detail && (
+          <span id={`${id}-d`} className="mt-0.5 block font-mono text-[10.5px] leading-snug text-ff-muted">
+            {detail}
+          </span>
+        )}
+      </span>
+    </label>
   )
 }
 
@@ -136,7 +148,7 @@ const Section = ({ title, children, aside }: { title: string; children: ReactNod
   </section>
 )
 
-const ActionBtn = ({ children, onClick, disabled, primary, label }: { children: ReactNode; onClick: () => void; disabled?: boolean; primary?: boolean; label?: string }) => (
+const ActionBtn = ({ children, onClick, disabled, primary, label, wide }: { children: ReactNode; onClick: () => void; disabled?: boolean; primary?: boolean; label?: string; wide?: boolean }) => (
   <button
     type="button"
     onClick={onClick}
@@ -144,6 +156,7 @@ const ActionBtn = ({ children, onClick, disabled, primary, label }: { children: 
     aria-label={label}
     className={cx(
       'ff-press inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap border px-2 font-mono text-[11px] uppercase tracking-[0.08em] disabled:cursor-default disabled:opacity-50 md:h-9',
+      wide && 'col-span-2',
       primary ? 'border-[rgb(var(--ff-accent-deep))] bg-[rgb(var(--ff-accent-deep))] text-[rgb(var(--ff-on-accent))] enabled:hover:brightness-110' : 'border-ff-line2 text-ff-text2 enabled:hover:bg-ff-raised enabled:hover:text-ff-text',
     )}
   >
@@ -379,9 +392,11 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
       <span className="min-w-0 truncate font-mono text-[10.5px] text-ff-muted">{fmtLabel.hint}</span>
     </div>
   )
-  // On a phone the preview stays pinned above the choices as they scroll, so every change shows where it lands.
+  // On a phone the preview stays pinned above the choices as they scroll, so every change shows where it lands; on a
+  // screen too short for that (a small phone on its side, or zoomed in) it scrolls away with them, so the choices
+  // keep the room.
   const preview = (
-    <div className={cx('flex flex-col gap-2', phone ? 'sticky top-0 z-[2] border-b border-ff-line bg-ff-panel px-4 pb-3 pt-1' : 'min-h-0 flex-1 p-5')}>
+    <div className={cx('flex flex-col gap-2', phone ? 'top-0 z-[2] border-b border-ff-line bg-ff-panel px-4 pb-3 pt-1 [@media(min-height:700px)]:sticky' : 'min-h-0 flex-1 p-5')}>
       <div
         className={cx('relative flex items-center justify-center border border-ff-line bg-ff-sunken', phone ? 'shrink-0 p-2' : 'min-h-0 flex-1 p-5')}
         style={phone ? { height: 'min(34dvh, calc(100vw - 50px))' } : undefined}
@@ -404,25 +419,39 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
     <>
       {phone && <Section title="Size">{sizePicker}</Section>}
       <Section title="For">
-        <div role="radiogroup" aria-label="Who the card is for" className="-mx-1">
-          {[...partners.map((t) => ({ a: { kind: 'pitch', to: t } as Audience, label: `Pitch to ${name(t)}`, sub: `Only what helps ${name(t)}`, avatar: analysis.teamById[t]?.avatar ?? null, t })), { a: { kind: 'league' } as Audience, label: 'League view', sub: 'The trade and every team’s lineup change', avatar: null, t: null }].map((o) => {
+        {/* One choice of several, set out as the theme picker's options are: a framed row each, the chosen one in the
+            accent with a tick, so it never reads as a checklist. */}
+        <div role="radiogroup" aria-label="Who the card is for" className="flex flex-col gap-1.5">
+          {[...partners.map((t) => ({ a: { kind: 'pitch', to: t } as Audience, label: `Pitch to ${name(t)}`, sub: 'Shows only what helps them', avatar: analysis.teamById[t]?.avatar ?? null, t })), { a: { kind: 'league' } as Audience, label: 'League view', sub: 'The trade and every team’s lineup change', avatar: null, t: null }].map((o) => {
             const on = audience.kind === o.a.kind && (o.a.kind === 'league' || (audience.kind === 'pitch' && audience.to === o.t))
+            const oid = `${titleId}-aud-${o.t ?? 'league'}`
             return (
-              <label key={o.t ?? 'league'} className={cx('flex min-h-11 cursor-pointer items-center gap-2.5 px-1 py-1.5 hover:bg-ff-raised md:min-h-10', on && 'bg-ff-raised')}>
-                <input type="radio" name={`${titleId}-aud`} checked={on} onChange={() => pickAudience(o.a)} className="peer sr-only" />
-                <span aria-hidden className={cx('flex h-4 w-4 shrink-0 items-center justify-center border peer-focus-visible:ring-2 peer-focus-visible:ring-ff-accent/40', on ? 'border-ff-accent' : 'border-ff-line2')}>
-                  {on && <span className="h-2 w-2 bg-ff-accent" />}
-                </span>
+              <label
+                key={o.t ?? 'league'}
+                className={cx(
+                  'flex min-h-11 cursor-pointer items-center gap-2.5 border px-2.5 py-2 transition-colors duration-150 md:min-h-10',
+                  on ? 'border-ff-accent bg-ff-accent/10' : 'border-ff-line hover:border-ff-line2 hover:bg-ff-raised',
+                  'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-ff-accent',
+                )}
+              >
+                <input type="radio" name={`${titleId}-aud`} checked={on} onChange={() => pickAudience(o.a)} aria-labelledby={`${oid}-l`} aria-describedby={`${oid}-d`} className="sr-only" />
                 {o.t != null ? (
                   <Avatar src={o.avatar} name={name(o.t)} size={20} />
                 ) : (
-                  <span aria-hidden className="flex h-5 w-5 items-center justify-center border border-ff-line2 font-mono text-[10px] text-ff-muted">
+                  <span aria-hidden className="flex h-5 w-5 shrink-0 items-center justify-center border border-ff-line2 font-mono text-[10px] text-ff-muted">
                     L
                   </span>
                 )}
                 <span className="min-w-0 flex-1 leading-tight">
-                  <span className="block truncate text-[13px] text-ff-text">{o.label}</span>
-                  <span className="block truncate font-mono text-[10.5px] text-ff-muted">{o.sub}</span>
+                  <span id={`${oid}-l`} className="block break-words text-[13px] text-ff-text">
+                    {o.label}
+                  </span>
+                  <span id={`${oid}-d`} className="mt-0.5 block font-mono text-[10.5px] leading-snug text-ff-muted">
+                    {o.sub}
+                  </span>
+                </span>
+                <span aria-hidden className={cx('flex h-4 w-4 shrink-0 items-center justify-center', on ? 'text-ff-accent' : 'invisible')}>
+                  <Glyph d={TICK} />
                 </span>
               </label>
             )
@@ -438,7 +467,9 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
         )}
         {[...shown, ...hidden].map((b) => {
           const v = b.stats[0]
-          const val = b.key === 'weeks' ? `${facts?.read.weeks.length ?? 0} wks` : v ? `${v.value}${v.unit?.startsWith('/') ? v.unit : ''}` : null
+          // The figure as the card prints it, with the unit that tells points a week from percentage points.
+          const unit = v?.unit === 'pts/wk' || v?.unit === '/wk' ? '/wk' : v?.unit === 'pt' ? ' pt' : ''
+          const val = b.key === 'weeks' ? `${facts?.read.weeks.length ?? 0} wks` : v ? `${v.value}${unit}` : null
           return (
             <Switch
               key={b.key}
@@ -465,10 +496,12 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
         <div className="pt-2">
           <div className="mb-1 flex items-baseline justify-between">
             <label htmlFor={`${titleId}-note`} className="text-[13px] text-ff-text">
-              Note
+              Note <span className="text-ff-muted">(optional)</span>
             </label>
-            <span className={cx('num text-[10.5px]', note.length >= NOTE_MAX ? 'text-ff-warn' : 'text-ff-muted')} aria-live="polite">
+            {/* Read with the field, not announced at every key: the field itself stops at the limit. */}
+            <span id={`${titleId}-note-n`} className={cx('num text-[10.5px]', note.length >= NOTE_MAX ? 'text-ff-warn' : 'text-ff-muted')}>
               {note.length}/{NOTE_MAX}
+              <span className="sr-only"> characters</span>
             </span>
           </div>
           <input
@@ -477,7 +510,8 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
             value={note}
             maxLength={NOTE_MAX}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Optional: a line to them"
+            aria-describedby={`${titleId}-note-n`}
+            placeholder={audience.kind === 'pitch' ? 'Open to tweaks. Let me know!' : 'Thoughts on this one?'}
             className="h-10 w-full border border-ff-line bg-ff-sunken px-2.5 text-[13px] text-ff-text max-md:text-[16px] placeholder:text-ff-muted focus:border-ff-accent focus:outline-none md:h-9"
           />
         </div>
@@ -499,6 +533,7 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
     </>
   )
 
+  const ways = (canCopyImage ? 1 : 0) + 1 + (canShareFiles ? 1 : 0) + (worker ? 1 : 0)
   const shown_ = curLink?.state === 'ready' && curLink.url ? curLink.url.replace(/^https?:\/\//, '') : null
   const actions = (
     <div className="border-t border-ff-line bg-ff-panel px-4 py-3">
@@ -512,11 +547,15 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
           </button>
         </div>
       )}
-      <div className={cx('grid gap-2', phone ? 'grid-cols-2' : canShareFiles ? 'grid-cols-4' : 'grid-cols-3')}>
-        <ActionBtn primary onClick={copyImage} disabled={!card}>
-          {canCopyImage ? 'Copy image' : 'Save image'}
-        </ActionBtn>
-        <ActionBtn onClick={download} disabled={!card}>
+      {/* One button per way out, and no two doing the same: where the image cannot be copied, downloading it is the
+          first choice rather than a second button that says the same thing. Three on a phone: the first takes the row. */}
+      <div className={cx('grid gap-2', phone ? 'grid-cols-2' : ['grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4'][ways - 1])}>
+        {canCopyImage && (
+          <ActionBtn primary onClick={copyImage} disabled={!card} wide={phone && ways === 3}>
+            Copy image
+          </ActionBtn>
+        )}
+        <ActionBtn primary={!canCopyImage} onClick={download} disabled={!card} wide={phone && ways === 3 && !canCopyImage}>
           Download PNG
         </ActionBtn>
         {canShareFiles && (
@@ -531,7 +570,7 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
         ) : null}
       </div>
       <p role="status" aria-live="polite" className={cx('mt-2 min-h-[1.2em] font-mono text-[11px] leading-snug', status?.tone === 'bad' ? 'text-ff-neg' : 'text-ff-muted')}>
-        {status?.text ?? (worker ? (curLink?.state === 'ready' ? 'The link shows the wide card in a message and opens the trade in the app.' : '') : 'Links are off on this site (no share server), so share the image instead.')}
+        {status?.text ?? (worker ? (curLink?.state === 'ready' ? 'The link shows the wide card in a message and opens the trade in the app.' : '') : 'Sharing by link isn’t set up here. Copy or download the image instead.')}
       </p>
     </div>
   )
@@ -669,9 +708,9 @@ export const SharedTradeOpener = ({ trade, finish }: { trade: string | null; fin
   useEffect(() => {
     if (!trade) return
     const deal = decodeDeal(trade)
-    if (!deal) return finish('That trade link is not one this app can read.')
-    if (!dock) return finish('Shared trades open in the builder for a team in the league, and this account has none here.')
-    if (deal.teams.some((t) => !analysis.teamById[t])) return finish('A team in that trade is no longer in the league.')
+    if (!deal) return finish('That trade link is incomplete, so it can’t open. Ask whoever sent it for a new one.')
+    if (!dock) return finish('This account has no team in that league, so the trade can’t open in the builder. Use “Switch league or user” in the menu to open it as a member.')
+    if (deal.teams.some((t) => !analysis.teamById[t])) return finish('A team in that trade has left the league, so it can’t open. Ask whoever sent it for a new one.')
     const moved = deal.moves.filter((m) => !analysis.teamById[m.from]?.players.includes(m.player))
     const live: Deal = { ...deal, moves: deal.moves.filter((m) => !moved.includes(m)) }
     if (!dealActive(live)) return finish('Everyone in that trade has moved since it was shared, so there is nothing left to open.')

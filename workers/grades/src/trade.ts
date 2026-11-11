@@ -34,6 +34,8 @@ export type TradeMeta = {
   sides: { head: string; focus: boolean; faab: number; players: { name: string; pos: string; team: string | null; ppw: number | null; tag: (typeof TAGS)[number] | null; from: string | null }[] }[]
   stats: { label: string; value: string; unit: string | null; sub: string | null; tone: (typeof TONES)[number] }[]
   strip: { week: number; delta: number }[] | null
+  /** With the strip, the lineup change a week its dashed line marks (lib/tradeShare `TradeCard.net`). */
+  net: number | null
   /** The deal as the app's link carries it (lib/tradeShare `encodeDeal`). */
   trade: string
 }
@@ -118,7 +120,10 @@ export const parseTradeMeta = (raw: unknown): TradeMeta | string => {
       strip.push({ week: wk, delta })
     }
   }
-  return { kind, league, leagueId, season, week, provider, title, description, to, from, note, sides, stats, strip, trade }
+  // Older links have no net; their strip is drawn without the line.
+  const net = strip && m.net != null ? num(m.net, -200, 200) : null
+  if (strip && m.net != null && net == null) return 'bad net'
+  return { kind, league, leagueId, season, week, provider, title, description, to, from, note, sides, stats, strip, net, trade }
 }
 
 /** POST /trade: validate, store, answer with the link's id. */
@@ -141,20 +146,33 @@ export async function handleTradePost(req: Request, env: ShareEnv, origin: strin
 
 const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`
 
-/** The lineup change week by week, as small bars either side of a zero line. */
-const stripSvg = (strip: NonNullable<TradeMeta['strip']>) => {
+/**
+ * The lineup change week by week, as small bars either side of a zero line, with the card's dashed line at the
+ * lineup change a week. Each bar's side of the line, its tooltip and the summary above say which way it went, so the
+ * colour is never the only cue.
+ */
+const stripSvg = (strip: NonNullable<TradeMeta['strip']>, net: number | null) => {
   const w = 28
   const h = 64
   const mid = h / 2
-  const max = Math.max(0.5, ...strip.map((s) => Math.abs(s.delta)))
+  const max = Math.max(0.5, ...strip.map((s) => Math.abs(s.delta)), Math.abs(net ?? 0))
+  const y = (v: number) => mid - (v / max) * (mid - 4)
   const bars = strip
     .map((s, i) => {
       const len = Math.max(1, (Math.abs(s.delta) / max) * (mid - 4))
-      const y = s.delta >= 0 ? mid - len : mid
-      return `<rect x="${i * w + 6}" y="${y.toFixed(1)}" width="${w - 12}" height="${len.toFixed(1)}" fill="${Math.abs(s.delta) < 0.05 ? '#3f3f46' : s.delta > 0 ? '#2ec470' : '#f46666'}"><title>Week ${s.week}: ${signed(s.delta)}</title></rect><text x="${i * w + w / 2}" y="${h + 14}" text-anchor="middle">${s.week}</text>`
+      const top = s.delta >= 0 ? mid - len : mid
+      return `<rect x="${i * w + 6}" y="${top.toFixed(1)}" width="${w - 12}" height="${len.toFixed(1)}" fill="${Math.abs(s.delta) < 0.05 ? '#3f3f46' : s.delta > 0 ? '#2ec470' : '#f46666'}"><title>Week ${s.week}: ${signed(s.delta)}</title></rect><text x="${i * w + w / 2}" y="${h + 14}" text-anchor="middle">${s.week}</text>`
     })
     .join('')
-  return `<svg class="strip" viewBox="0 0 ${strip.length * w} ${h + 18}" role="img" aria-label="Lineup change by week: ${esc(strip.map((s) => `week ${s.week} ${signed(s.delta)}`).join(', '))}"><line x1="0" x2="${strip.length * w}" y1="${mid}" y2="${mid}" stroke="#52525b" stroke-width="1.5"/>${bars}</svg>`
+  const line = net != null ? `<line x1="0" x2="${strip.length * w}" y1="${y(net).toFixed(1)}" y2="${y(net).toFixed(1)}" stroke="#fafafa" stroke-width="1.5" stroke-dasharray="4 3"/>` : ''
+  const label = `Lineup change by week${net != null ? `, ${signed(net)} a week overall` : ''}: ${strip.map((s) => `week ${s.week} ${signed(s.delta)}`).join(', ')}`
+  return `<svg class="strip" viewBox="0 0 ${strip.length * w} ${h + 18}" role="img" aria-label="${esc(label)}"><line x1="0" x2="${strip.length * w}" y1="${mid}" y2="${mid}" stroke="#71717a" stroke-width="1.5"/>${bars}${line}</svg>`
+}
+
+/** The strip's heading line: the lineup change a week, and how many of the weeks are better. */
+const stripSummary = (strip: NonNullable<TradeMeta['strip']>, net: number | null) => {
+  const better = strip.filter((s) => s.delta > 0.05).length
+  return `${net != null ? `<span class="key" aria-hidden="true"></span>${signed(net)} a week overall · ` : ''}better in ${better} of ${strip.length} weeks`
 }
 
 /** The page, for bots and people alike: Open Graph tags, the card, the trade in words, and the way into the app. */
@@ -235,7 +253,7 @@ li:first-child{border-top:0}
 .stats{display:flex;flex-wrap:wrap;gap:1px;margin-top:16px;background:#27272a;border:1px solid #27272a}
 .stat{flex:1 1 150px;background:#111114;padding:10px 12px}
 .lab{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#a1a1aa}
-.val{margin-top:2px;font:600 22px/1.2 ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.val{margin-top:2px;font:600 22px/1.2 ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
 .stat.pos .val{color:#2ec470}
 .stat.neg .val{color:#f46666}
 .val small{margin-left:4px;font-size:11px;font-weight:400;color:#a1a1aa}
@@ -243,11 +261,15 @@ li:first-child{border-top:0}
 .weeks{margin-top:16px;padding:12px;border:1px solid #27272a;background:#111114}
 .strip{display:block;width:100%;max-width:${meta.strip ? meta.strip.length * 44 : 0}px;margin-top:8px}
 .strip text{font-size:9px;fill:#a1a1aa}
+.weeks-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px}
+.weeks-head h2{margin:0}
+.weeks-sum{font:12px/1.4 ui-monospace,Menlo,monospace;color:#fafafa}
+.key{display:inline-block;width:16px;margin-right:6px;vertical-align:middle;border-top:1.5px dashed #fafafa}
 .go{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:0 0 16px;padding:14px 16px;border:1px solid #27272a;background:#111114}
 .cta{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 18px;background:#2a64c4;color:#fff;text-decoration:none;font-size:12px;letter-spacing:.1em;text-transform:uppercase}
 .cta:hover{filter:brightness(1.1)}
 .go p{flex:1 1 260px;margin:0;font-size:13px;color:#a1a1aa}
-.foot{margin-top:28px;font-size:12px;color:#71717a}
+.foot{margin-top:28px;font-size:12px;color:#a1a1aa}
 .foot a{color:#a1a1aa}
 </style>
 </head>
@@ -259,12 +281,12 @@ ${meta.from && meta.kind === 'pitch' ? '' : meta.from ? `<p class="by">Shared by
 <img class="card" src="${esc(image)}" width="${CARD.w}" height="${CARD.h}" alt="${esc(alt)}">
 <div class="go">
 <a class="cta" href="${esc(to)}">Open in Fantasy →</a>
-<p>Opens this trade in the trade builder, priced for your own team, if you are in ${esc(meta.league)}. You will be asked for your fantasy username first.</p>
+<p>Opens this trade in the trade builder, priced for your own team, if you are in ${esc(meta.league)}. The first time, you’ll be asked for your fantasy username.</p>
 </div>
 ${meta.note ? `<p class="note">“${esc(meta.note)}”</p>` : ''}
 <div class="sides">${meta.sides.map(side).join('')}</div>
 ${stats}
-${meta.strip ? `<div class="weeks"><h2>${esc(meta.to ? `${meta.to} lineup, week by week` : 'Lineup, week by week')}</h2>${stripSvg(meta.strip)}</div>` : ''}
+${meta.strip ? `<div class="weeks"><div class="weeks-head"><h2>${esc(meta.to ? `${meta.to} lineup, week by week` : 'Lineup, week by week')}</h2><span class="weeks-sum">${stripSummary(meta.strip, meta.net)}</span></div>${stripSvg(meta.strip, meta.net)}</div>` : ''}
 <div class="foot"><a href="${SITE}">ff.sujeff.com</a> · fantasy football, modelled</div>
 </main>
 </body>
@@ -292,7 +314,7 @@ export async function serveTrade(req: Request, env: ShareEnv): Promise<Response>
     return text(
       bot
         ? 'Not found'
-        : `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Trade link expired</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#09090b;color:#fafafa;font:15px/1.5 system-ui,sans-serif"><main style="text-align:center;padding:24px"><p>This trade link has expired or never existed.</p><a href="${SITE}/#trades" style="color:#5298f0">Open Fantasy</a></main></body>`,
+        : `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Trade link expired</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#09090b;color:#fafafa;font:15px/1.5 system-ui,sans-serif"><main style="text-align:center;padding:24px"><p>This trade link has expired or never existed. Ask whoever sent it for a new one.</p><a href="${SITE}/#trades" style="color:#5298f0">Open Fantasy</a></main></body>`,
       404,
     )
   }

@@ -28,8 +28,11 @@ export type ShareForm = { kind: 'buy-low' | 'sell-high'; name: string; text: str
 export type ShareFacts = {
   deal: Deal
   read: DealRead
-  /** The recipient's playoff and title odds change (two-team deals): undefined while simulating, null when there is none. */
-  leverage?: { playoffs: number; title: number } | null
+  /**
+   * The recipient's playoff and title odds change (two-team deals), with their playoff odds after it when known:
+   * undefined while simulating, null when there is none.
+   */
+  leverage?: { playoffs: number; title: number; after?: number } | null
   /** The recipient's starting slot that improves most this week. */
   fill?: { slot: string; before: number; after: number } | null
   /** The recipient's consensus value in minus out, pts/wk; null when there are no consensus prices. */
@@ -64,6 +67,8 @@ export const BLOCK_LABEL: Record<ShareBlockKey, string> = {
 
 /** Change in probability as signed points, one place: +4.1. */
 const pts1 = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`
+/** A probability as a whole percentage, kept off 0 and 100 unless it is there: 48%. */
+const pct0 = (p: number) => `${p > 0 && p < 0.005 ? '<1' : p < 1 && p > 0.995 ? '>99' : Math.round(p * 100)}%`
 
 /** A gain this small reads as no change. */
 const EDGE = 0.1
@@ -112,16 +117,20 @@ export const shareBlocks = (audience: Audience, facts: ShareFacts, names: (rid: 
       ? on('lineup', [{ key: 'lineup', label: 'Lineup', value: pts1(side.lineup), unit: 'pts/wk', sub: m > 1 && side.weeksBetter > m / 2 ? `better ${side.weeksBetter} of ${m} weeks` : null, tone: 'pos' }])
       : off('lineup', side.lineup < -EDGE ? 'their lineup gets worse' : 'their lineup barely moves'),
   )
-  out.push(gain ? (m >= 2 ? on('weeks', []) : off('weeks', 'only one week left to show')) : off('weeks', 'needs a lineup gain to show'))
+  out.push(gain ? (m >= 2 ? on('weeks', []) : off('weeks', 'only one week left')) : off('weeks', 'shown only with a lineup gain'))
 
-  // Playoff odds, from the same simulated seasons before and after: two teams only.
+  // Playoff odds, from the same simulated seasons before and after: two teams only. The change is in percentage
+  // points, written "pt" as the trade cards write it, and the odds themselves go underneath, so "+11.6" never reads
+  // as fantasy points.
   const lev = facts.leverage
   if (!two) out.push(off('odds', 'two-team trades only'))
-  else if (lev === undefined) out.push(off('odds', 'still simulating'))
-  else if (lev === null) out.push(off('odds', 'no season forecast to run'))
-  else if (lev.playoffs >= ODDS_EDGE)
-    out.push(on('odds', [{ key: 'odds', label: 'Playoff odds', value: pts1(lev.playoffs * 100), unit: 'pts', sub: lev.title >= 0.0005 ? `title ${pts1(lev.title * 100)} pts` : null, tone: 'pos' }]))
-  else if (lev.title >= ODDS_EDGE) out.push(on('odds', [{ key: 'odds', label: 'Title odds', value: pts1(lev.title * 100), unit: 'pts', sub: null, tone: 'pos' }]))
+  else if (lev === undefined) out.push(off('odds', 'still working out the odds'))
+  else if (lev === null) out.push(off('odds', 'no season forecast for this league'))
+  else if (lev.playoffs >= ODDS_EDGE) {
+    const range = lev.after != null ? `${pct0(lev.after - lev.playoffs)} → ${pct0(lev.after)}` : null
+    const title = lev.title >= 0.0005 ? `title ${pts1(lev.title * 100)} pt` : null
+    out.push(on('odds', [{ key: 'odds', label: 'Playoff odds', value: pts1(lev.playoffs * 100), unit: 'pt', sub: [range, title].filter(Boolean).join(' · ') || null, tone: 'pos' }]))
+  } else if (lev.title >= ODDS_EDGE) out.push(on('odds', [{ key: 'odds', label: 'Title odds', value: pts1(lev.title * 100), unit: 'pt', sub: null, tone: 'pos' }]))
   else out.push(off('odds', lev.playoffs <= -ODDS_EDGE ? 'their playoff odds drop' : 'their playoff odds hold steady'))
 
   const fill = facts.fill
@@ -195,6 +204,11 @@ export type TradeCard = {
   stats: CardStat[]
   /** The recipient's lineup change week by week, when shown. */
   strip: { week: number; delta: number }[] | null
+  /**
+   * With the strip, the recipient's lineup change a week over those weeks, as the Lineup figure states it (near weeks
+   * count for more, so it is not the plain average of the bars): the strip draws it as its dashed line.
+   */
+  net?: number | null
   note: string | null
   /** The deal itself, so the link can open it in the app. */
   deal: { moves: [string, number, number][]; faab: [number, number, number][] }
@@ -307,6 +321,7 @@ export const buildCard = (ctx: ShareContext, facts: ShareFacts, blocks: BlockSta
     sides,
     stats,
     strip: mine && on.get('weeks') ? mine.perWeek.map((w) => ({ week: w.week, delta: Math.round(w.delta * 10) / 10 })) : null,
+    net: mine && on.get('weeks') ? Math.round(mine.lineup * 100) / 100 : null,
     note: note || null,
     deal: {
       moves: deal.moves.map((m) => [m.player, m.from, m.to]),
@@ -427,6 +442,7 @@ export const linkMeta = (card: TradeCard) => {
     })),
     stats: card.stats.map((s) => ({ label: s.label.slice(0, 60), value: s.value, unit: s.unit, sub: s.sub?.slice(0, 90) ?? null, tone: s.tone })),
     strip: card.strip,
+    net: card.strip ? (card.net ?? null) : null,
     trade: encodeDeal(card.deal),
   }
 }

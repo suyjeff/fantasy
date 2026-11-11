@@ -124,6 +124,7 @@ describe('parseTradeMeta', () => {
       [{ stats: [{ ...meta().stats[0], value: 'x'.repeat(25) }] }, 'bad stats'],
       [{ strip: [{ week: 10, delta: Infinity }] }, 'bad strip'],
       [{ strip: Array(21).fill({ week: 1, delta: 0 }) }, 'bad strip'],
+      [{ net: 'lots' }, 'bad net'],
     ]
     for (const [over, why] of bad) expect(parseTradeMeta(meta(over))).toBe(why)
     expect(parseTradeMeta(null)).toBe('bad meta')

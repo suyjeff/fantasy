@@ -54,7 +54,7 @@ const clearParams = () => {
 /** What the visitor is told when the link cannot be followed all the way. */
 export type DeepNote = { text: string }
 
-const NOT_IN_TRADE = 'That trade is from a league this account is not in, so it cannot open in the builder here.'
+const NOT_IN_TRADE = 'That trade is from a league this account is not in, so it can’t open here. Use “Switch league or user” in the menu to open it as a member.'
 
 /** How long a requested switch of league (or season) may take before the link gives up on it. */
 const SWITCH_MS = 20000

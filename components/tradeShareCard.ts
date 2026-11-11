@@ -189,7 +189,7 @@ const faceCap = (colW: number) => Math.round(Math.min(104, colW * 0.2))
 const sideGrid = (n: number, r: { w: number; h: number }) => (n === 4 && r.w / r.h < 2.2 ? { cols: 2, rows: 2 } : { cols: n, rows: 1 })
 
 /** One side's column: who it is, then what it takes in, one row per player (and FAAB). */
-const drawSide = (ctx: Ctx, p: Palette, s: CardSide, r: Rect, o: { headH: number; rowH: number; avatar: string | null; k: number; clear?: { left: number; right: number } }) => {
+const drawSide = (ctx: Ctx, p: Palette, s: CardSide, r: Rect, o: { headH: number; rowH: number; avatar: string | null; k: number; clear?: { left: number; right: number }; headPx?: number }) => {
   const { headH, rowH, k } = o
   const pad = Math.round(22 * Math.min(1, k + 0.15))
   // Head: the recipient's marked with the accent along the top.
@@ -207,10 +207,20 @@ const drawSide = (ctx: Ctx, p: Palette, s: CardSide, r: Rect, o: { headH: number
     tx += av + 14
   }
   ctx.fillStyle = rgb(s.focus ? p.accent : p.muted)
-  ctx.font = `500 ${Math.round(21 * Math.min(1.1, k + 0.2))}px ${MONO}`
+  ctx.font = `500 ${Math.round((o.headPx ?? 21) * Math.min(1.1, k + 0.2))}px ${MONO}`
   spaced(ctx, 2)
   ctx.textAlign = 'left'
-  ctx.fillText(fit(ctx, s.head.toUpperCase(), r.x + r.w - pad - (o.clear?.right ?? 0) - tx), tx, r.y + headH / 2 + 3)
+  // A long team name is cut, never the verb after it: "THE EXTRAORDINARILY… GETS" still says which way it goes.
+  const room = r.x + r.w - pad - (o.clear?.right ?? 0) - tx
+  const verb = / (gets|sends)$/i.exec(s.head)
+  const head = s.head.toUpperCase()
+  if (verb && ctx.measureText(head).width > room) {
+    const tail = ` ${verb[1].toUpperCase()}`
+    const tw = ctx.measureText(tail).width
+    const who = fit(ctx, head.slice(0, -tail.length), Math.max(0, room - tw))
+    ctx.fillText(who, tx, r.y + headH / 2 + 3)
+    ctx.fillText(tail, tx + ctx.measureText(who).width, r.y + headH / 2 + 3)
+  } else ctx.fillText(fit(ctx, head, room), tx, r.y + headH / 2 + 3)
   spaced(ctx, 0)
   ctx.fillStyle = rgb(p.line)
   ctx.fillRect(r.x, r.y + headH, r.w, 2)
@@ -307,6 +317,11 @@ const drawSide = (ctx: Ctx, p: Palette, s: CardSide, r: Rect, o: { headH: number
       spaced(ctx, 0)
       ctx.restore()
     }
+    // A "from" line a little too long gives up some size before the sender's name is cut.
+    if (!tagW && pl.from) {
+      let rpx = Math.round(20 * k)
+      while (ctx.measureText(rest).width > room() && rpx > Math.round(20 * k * 0.8)) ctx.font = `400 ${--rpx}px ${MONO}`
+    }
     // No room for the team and the tag both: the tag stays (it is the point), the team goes.
     const restText = ctx.measureText(rest).width <= room() ? rest : tagW ? '' : fit(ctx, rest, Math.max(0, nameRight - sx))
     ctx.fillText(restText, sx, mid + 22 * k)
@@ -326,7 +341,7 @@ const drawSide = (ctx: Ctx, p: Palette, s: CardSide, r: Rect, o: { headH: number
 }
 
 /** The sides, side by side (two by two for four on a square), with the swap mark between two. */
-const drawSides = (ctx: Ctx, p: Palette, card: TradeCard, r: Rect, avatars: Record<number, string | null>, maxRow: number, layout?: { cols: number; rows: number }) => {
+const drawSides = (ctx: Ctx, p: Palette, card: TradeCard, r: Rect, avatars: Record<number, string | null>, maxRow: number, layout?: { cols: number; rows: number }, headPx?: number) => {
   const n = card.sides.length
   const grid = layout ?? sideGrid(n, r)
   box(ctx, p, r)
@@ -355,7 +370,7 @@ const drawSides = (ctx: Ctx, p: Palette, card: TradeCard, r: Rect, avatars: Reco
     }
     sy += h
     const mark = n === 2 ? Math.round(headH * 0.72) / 2 + 6 : 0
-    drawSide(ctx, p, s, cell, { headH, rowH, avatar: s.avatar ?? avatars[s.rosterId] ?? null, k, clear: { left: i === 1 ? mark : 0, right: i === 0 ? mark : 0 } })
+    drawSide(ctx, p, s, cell, { headH, rowH, avatar: s.avatar ?? avatars[s.rosterId] ?? null, k, clear: { left: i === 1 ? mark : 0, right: i === 0 ? mark : 0 }, headPx })
   })
   ctx.fillStyle = rgb(p.line2)
   for (let c = 1; c < grid.cols; c++) ctx.fillRect(Math.round(r.x + c * cw) - 1, r.y, 2, r.h)
@@ -363,8 +378,11 @@ const drawSides = (ctx: Ctx, p: Palette, card: TradeCard, r: Rect, avatars: Reco
   if (n === 2) swapMark(ctx, p, r.x + cw, r.y + headH / 2, Math.round(headH * 0.72))
 }
 
-/** The benefit figures: a few large numbers with their labels, in a hairline grid. */
-const drawStats = (ctx: Ctx, p: Palette, stats: CardStat[], r: Rect, cols: number, valuePx: number) => {
+/**
+ * The benefit figures: a few large numbers with their labels, in a hairline grid. `small` is the least the labels,
+ * units and notes may be: the link preview is seen a quarter size, so it asks for more than the square does.
+ */
+const drawStats = (ctx: Ctx, p: Palette, stats: CardStat[], r: Rect, cols: number, valuePx: number, small = 15) => {
   const rows = Math.ceil(stats.length / cols)
   const gap = 2
   const tw = (r.w - gap * (cols - 1)) / cols
@@ -384,23 +402,35 @@ const drawStats = (ctx: Ctx, p: Palette, stats: CardStat[], r: Rect, cols: numbe
       ctx.fillRect(x, y, w, th)
     }
     const pad = Math.round(Math.min(24, w * 0.08))
-    const v = Math.min(valuePx, th * 0.42)
-    const lab = Math.round(Math.max(15, Math.min(20, v * 0.36)))
+    let v = Math.min(valuePx, th * 0.42)
+    const lab = Math.round(Math.max(small, Math.min(Math.max(20, small), v * 0.36)))
     const sub = s.sub ? Math.round(lab * 0.95) : 0
-    const block = lab + 14 + v + (sub ? 12 + sub : 0)
+    // A short tile closes up its gaps, then its number, before anything runs over its edge.
+    let g1 = 14
+    let g2 = 12
+    const need = () => lab + g1 + v + (sub ? g2 + sub : 0)
+    if (need() > th - 16) {
+      g1 = 8
+      g2 = 6
+      v = Math.max(24, Math.min(v, th - 16 - lab - g1 - (sub ? g2 + sub : 0)))
+    }
+    const block = need()
     let cy = y + (th - block) / 2
     ctx.textAlign = 'left'
     ctx.fillStyle = rgb(p.muted)
-    ctx.font = `500 ${lab}px ${MONO}`
+    // A long label ("CONSENSUS VALUE" in a narrow tile) gives up a little size before it is cut.
+    let lpx = lab
+    ctx.font = `500 ${lpx}px ${MONO}`
     spaced(ctx, 2)
+    while (lpx > 14 && ctx.measureText(s.label.toUpperCase()).width > w - pad * 2) ctx.font = `500 ${--lpx}px ${MONO}`
     ctx.fillText(fit(ctx, s.label.toUpperCase(), w - pad * 2), x + pad, cy + lab / 2)
     spaced(ctx, 0)
-    cy += lab + 14
+    cy += lab + g1
     ctx.fillStyle = rgb(s.tone === 'pos' ? p.pos : s.tone === 'neg' ? p.neg : p.text)
     let vpx = Math.round(v)
     ctx.font = `600 ${vpx}px ${MONO}`
     const unit = s.unit ? ` ${s.unit.toUpperCase()}` : ''
-    const unitPx = Math.round(Math.max(15, vpx * 0.34))
+    const unitPx = Math.round(Math.max(small, vpx * 0.34))
     const unitW = () => {
       ctx.font = `400 ${unitPx}px ${MONO}`
       const uw = unit ? ctx.measureText(unit).width : 0
@@ -420,65 +450,130 @@ const drawStats = (ctx: Ctx, p: Palette, stats: CardStat[], r: Rect, cols: numbe
       ctx.fillText(unit, x + pad + vw, cy + v / 2 + vpx * 0.12)
     }
     if (sub) {
-      cy += v + 12
+      cy += v + g2
       ctx.fillStyle = rgb(p.text2)
       let spx = sub
       ctx.font = `400 ${spx}px ${MONO}`
-      while (spx > 13 && ctx.measureText(s.sub!).width > w - pad * 2) ctx.font = `400 ${--spx}px ${MONO}`
-      ctx.fillText(fit(ctx, s.sub!, w - pad * 2), x + pad, cy + sub / 2)
+      // A note in parts ("48% → 60% · title +3.0 pt") drops its last part before it shrinks far or is cut.
+      let note = s.sub!
+      const floor = Math.max(13, Math.round(sub * 0.8))
+      while (note.includes(' · ') && ctx.measureText(note).width > w - pad * 2) {
+        ctx.font = `400 ${floor}px ${MONO}`
+        if (ctx.measureText(note).width <= w - pad * 2) break
+        note = note.slice(0, note.lastIndexOf(' · '))
+        ctx.font = `400 ${spx}px ${MONO}`
+      }
+      ctx.font = `400 ${spx}px ${MONO}`
+      while (spx > Math.min(13, small) && ctx.measureText(note).width > w - pad * 2) ctx.font = `400 ${--spx}px ${MONO}`
+      ctx.fillText(fit(ctx, note, w - pad * 2), x + pad, cy + sub / 2)
     }
   })
 }
 
 /**
  * The recipient's lineup change week by week: bars either side of a zero line, gains in the positive colour and the
- * odd losing week in the negative, the best week labelled.
+ * odd losing week in the negative. Colour is never the only cue: a bar's side of the line says which way the week went,
+ * the best and worst weeks carry their signed numbers, and a dashed line at the lineup change a week (the Lineup
+ * figure, named in the heading: "NET +0.4/WK · BETTER 5 OF 8") shows the run as a whole is a gain even when a week or
+ * two is not.
  */
-const drawStrip = (ctx: Ctx, p: Palette, card: TradeCard, r: Rect) => {
+const drawStrip = (ctx: Ctx, p: Palette, card: TradeCard, r: Rect, small = 17) => {
   const strip = card.strip!
   box(ctx, p, r)
-  const pad = 24
-  const lab = 19
-  ctx.fillStyle = rgb(p.muted)
+  const pad = 22
+  const inner = r.w - pad * 2
+  const lab = Math.max(19, small + 1)
+  const valPx = Math.max(18, small)
+  const weekPx = Math.max(17, small)
+  const n = strip.length
+  const net = card.net ?? null
+  const better = strip.filter((s) => s.delta > 0.05).length
+  const sign = (v: number) => `${v > 0.05 ? '+' : v < -0.05 ? '−' : ''}${Math.abs(v).toFixed(1)}`
+  const ly = r.y + pad + lab / 2
+
+  // The heading: the summary at the right, said in full where it fits and cut down where it does not, then what the
+  // strip is, at the left, in what room is left (none, on the narrow one beside the link card's figures).
   ctx.font = `500 ${lab}px ${MONO}`
-  spaced(ctx, 2)
-  ctx.textAlign = 'left'
-  ctx.fillText(fit(ctx, `${card.to ?? ''} lineup, week by week`.trim().toUpperCase(), r.w - pad * 2 - 160), r.x + pad, r.y + pad + lab / 2)
+  spaced(ctx, 1.5)
+  const key = net != null ? 22 + 10 : 0
+  const sums = net != null ? [`NET ${sign(net)}/WK · BETTER ${better} OF ${n}`, `NET ${sign(net)}/WK`] : [`BETTER ${better} OF ${n} WEEKS`, `BETTER ${better} OF ${n}`]
+  const sum = sums.find((t) => ctx.measureText(t).width + key <= inner * 0.62) ?? sums.find((t) => ctx.measureText(t).width + key <= inner) ?? sums[1]
+  const sumW = ctx.measureText(sum).width
+  const titles = [`${card.to ?? ''} lineup, week by week`.trim(), 'Lineup, week by week', 'Week by week'].map((t) => t.toUpperCase())
+  const titleRoom = inner - sumW - key - 24
+  const title = titles.find((t) => ctx.measureText(t).width <= titleRoom)
+  ctx.textAlign = title ? 'right' : 'left'
+  ctx.fillStyle = rgb(p.text)
+  const sx = title ? r.x + r.w - pad : r.x + pad + key
+  ctx.fillText(sum, sx, ly)
+  if (net != null) {
+    // A short dashed rule before the summary: the key to the dashed line in the plot.
+    const kx = (title ? sx - sumW : sx) - key
+    ctx.strokeStyle = rgb(p.text)
+    ctx.lineWidth = 2
+    ctx.setLineDash([6, 4])
+    ctx.beginPath()
+    ctx.moveTo(kx, ly)
+    ctx.lineTo(kx + 22, ly)
+    ctx.stroke()
+    ctx.setLineDash([])
+  }
+  if (title) {
+    ctx.textAlign = 'left'
+    ctx.fillStyle = rgb(p.muted)
+    ctx.fillText(title, r.x + pad, ly)
+  }
   spaced(ctx, 0)
-  ctx.textAlign = 'right'
-  ctx.font = `400 ${lab - 2}px ${MONO}`
-  ctx.fillText('PTS VS NOW', r.x + r.w - pad, r.y + pad + lab / 2)
-  const top = r.y + pad + lab + 26
-  const weekH = 26
-  const bottom = r.y + r.h - pad - weekH
-  const max = Math.max(0.5, ...strip.map((s) => Math.abs(s.delta)))
+
+  // The plot, with a line kept clear above it for the best week's number and, when there is one, below it for the
+  // worst's, then the week numbers.
   const anyNeg = strip.some((s) => s.delta < -0.05)
+  const top = r.y + pad + lab + 14 + valPx + 8
+  const weekH = weekPx + 8
+  const bottom = r.y + r.h - pad + 4 - weekH - (anyNeg ? valPx + 10 : 0)
+  const max = Math.max(0.5, ...strip.map((s) => Math.max(0, s.delta)), net ?? 0)
   // With no losing week the zero line sits low and the bars use the height; otherwise it sits where the split falls.
   const negMax = anyNeg ? Math.max(...strip.map((s) => -s.delta)) : 0
-  const span = bottom - top
-  const zero = anyNeg ? top + span * (max / (max + negMax)) : bottom
-  const scale = (anyNeg ? span : span - 4) / (anyNeg ? max + negMax : max)
-  const slot = (r.w - pad * 2) / strip.length
+  const span = Math.max(8, bottom - top)
+  const zero = anyNeg ? top + span * (max / (max + negMax)) : top + span
+  const scale = (anyNeg ? span : span - 2) / (anyNeg ? max + negMax : max)
+  const slot = inner / n
   const bw = Math.min(40, slot * 0.58)
   const best = strip.reduce((b, s, i) => (s.delta > strip[b].delta ? i : b), 0)
+  const worst = strip.reduce((b, s, i) => (s.delta < strip[b].delta ? i : b), 0)
+  const at = (i: number) => r.x + pad + slot * i + slot / 2
   strip.forEach((s, i) => {
-    const cx = r.x + pad + slot * i + slot / 2
     const len = Math.max(2, Math.abs(s.delta) * scale)
     ctx.fillStyle = rgb(Math.abs(s.delta) < 0.05 ? p.line2 : s.delta > 0 ? p.pos : p.neg)
-    ctx.fillRect(cx - bw / 2, s.delta >= 0 ? zero - len : zero, bw, len)
+    ctx.fillRect(at(i) - bw / 2, s.delta >= 0 ? zero - len : zero, bw, len)
     ctx.fillStyle = rgb(p.muted)
-    ctx.font = `400 17px ${MONO}`
+    ctx.font = `400 ${weekPx}px ${MONO}`
     ctx.textAlign = 'center'
-    ctx.fillText(String(s.week), cx, r.y + r.h - pad - weekH / 2 + 4)
-    if (i === best && s.delta > 0.05) {
-      ctx.fillStyle = rgb(p.text)
-      ctx.font = `500 18px ${MONO}`
-      const ly = zero - len - 14
-      ctx.fillText(`+${s.delta.toFixed(1)}`, cx, Math.max(top - 6, ly))
-    }
+    ctx.fillText(String(s.week), at(i), r.y + r.h - pad + 4 - weekH / 2 + 2)
   })
   ctx.fillStyle = rgb(p.text2)
-  ctx.fillRect(r.x + pad, zero - 1, r.w - pad * 2, 2)
+  ctx.fillRect(r.x + pad, zero - 1, inner, 2)
+  if (net != null) {
+    const ay = Math.round(zero - net * scale)
+    ctx.strokeStyle = rgb(p.text)
+    ctx.lineWidth = 2
+    ctx.setLineDash([6, 4])
+    ctx.beginPath()
+    ctx.moveTo(r.x + pad, ay)
+    ctx.lineTo(r.x + r.w - pad, ay)
+    ctx.stroke()
+    ctx.setLineDash([])
+  }
+  ctx.font = `500 ${valPx}px ${MONO}`
+  ctx.textAlign = 'center'
+  if (strip[best].delta > 0.05) {
+    ctx.fillStyle = rgb(p.text)
+    ctx.fillText(sign(strip[best].delta), at(best), zero - Math.max(2, strip[best].delta * scale) - valPx / 2 - 6)
+  }
+  if (strip[worst].delta < -0.05) {
+    ctx.fillStyle = rgb(p.text2)
+    ctx.fillText(sign(strip[worst].delta), at(worst), zero + Math.max(2, -strip[worst].delta * scale) + valPx / 2 + 6)
+  }
   ctx.textAlign = 'left'
 }
 
@@ -499,6 +594,12 @@ const noteLines = (ctx: Ctx, note: string, w: number, px: number, lines: number)
   ctx.font = `italic 500 ${px}px ${SANS}`
   return wrap(ctx, `“${note}”`, w - 28, lines).length
 }
+
+/**
+ * The least the link card's labels, units and notes may be: it is mostly seen as a preview about 300px wide, a
+ * quarter of its size, where the square card's 15px labels would be under 4px.
+ */
+const OG_SMALL = 20
 
 const titleOf = (card: TradeCard) => (card.kind === 'pitch' ? { eyebrow: 'Trade pitch', title: `For ${card.to}` } : { eyebrow: 'Trade', title: card.sides.length > 2 ? `${card.sides.length}-team trade` : card.sides.map((s) => s.head.replace(/ gets$/, '')).join(' ⇄ ') })
 
@@ -577,13 +678,13 @@ export const drawTradeCard = (canvas: HTMLCanvasElement, card: TradeCard, format
     const natural = grid.rows * (64 + most * Math.min(112, faceCap(left.w / grid.cols) + 36) + 10)
     const stripLeft = !!card.strip && left.h - natural - gap >= 150
     const stripRight = !!card.strip && !stripLeft && stats.length <= 2 && !!statW
-    drawSides(ctx, p, card, stripLeft ? { ...left, h: natural } : left, avatars, 120)
-    if (stripLeft) drawStrip(ctx, p, card, { x: left.x, y: left.y + natural + gap, w: left.w, h: left.h - natural - gap })
+    drawSides(ctx, p, card, stripLeft ? { ...left, h: natural } : left, avatars, 120, undefined, OG_SMALL + 3)
+    if (stripLeft) drawStrip(ctx, p, card, { x: left.x, y: left.y + natural + gap, w: left.w, h: left.h - natural - gap }, OG_SMALL)
     if (statW) {
       const right = { x: W - PAD - statW, y: top, w: statW, h: bottom - top }
-      const sh = stripRight ? Math.round(right.h * (stats.length === 1 ? 0.45 : 0.62)) : right.h
-      drawStats(ctx, p, stats, { ...right, h: sh }, stats.length > 3 ? 2 : 1, stats.length > 3 ? 40 : 52)
-      if (stripRight) drawStrip(ctx, p, card, { x: right.x, y: right.y + sh + gap, w: right.w, h: right.h - sh - gap })
+      const sh = stripRight ? Math.round(right.h * (stats.length === 1 ? 0.4 : 0.5)) : right.h
+      drawStats(ctx, p, stats, { ...right, h: sh }, stats.length > 3 ? 2 : 1, stats.length > 3 ? 40 : 52, OG_SMALL)
+      if (stripRight) drawStrip(ctx, p, card, { x: right.x, y: right.y + sh + gap, w: right.w, h: right.h - sh - gap }, OG_SMALL)
     }
     return canvas
   }
@@ -603,7 +704,7 @@ export const drawTradeCard = (canvas: HTMLCanvasElement, card: TradeCard, format
   const headH = 64
   const minRow = 64
   const fixed = (x: number) => (x ? x + gap : 0)
-  let stripH = card.strip ? (story ? 210 : 172) : 0
+  let stripH = card.strip ? (story ? 230 : 196) : 0
   let room = bottom - top - fixed(noteH) - fixed(statH) - fixed(stripH)
   // Three or four sides sit side by side (two by two for four), or, when there is the height for it, one above
   // another at full width, where names and "from" lines have the room they need.
