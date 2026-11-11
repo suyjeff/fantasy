@@ -11,14 +11,21 @@ import { appUrl, LEAGUE_ID } from '../workers/grades/src/links'
  * `reveal=` alone, or `reveal=1`, means the latest week. A week number means that week; week 1 is written `01`.
  * The address itself is written in one place, workers/grades/src/links.ts, which the worker redirects to.
  */
-export type DeepLink = { league: string | null; season: string | null; week: number | 'latest' | null }
+export type DeepLink = {
+  league: string | null
+  season: string | null
+  week: number | 'latest' | null
+  /** A shared trade (lib/tradeShare `encodeDeal`), to open in the builder once the league is up. */
+  trade?: string | null
+}
 
 /** The link in an address's query string, or null when it carries none. */
 export const parseDeepLink = (search: string): DeepLink | null => {
   const q = new URLSearchParams(search)
   const league = q.get('league')
   const reveal = q.get('reveal')
-  if (league == null && reveal == null) return null
+  const trade = q.get('trade')
+  if (league == null && reveal == null && trade == null) return null
   let week: DeepLink['week'] = null
   if (reveal != null) {
     // A bare 1 has always meant "the latest"; week 1 is `01`.
@@ -26,7 +33,7 @@ export const parseDeepLink = (search: string): DeepLink | null => {
     if (week === 0) week = 'latest'
   }
   const season = q.get('season')
-  return { league: league && LEAGUE_ID.test(league) ? league : null, season: season && /^\d{4}$/.test(season) ? season : null, week }
+  return { league: league && LEAGUE_ID.test(league) ? league : null, season: season && /^\d{4}$/.test(season) ? season : null, week, ...(trade && trade.length <= 800 ? { trade } : {}) }
 }
 
 /** The plain address of a week's reveal in the app, for a link with no preview. */
@@ -35,16 +42,19 @@ export const deepLinkUrl = (leagueId: string, week: number, season?: string | nu
 /** Takes the link's parameters off the address, leaving the rest. */
 const clearParams = () => {
   const q = new URLSearchParams(window.location.search)
-  if (q.get('league') == null && q.get('reveal') == null && q.get('season') == null) return
+  if (q.get('league') == null && q.get('reveal') == null && q.get('season') == null && q.get('trade') == null) return
   q.delete('league')
   q.delete('reveal')
   q.delete('season')
+  q.delete('trade')
   const rest = q.toString()
   window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`)
 }
 
 /** What the visitor is told when the link cannot be followed all the way. */
 export type DeepNote = { text: string }
+
+const NOT_IN_TRADE = 'That trade is from a league this account is not in, so it cannot open in the builder here.'
 
 /** How long a requested switch of league (or season) may take before the link gives up on it. */
 const SWITCH_MS = 20000
@@ -101,7 +111,7 @@ export const useDeepLink = ({
   // the visitor's own league.
   const giveUp = useCallback(() => {
     const week = link?.week
-    const text = 'That link is for a league this account is not in, so this is your own league instead.'
+    const text = link?.trade ? NOT_IN_TRADE : 'That link is for a league this account is not in, so this is your own league instead.'
     if (before.current && link?.season) {
       const back = before.current
       sawLoad.current = false
@@ -110,6 +120,12 @@ export const useDeepLink = ({
       setSwitching(false)
       setRestoring(true)
       before.current = null
+      if (link.trade) {
+        setNote({ text: NOT_IN_TRADE })
+        setLink(null)
+        clearParams()
+        return
+      }
       setNote({ text: `You aren't in that league for ${link.season}, so this is week ${week && week !== 'latest' ? week : 'the latest'} of your own league.` })
       setLink({ league: null, season: null, week })
       return
@@ -138,7 +154,7 @@ export const useDeepLink = ({
         sawLoad.current = false
         setSwitching(true)
         selectLeague(link.league, link.season === current ? null : link.season)
-      } else finish('That link is for a league this account is not in, so this is your own league instead.')
+      } else finish(link.trade ? NOT_IN_TRADE : 'That link is for a league this account is not in, so this is your own league instead.')
       return
     }
     // Switching: it has landed once a load has come and gone.
@@ -166,11 +182,13 @@ export const useDeepLink = ({
   }, [restoring])
 
   const ready = link && onboarded && data && !loading && !restoring && (!link.league || data.league.league_id === link.league) ? link : null
-  // A link that names a league and no week is used up as soon as the league is up.
+  // A link that names a league and no week (and no trade) is used up as soon as the league is up.
   useEffect(() => {
-    if (ready && ready.week == null) finish()
+    if (ready && ready.week == null && !ready.trade) finish()
   }, [ready, finish])
 
   const dismiss = useCallback(() => setNote(null), [])
-  return { link, ready: ready && ready.week != null ? { week: ready.week } : null, finish, note, dismiss }
+  /** A shared trade, once its league is on screen: open it in the builder (SharedTradeOpener), then `finish`. */
+  const trade = ready?.trade ?? null
+  return { link, ready: ready && ready.week != null ? { week: ready.week } : null, trade, finish, note, dismiss }
 }

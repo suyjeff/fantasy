@@ -8,6 +8,7 @@ import type { LeagueData } from '../lib/useLeagueData'
 import { ContextNotes } from './ContextNotes'
 import { dealFromIdea } from '../lib/deal'
 import { CompareToggle } from './useCompare'
+import { ShareTradeButton } from './TradeShare'
 import { BuildIcon } from './icons'
 import { InsightMark } from './InsightMark'
 import { useFantasy, useTradeRead } from './FantasyContext'
@@ -458,7 +459,8 @@ const TradeCard = ({
 
       <GradeBar idea={idea} base={base} nm={nm} posOf={(id) => players[id]?.pos} />
 
-      <footer className="mt-auto flex items-center justify-between gap-2 border-t border-ff-line px-3 py-2">
+      {/* At the narrowest widths the actions wrap under the details and versions rather than run over them. */}
+      <footer className="mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 border-t border-ff-line px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="ff-hit whitespace-nowrap py-1 font-mono text-[11px] text-ff-muted hover:text-ff-text">
             {open ? 'less ▴' : 'details ▾'}
@@ -478,7 +480,8 @@ const TradeCard = ({
           )}
         </div>
         {onBuild && (
-          <span className="flex shrink-0 items-center gap-1.5">
+          <span className="ml-auto flex shrink-0 items-center gap-1.5">
+            {asDeal && <ShareTradeButton deal={asDeal} label={`Share this trade with ${team?.name ?? 'them'}`} />}
             {asDeal && <CompareToggle deal={asDeal} size="sm" />}
             <Button size="sm" variant="aqua" className="ff-aqua-soft" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
               <BuildIcon size={12} />

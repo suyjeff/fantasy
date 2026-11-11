@@ -13,3 +13,10 @@ export const LEAGUE_ID = /^[A-Za-z0-9:_.-]{1,64}$/
  */
 export const appUrl = (m: { leagueId: string; week: number; season?: string | null }, site = SITE) =>
   `${site}/?league=${encodeURIComponent(m.leagueId)}${m.season ? `&season=${encodeURIComponent(m.season)}` : ''}&reveal=${m.week === 1 ? '01' : m.week}#power`
+
+/**
+ * Where a shared trade opens in the app: the league, its season, and the deal itself (lib/tradeShare `encodeDeal`),
+ * which the app puts in the trade builder for a member of the league.
+ */
+export const tradeAppUrl = (m: { leagueId: string; season?: string | null; trade: string }, site = SITE) =>
+  `${site}/?league=${encodeURIComponent(m.leagueId)}${m.season ? `&season=${encodeURIComponent(m.season)}` : ''}&trade=${encodeURIComponent(m.trade)}#trades`

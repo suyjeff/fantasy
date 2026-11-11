@@ -24,7 +24,7 @@ const canDownload = () => {
 }
 
 /** Saves the file by a link the page clicks itself, or opens it in a tab to be pressed and held where that cannot be. */
-const save = (file: File): 'downloaded' | 'opened' => {
+export const save = (file: File): 'downloaded' | 'opened' => {
   const url = URL.createObjectURL(file)
   const a = document.createElement('a')
   a.href = url
@@ -249,7 +249,7 @@ const useShareKit = (input: ShareInput, wantLink: boolean): Kit => {
 
 type Status = null | { tone: 'ok' | 'bad'; text: string }
 
-const copyText = async (text: string) => {
+export const copyText = async (text: string) => {
   try {
     await navigator.clipboard.writeText(text)
     return true

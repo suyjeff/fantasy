@@ -13,6 +13,7 @@ import PlayerName from './PlayerName'
 import { Disclosure } from './Disclosure'
 import { BuildIcon, TradeIcon } from './icons'
 import { SlotKey, useCompare } from './useCompare'
+import { ShareTradeButton } from './TradeShare'
 import { Avatar, Button, Chip, PlayerAvatar, cx, fmt, fmtSigned, isOut, pct, usePhone } from './ui'
 
 // The Compare tab: up to four trades side by side, to answer "which of these should I make?". A sentence first (the
@@ -807,6 +808,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
         <IconBtn label={`Move trade ${col.letter} right`} onClick={() => c.move(col.item.id, 1)} disabled={i === n - 1}>
           →
         </IconBtn>
+        <ShareTradeButton deal={col.item.deal} variant="cell" label={`Share trade ${col.letter}`} />
         <IconBtn label={`Remove trade ${col.letter} from compare`} onClick={() => c.remove(col.item.id)} danger>
           <svg aria-hidden width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="square">
             <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />

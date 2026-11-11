@@ -12,6 +12,7 @@
 import { allowed, limited, send } from './common'
 import { LEAGUE_ID } from './links'
 import { handlePost as handleShare, serve as serveShare, type ShareKV } from './share'
+import { handleTradePost, serveTrade } from './trade'
 import { cleanGrade, clientKey, clientOf, contribute, LIMITS, priorFor, type Contribution, type StoredGrade, type Sum } from './aggregate'
 
 export interface Env {
@@ -147,12 +148,20 @@ export default {
         return new Response('Server error', { status: 500 })
       }
     }
+    if (url.pathname.startsWith('/t/') && (req.method === 'GET' || req.method === 'HEAD')) {
+      try {
+        return await serveTrade(req, env)
+      } catch {
+        return new Response('Server error', { status: 500 })
+      }
+    }
     const origin = allowed(req.headers.get('origin'))
     if (req.method === 'OPTIONS') return send(null, origin ? 204 : 403, origin)
     if (!origin) return send({ error: 'origin not allowed' }, 403, null)
     const ip = req.headers.get('cf-connecting-ip') ?? 'unknown'
     try {
       if (url.pathname === '/share' && req.method === 'POST') return await handleShare(req, env, origin, ip)
+      if (url.pathname === '/trade' && req.method === 'POST') return await handleTradePost(req, env, origin, ip)
       if (url.pathname === '/grades' && req.method === 'POST') {
         if (limited(`p:${ip}`, 30)) return send({ error: 'slow down' }, 429, origin, { 'retry-after': '60' })
         return await post(req, env, origin)

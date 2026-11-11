@@ -31,11 +31,11 @@ const MAX_BODY = Math.ceil((MAX_PNG * 4) / 3) + 20_000
 /** The facts alone are a few hundred bytes; this is room for five long names. */
 const MAX_META = 4_000
 
-const ID = /^[A-Za-z0-9]{10,32}$/
+export const ID = /^[A-Za-z0-9]{10,32}$/
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
 const PNG_END = [0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
 /** The unfurlers that get a page of tags instead of a redirect: known by name, so a browser never lands on one. */
-const BOTS = /facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|WhatsApp|TelegramBot|LinkedInBot|Applebot|Pinterest|redditbot|Embedly|Iframely|SkypeUriPreview|Google-PageRenderer|vkShare|Mastodon/i
+export const BOTS = /facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|WhatsApp|TelegramBot|LinkedInBot|Applebot|Pinterest|redditbot|Embedly|Iframely|SkypeUriPreview|Google-PageRenderer|vkShare|Mastodon/i
 
 export type ShareMeta = {
   league: string
@@ -49,13 +49,13 @@ export type ShareMeta = {
 }
 
 // Strings are cut of control characters and measured after, so a cap means what it says.
-const clean = (v: unknown, max: number, min = 1): string | null => {
+export const clean = (v: unknown, max: number, min = 1): string | null => {
   if (typeof v !== 'string') return null
   // eslint-disable-next-line no-control-regex
   const s = v.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim()
   return s.length >= min && s.length <= max ? s : null
 }
-const int = (v: unknown, lo: number, hi: number): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi ? v : null)
+export const int = (v: unknown, lo: number, hi: number): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi ? v : null)
 
 /** The facts, or why they were refused. Every field is checked; nothing is passed through unread. */
 export const parseMeta = (raw: unknown): ShareMeta | string => {
@@ -152,8 +152,11 @@ const readBounded = async (req: Request, cap: number): Promise<Uint8Array | null
   return out
 }
 
-/** What a request carried: the facts and the card, from JSON (`png` in base64) or a multipart form (`meta`, `png`). */
-const readBody = async (req: Request): Promise<{ meta: unknown; png: Uint8Array } | { error: string; status: number }> => {
+/**
+ * What a request carried: the facts and the card, from JSON (`png` in base64) or a multipart form (`meta`, `png`).
+ * `maxMeta` caps the facts (a trade's run longer than a ranking's).
+ */
+export const readBody = async (req: Request, maxMeta = MAX_META): Promise<{ meta: unknown; png: Uint8Array } | { error: string; status: number }> => {
   // A length must be declared and within the cap before a byte is read; the reader still holds the line if it lied.
   const declared = req.headers.get('content-length')
   if (declared == null || !/^\d+$/.test(declared)) return { error: 'length required', status: 411 }
@@ -167,13 +170,13 @@ const readBody = async (req: Request): Promise<{ meta: unknown; png: Uint8Array 
       const form = await new Response(bytes as BodyInit, { headers: { 'content-type': type } }).formData()
       const file = form.get('png')
       const metaRaw = form.get('meta')
-      if (typeof metaRaw !== 'string' || metaRaw.length > MAX_META || !file || typeof file === 'string') return bad
+      if (typeof metaRaw !== 'string' || metaRaw.length > maxMeta || !file || typeof file === 'string') return bad
       if (file.size > MAX_PNG) return { error: 'png too large', status: 413 }
       return { meta: JSON.parse(metaRaw), png: new Uint8Array(await file.arrayBuffer()) }
     }
     const body = JSON.parse(new TextDecoder().decode(bytes)) as { meta?: unknown; png?: unknown }
     if (typeof body?.png !== 'string') return bad
-    if (JSON.stringify(body.meta ?? null).length > MAX_META) return { error: 'meta too large', status: 413 }
+    if (JSON.stringify(body.meta ?? null).length > maxMeta) return { error: 'meta too large', status: 413 }
     const png = unbase64(body.png)
     return png ? { meta: body.meta, png } : { error: 'bad png', status: 400 }
   } catch {
@@ -199,7 +202,7 @@ export async function handlePost(req: Request, env: ShareEnv, origin: string, ip
   return send({ id, url: `${new URL(req.url).origin}/s/${id}` }, 200, origin)
 }
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+export const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 /** A string for inside a <script>: JSON, with the characters that could end the tag or the line escaped. */
 const js = (s: string) => JSON.stringify(s).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
 
@@ -256,7 +259,7 @@ a{display:inline-block;margin-top:20px;padding:12px 20px;border:1px solid #52a0f
 /** The redirect people get. It depends on who asks, so nothing may keep it. */
 const redirect = (to: string) => new Response(null, { status: 302, headers: { location: to, 'cache-control': 'private, no-store', vary: 'User-Agent' } })
 
-const text = (body: string, status: number, extra: Record<string, string> = {}) =>
+export const text = (body: string, status: number, extra: Record<string, string> = {}) =>
   new Response(body, { status, headers: { 'content-type': 'text/html; charset=utf-8', 'x-robots-tag': 'noindex', ...extra } })
 
 /** GET /s/:id (the page or the redirect) and GET /s/:id.png (the card). Open to anyone; there is nothing private in it. */

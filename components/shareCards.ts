@@ -15,7 +15,7 @@ const FOOT = 96
 
 // The current theme's colours as read off the page, as "r,g,b" triplets; these are the light theme's, for when a
 // variable cannot be read (a page without the fantasy root, a test).
-const LIGHT = {
+export const LIGHT = {
   bg: '246,246,247',
   panel: '255,255,255',
   sunken: '244,244,245',

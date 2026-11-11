@@ -47,6 +47,7 @@ import { NavBanner } from '../components/RevealBanner'
 import { useReveal } from '../components/useReveal'
 import { useDeepLink } from '../components/useDeepLink'
 import DeepLinkNote from '../components/DeepLinkNote'
+import { SharedTradeOpener } from '../components/TradeShare'
 
 const PREFS_KEY = 'ff:prefs'
 
@@ -287,8 +288,13 @@ const FantasyPage = () => {
   const selectLeague = useCallback((id: string | null, season?: string | null) => setPrefs((p) => (p ? { ...p, leagueId: id, ...(season !== undefined ? { season } : {}) } : p)), [])
   const deepLink = useDeepLink({ onboarded: !!prefs?.onboarded, data, loading, selectLeague, leagueId: prefs?.leagueId ?? null, season: prefs?.season ?? null })
   const deep = useMemo(() => (deepLink.ready ? { week: deepLink.ready.week, finish: deepLink.finish } : null), [deepLink.ready?.week, deepLink.finish]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A shared trade opens in the builder, and the reveal does not open over it this visit.
+  const [tradeLink, setTradeLink] = useState(false)
+  useEffect(() => {
+    if (deepLink.link?.trade) setTradeLink(true)
+  }, [deepLink.link?.trade])
   // While a link is still finding its league, the reveal that opens by itself waits.
-  const reveal = useReveal({ data, analysis, models, prefs: revealPrefs, blocked: !appUp || tour || tourDue || (!!deepLink.link && !deepLink.ready), quiet: toured, deep })
+  const reveal = useReveal({ data, analysis, models, prefs: revealPrefs, blocked: !appUp || tour || tourDue || tradeLink || (!!deepLink.link && !deepLink.ready), quiet: toured, deep })
   const endTour = useCallback(() => {
     setTour(false)
     writeStored(TOUR_KEY, '1')
@@ -450,7 +456,7 @@ const FantasyPage = () => {
         }}
         onCancel={(prefs.provider === 'espn' ? prefs.espnLeagueId : prefs.username) ? () => update({ onboarded: true }) : undefined}
         cancelLabel={prefs.provider === 'espn' ? `keep ESPN league ${prefs.espnLeagueId}` : `keep @${prefs.username}`}
-        hint={deepLink.link ? (deepLink.link.week != null ? 'Someone shared a Power Rank with you. Sign in and it opens right up.' : 'Someone shared a league with you. Sign in and it opens right up.') : undefined}
+        hint={deepLink.link ? (deepLink.link.trade ? 'Someone shared a trade with you. Sign in and it opens in the trade builder.' : deepLink.link.week != null ? 'Someone shared a Power Rank with you. Sign in and it opens right up.' : 'Someone shared a league with you. Sign in and it opens right up.') : undefined}
       />
     )
   }
@@ -546,6 +552,7 @@ const FantasyPage = () => {
         </div>
         {sheets.length > 0 && <SheetHost stack={sheets} onBack={backSheet} onClose={closeSheet} />}
         <RevealHost api={reveal} />
+        <SharedTradeOpener trade={deepLink.trade} finish={deepLink.finish} />
         {deepLink.note && <DeepLinkNote text={deepLink.note.text} onDismiss={deepLink.dismiss} />}
         <CommandPalette
           open={palette}
