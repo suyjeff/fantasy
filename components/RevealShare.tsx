@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Recap } from '../lib/recap'
 import { sharedUrl } from '../lib/sharedGrades'
 import { useFantasy } from './FantasyContext'
-import { ogText, readPalette, renderOgCard, renderRankCard, toBlob, type CardInput, type OgInput } from './shareCards'
+import { ogText, postCard, readPalette, renderOgCard, renderRankCard, toBlob, type CardInput, type OgInput } from './shareCards'
 import { deepLinkUrl } from './useDeepLink'
 import { cx } from './ui'
 
@@ -100,21 +100,9 @@ const uploadPreview = async (input: ShareInput, blob: Blob, key: string): Promis
     provider: input.provider,
     top: input.card.teams.slice(0, 5).map((t) => ({ rank: t.rank, name: t.name.slice(0, 60), score: t.score, move: t.move })),
   }
-  const form = new FormData()
-  form.set('meta', JSON.stringify(meta))
-  form.set('png', blob, 'power-rank.png')
-  const ctl = new AbortController()
-  const timer = window.setTimeout(() => ctl.abort(), 20000)
-  try {
-    const r = await fetch(`${base}/share`, { method: 'POST', body: form, signal: ctl.signal })
-    if (!r.ok) throw new Error(`share ${r.status}`)
-    const { id } = (await r.json()) as { id?: string }
-    if (!id || !/^[A-Za-z0-9]{10,32}$/.test(id)) throw new Error('bad id')
-    writeStored(key, id, base)
-    return `${base}/s/${id}`
-  } finally {
-    window.clearTimeout(timer)
-  }
+  const { id } = await postCard('/share', meta, blob)
+  writeStored(key, id, base)
+  return `${base}/s/${id}`
 }
 
 // What was made, kept by what it was made from and not by the recap object (a weight slider builds a new recap of the

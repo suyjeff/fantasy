@@ -20,12 +20,14 @@ import { Disclosure } from './Disclosure'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
 import { Avatar, Button, Dropdown, PlayerAvatar, WeekBars, cx, fmt, fmtSigned, pct, playerImage, reducedMotion } from './ui'
+import { MAX_DEAL_TEAMS } from '../workers/grades/src/tradeLink'
 
 // The trade builder's body: pick the teams and the players, then review the deal priced for every side. On a phone
 // the two are steps of one sheet; on a wide screen they sit side by side. It holds no deal of its own: the dock
 // (TradeDock) keeps it, so it survives being minimized and moving between pages.
 
-export const MAX_TEAMS = 4
+/** The most teams in one deal: the same limit a shared trade's link holds to. */
+export const MAX_TEAMS = MAX_DEAL_TEAMS
 export type BuilderStep = 'pick' | 'review'
 export type BuilderLayout = 'steps' | 'split'
 export type DealUpdate = (fn: (d: Deal) => Deal) => void

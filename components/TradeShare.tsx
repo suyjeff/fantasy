@@ -8,9 +8,11 @@ import {
   NOTE_MAX,
   blockOn,
   buildCard,
+  cardFileName,
   cardText,
   decodeDeal,
   linkMeta,
+  linkProblem,
   ppwDefault,
   shareBlocks,
   slotFill,
@@ -25,7 +27,7 @@ import {
 import { useFantasy } from './FantasyContext'
 import { copyText, save } from './RevealShare'
 import { useModal } from './Sheet'
-import { toBlob } from './shareCards'
+import { postCard, toBlob } from './shareCards'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { CLOSE, Glyph, useDealRead } from './TradeBuilder'
 import { useLeverages, useTradeSides } from './TradeCard'
@@ -80,8 +82,8 @@ const useShareFacts = (deal: Deal, audience: Audience): ShareFacts | null => {
     const perceived = models.perceived
     const consensus = side && perceived ? Math.round((tradeValue(side.receives, perceived, analysis.currency, false) - tradeValue(side.sends, perceived, analysis.currency, true)) * 100) / 100 : null
     const leverage = rid != null && rid === partner ? (lev === undefined ? undefined : lev ? { playoffs: lev.partner.playoffs, title: lev.partner.title, after: lev.after.partner.playoffs } : null) : null
-    return { deal, read, leverage, fill, consensus, form }
-  }, [read, audience, analysis, data, models.perceived, lev, partner, deal, form])
+    return { deal, read, leverage, mine: me != null && deal.teams.includes(me), fill, consensus, form }
+  }, [read, audience, analysis, data, models.perceived, lev, partner, deal, form, me])
 }
 
 // ---- Small controls ----
@@ -179,30 +181,49 @@ const remember = <T,>(m: Map<string, Promise<T>>, key: string, make: () => Promi
   return hit
 }
 
-const fileName = (card: TradeCard, format: CardFormat) => {
-  const who = (card.to ?? card.league).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'trade'
-  return `trade-${who}-wk${card.week}${format === 'square' ? '' : `-${format}`}.png`
+/** The worker takes a card of at most this many bytes (workers/grades/src/share.ts `MAX_PNG`). */
+const OG_MAX = 400 * 1024
+const TOO_LARGE = 'This trade’s card is too large to link. Copy or download the image instead.'
+
+/** A link that cannot be made for this card, however often it is asked for: the reason is said as it is. */
+class NoLink extends Error {}
+
+/** Fewer shades of each colour: at link-preview size it does not show, and a card full of headshots packs far smaller. */
+const posterize = (canvas: HTMLCanvasElement, levels: number) => {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const d = img.data
+  const step = 255 / (levels - 1)
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = Math.round(d[i] / step) * step
+    d[i + 1] = Math.round(d[i + 1] / step) * step
+    d[i + 2] = Math.round(d[i + 2] / step) * step
+  }
+  ctx.putImageData(img, 0, 0)
+}
+
+/** The wide picture within the worker's limit: as drawn, else with fewer shades; null when neither fits. */
+const ogFor = async (card: TradeCard, theme: CardTheme): Promise<Blob | null> => {
+  const canvas = await renderTradeCard(card, 'og', paletteOf(theme))
+  const og = await toBlob(canvas)
+  if (og.size <= OG_MAX) return og
+  posterize(canvas, 16)
+  const small = await toBlob(canvas)
+  return small.size <= OG_MAX ? small : null
 }
 
 /** The worker's link for a card: the wide picture and the card's facts, uploaded once per card. */
 const uploadLink = async (card: TradeCard, theme: CardTheme): Promise<string> => {
-  const base = sharedUrl()
-  if (!base) throw new Error('no worker')
-  const og = await toBlob(await renderTradeCard(card, 'og', paletteOf(theme)))
-  if (og.size > 400 * 1024) throw new Error('card too large')
-  const form = new FormData()
-  form.set('meta', JSON.stringify(linkMeta(card)))
-  form.set('png', og, 'trade.png')
-  const ctl = new AbortController()
-  const timer = window.setTimeout(() => ctl.abort(), 20000)
+  const problem = linkProblem(card)
+  if (problem) throw new NoLink(problem)
+  const og = await ogFor(card, theme)
+  if (!og) throw new NoLink(TOO_LARGE)
   try {
-    const r = await fetch(`${base}/trade`, { method: 'POST', body: form, signal: ctl.signal })
-    if (!r.ok) throw new Error(`share ${r.status}`)
-    const { id } = (await r.json()) as { id?: string }
-    if (!id || !/^[A-Za-z0-9]{10,32}$/.test(id)) throw new Error('bad id')
+    const { base, id } = await postCard('/trade', linkMeta(card), og)
     return `${base}/t/${id}`
-  } finally {
-    window.clearTimeout(timer)
+  } catch (e) {
+    throw (e as Error)?.message === 'share 413' ? new NoLink(TOO_LARGE) : e
   }
 }
 
@@ -224,7 +245,8 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
   const [theme, setTheme] = useState<CardTheme>('app')
   const [format, setFormat] = useState<CardFormat>('square')
   const [status, setStatus] = useState<Status>(null)
-  const [link, setLink] = useState<{ key: string; url: string | null; state: 'working' | 'ready' | 'failed' } | null>(null)
+  // `blocked`: this card cannot have a link at all (too big), so the button stays off and says why, rather than retry.
+  const [link, setLink] = useState<{ key: string; url: string | null; state: 'working' | 'ready' | 'failed' | 'blocked'; reason?: string } | null>(null)
   const timer = useRef(0)
   useEffect(() => () => window.clearTimeout(timer.current), [])
   const say = useCallback((s: Status) => {
@@ -303,7 +325,7 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
     remember(fileCache, fileKey, () =>
       renderTradeCard(card!, format, pal)
         .then(toBlob)
-        .then((b) => new File([b], fileName(card!, format), { type: 'image/png' })),
+        .then((b) => new File([b], cardFileName(card!, format), { type: 'image/png' })),
     )
   const readyFile = file?.key === fileKey ? file.file : null
 
@@ -351,16 +373,17 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
   const curLink = link?.key === linkKey ? link : null
   const copyLink = () => {
     if (!card || !worker) return
-    if (curLink?.state === 'working') return
+    if (curLink?.state === 'working' || curLink?.state === 'blocked') return
     setLink({ key: linkKey, url: null, state: 'working' })
     remember(linkCache, linkKey, () => uploadLink(card, theme)).then(
       (url) => {
         setLink((l) => (l?.key === linkKey ? { key: linkKey, url, state: 'ready' } : l))
         copyText(url).then((ok) => say(ok ? { tone: 'ok', text: 'Link copied' } : { tone: 'bad', text: 'Link made: copy it from the field.' }))
       },
-      () => {
-        setLink((l) => (l?.key === linkKey ? { key: linkKey, url: null, state: 'failed' } : l))
-        say({ tone: 'bad', text: 'Could not make the link. Try again in a moment.' })
+      (e) => {
+        const reason = e instanceof NoLink ? e.message : null
+        setLink((l) => (l?.key === linkKey ? { key: linkKey, url: null, state: reason ? 'blocked' : 'failed', reason: reason ?? undefined } : l))
+        say({ tone: 'bad', text: reason ?? 'Could not make the link. Try again in a moment.' })
       },
     )
   }
@@ -492,7 +515,12 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
           detail={audience.kind === 'pitch' && facts && !ppwDefault(audience, facts.read, analysis.horizon.perWeek) ? 'Off by default: what they send projects higher' : 'Each player’s expected points a week'}
         />
         {data.tradeFaab && hasFaab && <Switch label="FAAB in the trade" checked={faab} onChange={setFaab} detail="The dollars moving, on each side" />}
-        <Switch label="Sign with your team" checked={sender} onChange={setSender} detail={sender ? `Proposed by ${name(me)}` : 'Your team’s name is left off'} />
+        <Switch
+          label="Sign with your team"
+          checked={sender}
+          onChange={setSender}
+          detail={sender ? `Proposed by ${name(me)}` : worker ? 'Your team’s name stays off the image and page. The link still opens the full trade in the app, where every team is visible to league members.' : 'Your team’s name stays off the image.'}
+        />
         <div className="pt-2">
           <div className="mb-1 flex items-baseline justify-between">
             <label htmlFor={`${titleId}-note`} className="text-[13px] text-ff-text">
@@ -564,13 +592,13 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
           </ActionBtn>
         )}
         {worker ? (
-          <ActionBtn onClick={copyLink} disabled={!card || curLink?.state === 'working'}>
-            {curLink?.state === 'working' ? 'Making link…' : curLink?.state === 'failed' ? 'Retry link' : 'Copy link'}
+          <ActionBtn onClick={copyLink} disabled={!card || curLink?.state === 'working' || curLink?.state === 'blocked'}>
+            {curLink?.state === 'working' ? 'Making link…' : curLink?.state === 'failed' ? 'Retry link' : curLink?.state === 'blocked' ? 'No link' : 'Copy link'}
           </ActionBtn>
         ) : null}
       </div>
       <p role="status" aria-live="polite" className={cx('mt-2 min-h-[1.2em] font-mono text-[11px] leading-snug', status?.tone === 'bad' ? 'text-ff-neg' : 'text-ff-muted')}>
-        {status?.text ?? (worker ? (curLink?.state === 'ready' ? 'The link shows the wide card in a message and opens the trade in the app.' : '') : 'Sharing by link isn’t set up here. Copy or download the image instead.')}
+        {status?.text ?? (worker ? (curLink?.state === 'ready' ? 'The link shows the wide card in a message and opens the trade in the app.' : curLink?.state === 'blocked' ? curLink.reason : '') : 'Sharing by link isn’t set up here. Copy or download the image instead.')}
       </p>
     </div>
   )

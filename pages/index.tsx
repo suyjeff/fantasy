@@ -288,11 +288,8 @@ const FantasyPage = () => {
   const selectLeague = useCallback((id: string | null, season?: string | null) => setPrefs((p) => (p ? { ...p, leagueId: id, ...(season !== undefined ? { season } : {}) } : p)), [])
   const deepLink = useDeepLink({ onboarded: !!prefs?.onboarded, data, loading, selectLeague, leagueId: prefs?.leagueId ?? null, season: prefs?.season ?? null })
   const deep = useMemo(() => (deepLink.ready ? { week: deepLink.ready.week, finish: deepLink.finish } : null), [deepLink.ready?.week, deepLink.finish]) // eslint-disable-line react-hooks/exhaustive-deps
-  // A shared trade opens in the builder, and the reveal does not open over it this visit.
-  const [tradeLink, setTradeLink] = useState(false)
-  useEffect(() => {
-    if (deepLink.link?.trade) setTradeLink(true)
-  }, [deepLink.link?.trade])
+  // A shared trade opens in the builder (or says why it can't), and the reveal does not open over it this visit.
+  const tradeLink = deepLink.sharedTrade
   // While a link is still finding its league, the reveal that opens by itself waits.
   const reveal = useReveal({ data, analysis, models, prefs: revealPrefs, blocked: !appUp || tour || tourDue || tradeLink || (!!deepLink.link && !deepLink.ready), quiet: toured, deep })
   const endTour = useCallback(() => {

@@ -4,7 +4,8 @@ import worker from '../../workers/grades/src/index'
 import { tradeAppUrl } from '../../workers/grades/src/links'
 import { TTL_SECONDS } from '../../workers/grades/src/share'
 import { MAX_TRADE_META, parseTradeMeta } from '../../workers/grades/src/trade'
-import { decodeDeal } from '../tradeShare'
+import { MAX_DEAL_PARTS, MAX_DEAL_TEAMS, MAX_TRADE_CHARS } from '../../workers/grades/src/tradeLink'
+import { cardText, decodeDeal, linkMeta, linkProblem, type TradeCard } from '../tradeShare'
 
 // The worker's shared trades (workers/grades/src/trade.ts), run against a fake of its KV namespace.
 const fakeKV = () => {
@@ -53,8 +54,8 @@ const meta = (over: Record<string, unknown> = {}) => ({
   from: 'chode',
   note: 'Open to more',
   sides: [
-    { head: 'Emillionaires gets', focus: true, faab: 0, players: [{ name: 'Christian McCaffrey', pos: 'RB', team: 'SF', ppw: 17.9, tag: 'buy low', from: null }] },
-    { head: 'chode gets', focus: false, faab: 15, players: [{ name: 'Justin Jefferson', pos: 'WR', team: 'MIN', ppw: 16.2, tag: null, from: null }] },
+    { rosterId: 2, head: 'Emillionaires gets', focus: true, faab: 0, players: [{ id: '4034', name: 'Christian McCaffrey', pos: 'RB', team: 'SF', ppw: 17.9, tag: 'buy low', from: null }] },
+    { rosterId: 1, head: 'chode gets', focus: false, faab: 15, players: [{ id: '6794', name: 'Justin Jefferson', pos: 'WR', team: 'MIN', ppw: 16.2, tag: null, from: null }] },
   ],
   stats: [{ label: 'Lineup', value: '+2.3', unit: 'pts/wk', sub: 'better 9 of 11 weeks', tone: 'pos' }],
   strip: [
@@ -105,8 +106,6 @@ describe('parseTradeMeta', () => {
       [{ season: 2026 }, 'bad season'],
       [{ week: 31 }, 'bad week'],
       [{ provider: 'yahoo' }, 'bad provider'],
-      [{ title: '' }, 'bad title'],
-      [{ description: 'x'.repeat(301) }, 'bad description'],
       [{ to: null }, 'bad to'],
       [{ from: 'x'.repeat(61) }, 'bad from'],
       [{ note: 'x'.repeat(101) }, 'bad note'],
@@ -114,7 +113,9 @@ describe('parseTradeMeta', () => {
       [{ trade: 'x'.repeat(900) }, 'bad trade'],
       [{ sides: [meta().sides[0]] }, 'bad sides'],
       [{ sides: Array(5).fill(meta().sides[0]) }, 'bad sides'],
-      [{ sides: [{ ...meta().sides[0], players: Array(11).fill(p0) }, meta().sides[1]] }, 'bad sides'],
+      [{ sides: [{ ...meta().sides[0], players: Array(MAX_DEAL_PARTS + 1).fill(p0) }, meta().sides[1]] }, 'bad sides'],
+      [{ sides: [{ ...meta().sides[0], rosterId: 'two' }, meta().sides[1]] }, 'bad sides'],
+      [{ sides: [{ ...meta().sides[0], players: [{ ...p0, id: '<b>' }] }, meta().sides[1]] }, 'bad player'],
       [{ sides: [{ ...meta().sides[0], faab: -5 }, meta().sides[1]] }, 'bad sides'],
       [{ sides: [{ ...meta().sides[0], players: [{ ...p0, pos: '<b>' }] }, meta().sides[1]] }, 'bad player'],
       [{ sides: [{ ...meta().sides[0], players: [{ ...p0, ppw: 'lots' }] }, meta().sides[1]] }, 'bad player'],
@@ -130,6 +131,130 @@ describe('parseTradeMeta', () => {
     expect(parseTradeMeta(null)).toBe('bad meta')
     // A league view has no recipient.
     expect(parseTradeMeta(meta({ kind: 'league', to: null }))).toMatchObject({ kind: 'league', to: null })
+  })
+})
+
+describe('the deal behind the card', () => {
+  const [s0, s1] = meta().sides
+  it('writes the title and description itself, ignoring what the request says', async () => {
+    const m = parseTradeMeta(meta({ title: 'FREE MONEY: click here', description: 'Emillionaires gets: Patrick Mahomes' })) as { title: string; description: string }
+    expect(m.title).toBe('Trade idea for Emillionaires from chode')
+    expect(m.description).toBe('Emillionaires gets: Christian McCaffrey · chode gets: Justin Jefferson, $15 FAAB · Lineup +2.3 pts/wk')
+    // Missing altogether is fine too: the app no longer sends them.
+    expect(parseTradeMeta({ ...meta(), title: undefined, description: undefined })).toMatchObject({ title: m.title, description: m.description })
+    // And the page shows only its own words.
+    const { env, id } = await stored({ title: 'FREE MONEY: click here', description: 'spoofed' })
+    const html = await (await get(env, `/t/${id}`)).text()
+    expect(html).not.toContain('FREE MONEY')
+    expect(html).not.toContain('spoofed')
+    expect(html).toContain('<meta property="og:title" content="Trade idea for Emillionaires from chode">')
+    expect(html).toContain('<h1>Trade idea for Emillionaires from chode</h1>')
+  })
+  it('words a preview exactly as the app does', () => {
+    const card: TradeCard = {
+      v: 1,
+      kind: 'league',
+      league: 'NYC Fantasy Football',
+      leagueId: '1234567890',
+      season: '2026',
+      week: 10,
+      provider: 'sleeper',
+      to: null,
+      from: 'chode',
+      sides: [
+        { rosterId: 1, head: 'chode gets', avatar: null, focus: false, faab: 15, players: [{ id: '6794', name: 'Justin Jefferson', pos: 'WR', team: 'MIN', ppw: 16.2, tag: null, from: null }] },
+        { rosterId: 2, head: 'Emillionaires gets', avatar: null, focus: false, faab: 0, players: [{ id: '4034', name: 'Christian McCaffrey', pos: 'RB', team: 'SF', ppw: null, tag: null, from: null }] },
+      ],
+      stats: [{ key: 'lineup', label: 'chode', value: '+1.2', unit: '/wk', sub: null, tone: 'pos' }],
+      strip: null,
+      note: null,
+      deal: { moves: [['4034', 1, 2], ['6794', 2, 1]], faab: [[2, 1, 15]] },
+    }
+    const m = parseTradeMeta(JSON.parse(JSON.stringify(linkMeta(card))))
+    expect(m).toMatchObject(cardText(card))
+  })
+  it('refuses a deal that is not the one pictured', () => {
+    const bad: Record<string, unknown>[] = [
+      // A player moves in the deal but is not on the card.
+      { trade: '1.2.4034,2.1.6794,2.1.$15,1.2.9999' },
+      // A player is on the card but not in the deal.
+      { trade: '1.2.4034,2.1.$15' },
+      // The right players, the wrong way round.
+      { trade: '2.1.4034,1.2.6794,2.1.$15' },
+      // A side under another team's roster.
+      { sides: [{ ...s0, rosterId: 3 }, s1] },
+      // A side on the card that is not in the deal.
+      { sides: [s0, s1, { rosterId: 7, head: 'Third gets', focus: false, faab: 0, players: [] }] },
+      // FAAB shown that the deal does not pay, or other than it pays.
+      { trade: '1.2.4034,2.1.6794' },
+      { sides: [s0, { ...s1, faab: 50 }] },
+      { trade: '1.2.4034,2.1.6794,2.1.$15,1.2.$5', sides: [s0, s1] },
+      // The recipient's FAAB figure is not what they take in.
+      { stats: [{ label: 'FAAB in', value: '$40', unit: null, sub: null, tone: 'pos' }] },
+    ]
+    for (const over of bad) expect(parseTradeMeta(meta(over)), JSON.stringify(over)).toBe('trade does not match the card')
+    // FAAB left off the card entirely is fine: the deal still pays it.
+    expect(parseTradeMeta(meta({ sides: [s0, { ...s1, faab: 0 }] }))).toMatchObject({ trade: '1.2.4034,2.1.6794,2.1.$15' })
+    // So is the recipient's FAAB figure when it is what they take in, net.
+    expect(parseTradeMeta(meta({ trade: '2.1.4034,1.2.6794,1.2.$15', sides: [{ ...s0, faab: 15, players: [{ ...s0.players[0], id: '6794' }] }, { ...s1, faab: 0, players: [{ ...s1.players[0], id: '4034' }] }], stats: [{ label: 'FAAB in', value: '$15', unit: null, sub: null, tone: 'pos' }] }))).not.toBeTypeOf('string')
+  })
+})
+
+describe('the largest deal the builder can make', () => {
+  // Every field at its cap, in characters JSON writes twice, so the bound holds whatever the names are.
+  const q = (n: number) => '"'.repeat(n)
+  const teams = Array.from({ length: MAX_DEAL_TEAMS }, (_, i) => 9001 + i)
+  const ids = Array.from({ length: MAX_DEAL_PARTS }, (_, i) => `p${String(i).padStart(23, '0')}`)
+  const trade = ids.map((p, i) => `${teams[(i + 1) % teams.length]}.${teams[i % teams.length]}.${p}`).join(',')
+  const big = meta({
+    league: q(80),
+    leagueId: 'x'.repeat(64),
+    to: q(60),
+    from: q(60),
+    note: q(100),
+    sides: teams.map((t) => ({
+      rosterId: t,
+      head: q(80),
+      focus: t === teams[0],
+      faab: 0,
+      players: ids.filter((_, i) => teams[i % teams.length] === t).map((id) => ({ id, name: q(60), pos: 'ABCDEF', team: 'ABCD', ppw: -9.99, tag: 'sell high', from: q(60) })),
+    })),
+    stats: Array.from({ length: 8 }, () => ({ label: q(60), value: q(24), unit: q(10), sub: q(90), tone: 'neutral' })),
+    strip: Array.from({ length: 20 }, () => ({ week: 30, delta: -199.99 })),
+    net: -199.99,
+    trade,
+  })
+  it('fits a link, within the limits the app checks before it posts', async () => {
+    expect(trade.length).toBe(MAX_TRADE_CHARS)
+    expect(decodeDeal(trade)?.moves).toHaveLength(MAX_DEAL_PARTS)
+    expect(parseTradeMeta(big)).not.toBeTypeOf('string')
+    const size = JSON.stringify(big).length
+    expect(size).toBeLessThanOrEqual(MAX_TRADE_META)
+    // The bound is close to the real worst case, not a guess far above it.
+    expect(size).toBeGreaterThan(MAX_TRADE_META * 0.9)
+    const env = { GRADES: fakeKV() }
+    expect((await post(env, { meta: big, png: b64(png()) })).status).toBe(200)
+  })
+  it('says why when a trade is too big for a link, before posting', () => {
+    const card = (n: number): TradeCard => ({
+      v: 1,
+      kind: 'league',
+      league: 'L',
+      leagueId: '1',
+      season: '2026',
+      week: 1,
+      provider: 'sleeper',
+      to: null,
+      from: null,
+      sides: [],
+      stats: [],
+      strip: null,
+      note: null,
+      deal: { moves: Array.from({ length: n }, (_, i) => [`p${i}`, 1, 2] as [string, number, number]), faab: [] },
+    })
+    expect(linkProblem(card(MAX_DEAL_PARTS))).toBeNull()
+    expect(linkProblem(card(MAX_DEAL_PARTS + 1))).toBe(`This trade moves ${MAX_DEAL_PARTS + 1} players and payments, more than the ${MAX_DEAL_PARTS} a link can carry. Copy or download the image instead.`)
+    expect(linkProblem({ ...card(1), deal: { moves: [['has space', 1, 2]], faab: [] } })).toMatch(/can’t be put in a link/)
   })
 })
 

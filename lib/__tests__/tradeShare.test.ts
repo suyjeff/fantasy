@@ -3,6 +3,7 @@ import type { Deal, DealRead, DealSide } from '../deal'
 import {
   blockOn,
   buildCard,
+  cardFileName,
   cardText,
   cleanNote,
   decodeDeal,
@@ -17,6 +18,7 @@ import {
   type ShareFacts,
   type ShareOptions,
 } from '../tradeShare'
+import { MAX_TRADE_CHARS } from '../../workers/grades/src/tradeLink'
 
 // You (1) send Jefferson to them (2) for McCaffrey. The figures are picked so every one of yours is distinctive, and
 // a leak of any of them into what they would see can be caught by its spelling.
@@ -97,7 +99,16 @@ describe('what a pitch may show', () => {
     expect(byKey(facts({ leverage: undefined })).odds.reason).toBe('still working out the odds')
     expect(byKey(facts({ leverage: null })).odds.reason).toBe('no season forecast for this league')
     const three = { ...deal, teams: [1, 2, 3] }
-    expect(byKey(facts({ deal: three })).odds.reason).toBe('two-team trades only')
+    expect(byKey(facts({ deal: three })).odds.reason).toBe('odds are simulated only for two-team trades you’re in')
+  })
+  it('says plainly why there are no odds when you are not in a two-team deal', () => {
+    const why = 'odds are simulated only for two-team trades you’re in'
+    // A Compare column of other teams' trade: priced, but nobody simulated it for you.
+    expect(byKey(facts({ leverage: null, mine: false })).odds.reason).toBe(why)
+    const d3: Deal = { teams: [1, 2, 3], moves: [{ player: 'jj', from: 1, to: 2 }, { player: 'cmc', from: 2, to: 3 }], faab: [] }
+    expect(byKey(facts({ deal: d3, leverage: null })).odds.reason).toBe(why)
+    // In a two-team deal of yours, a missing forecast is still said as such.
+    expect(byKey(facts({ leverage: null })).odds.reason).toBe('no season forecast for this league')
   })
   it('shows the slot it fills only when it gets better', () => {
     expect(byKey(facts()).need.stats[0]).toMatchObject({ label: 'Fills WR2', value: '7.0 → 12.5' })
@@ -183,6 +194,25 @@ describe('the card a pitch sends', () => {
     expect(c.sides[1].avatar).toBeNull()
     expect(JSON.stringify([c, linkMeta(c), cardText(c)])).not.toContain('Sender FC')
   })
+  it('unsigned, names you in no string it sends or saves, in a deal of two or three', () => {
+    const d3: Deal = { teams: [1, 2, 3], moves: [{ player: 'jj', from: 1, to: 2 }, { player: 'cmc', from: 2, to: 3 }, { player: 'ja', from: 3, to: 1 }], faab: [{ from: 1, to: 2, dollars: 7 }] }
+    const r3: DealRead = {
+      valid: true,
+      weeks: [10],
+      sides: [side({ rosterId: 1, receives: ['ja'], sends: ['jj'], faab: -7 }), side({ rosterId: 2, receives: ['jj'], sends: ['cmc'], faab: 7, lineup: 1, perWeek: weeks([1]), weeksBetter: 1 }), side({ rosterId: 3, receives: ['cmc'], sends: ['ja'] })],
+    }
+    const strings = (v: unknown): string[] => (typeof v === 'string' ? [v] : v && typeof v === 'object' ? Object.values(v).flatMap(strings) : [])
+    for (const f of [facts(), facts({ deal: d3, read: r3, leverage: null })]) {
+      for (const audience of [pitch, { kind: 'league' } as Audience]) {
+        const c = card(f, { sender: false, audience, note: 'Open to more' })
+        const sent = [...strings(c), ...strings(linkMeta(c)), ...strings(cardText(c)), ...(['square', 'og', 'story'] as const).map((fmt) => cardFileName(c, fmt))]
+        expect(sent.length).toBeGreaterThan(5)
+        if (audience.kind === 'pitch') for (const t of sent) expect(t).not.toContain('Sender FC')
+        // The link must still open the deal, so your roster id travels in it: the sheet says so where it is switched off.
+        expect(decodeDeal(linkMeta(c).trade)?.teams).toContain(ME)
+      }
+    }
+  })
   it('drops points per week, timing tags and FAAB when switched off', () => {
     const withFaab = { ...deal, faab: [{ from: ME, to: THEM, dollars: 12 }] }
     const r = { ...good, sides: good.sides.map((s) => (s.rosterId === THEM ? { ...s, faab: 12 } : { ...s, faab: -12 })) }
@@ -194,7 +224,21 @@ describe('the card a pitch sends', () => {
     expect(off.sides.flatMap((s) => s.players).every((p) => p.ppw == null && p.tag == null)).toBe(true)
     expect(off.sides[0].faab).toBe(0)
     expect(off.stats.map((s) => s.key)).not.toContain('faab')
-    expect(off.deal.faab).toEqual([])
+    // Hiding FAAB hides it from the picture, not from the deal: the link opens the trade that was offered.
+    expect(off.deal.faab).toEqual([[ME, THEM, 12]])
+    expect(decodeDeal(linkMeta(off).trade)).toEqual(withFaab)
+    expect(linkMeta(off).sides.map((s) => s.faab)).toEqual([0, 0])
+  })
+  it('keeps a team whose only part is FAAB on the card when FAAB is hidden, so the link opens the same teams', () => {
+    const d3: Deal = { teams: [1, 2, 3], moves: [{ player: 'jj', from: 1, to: 2 }, { player: 'cmc', from: 2, to: 1 }], faab: [{ from: 1, to: 3, dollars: 5 }] }
+    const r3: DealRead = { valid: true, weeks: [10], sides: [side({ rosterId: 1, receives: ['cmc'], sends: ['jj'], faab: -5 }), side({ rosterId: 2, receives: ['jj'], sends: ['cmc'], lineup: 1, perWeek: weeks([1]), weeksBetter: 1 }), side({ rosterId: 3, faab: 5 })] }
+    const c = card(facts({ deal: d3, read: r3, leverage: null }), { faab: false })
+    expect(c.sides.map((s) => [s.rosterId, s.faab])).toEqual([
+      [2, 0],
+      [1, 0],
+      [3, 0],
+    ])
+    expect(decodeDeal(linkMeta(c).trade)).toEqual(d3)
   })
   it('keeps the note to one line and a length', () => {
     expect(cleanNote('  hi\nthere\u0000 ')).toBe('hi there')
@@ -284,5 +328,22 @@ describe('a shared trade’s address', () => {
     const { parseDeepLink } = await import('../../components/useDeepLink')
     expect(parseDeepLink('?league=abc&season=2026&trade=1.2.4034%2C2.1.%245')).toEqual({ league: 'abc', season: '2026', week: null, trade: '1.2.4034,2.1.$5' })
     expect(decodeDeal(parseDeepLink('?league=abc&trade=1.2.4034%2C2.1.%245')!.trade)).toEqual({ teams: [1, 2], moves: [{ player: '4034', from: 1, to: 2 }], faab: [{ from: 2, to: 1, dollars: 5 }] })
+  })
+  it('turns a trade away, saying why, when it has no league to open in or is longer than any deal', async () => {
+    const { parseDeepLink } = await import('../../components/useDeepLink')
+    for (const q of ['?trade=1.2.4034', '?league=a%20b&trade=1.2.4034', '?season=2026&reveal=3&trade=1.2.4034']) {
+      const link = parseDeepLink(q)!
+      expect(link.trade).toBeUndefined()
+      expect(link.league).toBeNull()
+      expect(link.week).toBeNull()
+      expect(link.refused).toMatch(/doesn’t say which league/)
+    }
+    const longest = Array.from({ length: 30 }, (_, i) => `1001.1002.${String(i).padStart(24, 'p')}`).join(',')
+    expect(longest).toHaveLength(MAX_TRADE_CHARS)
+    expect(parseDeepLink(`?league=abc&trade=${encodeURIComponent(longest)}`)).toMatchObject({ league: 'abc', trade: longest })
+    expect(decodeDeal(longest)?.moves).toHaveLength(30)
+    const tooLong = parseDeepLink(`?league=abc&trade=${encodeURIComponent(`${longest},1`)}`)!
+    expect(tooLong.trade).toBeUndefined()
+    expect(tooLong.refused).toMatch(/longer than any trade/)
   })
 })

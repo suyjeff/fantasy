@@ -1,5 +1,6 @@
 import { CROWN_BAND, CROWN_NODES, CROWN_NODE_R, CROWN_PATH } from './RevealBanner'
 import { POOP_BODY, POOP_FACE } from './RevealArt'
+import { sharedUrl } from '../lib/sharedGrades'
 import { fmt } from './ui'
 
 // The pictures the Power Rank reveal shares, drawn straight onto a canvas so they are the same on every device and
@@ -644,3 +645,26 @@ export const renderGenericOgCard = async (palette: Palette = DARK): Promise<HTML
 
 export const toBlob = (canvas: HTMLCanvasElement) =>
   new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('could not encode the image'))), 'image/png'))
+
+/**
+ * Posts a card and its facts to the worker (`/share` for a ranking, `/trade` for a trade) and answers with the new
+ * link's id and the worker it lives on. Gives up after 20 seconds; a refusal throws with the worker's status.
+ */
+export const postCard = async (path: '/share' | '/trade', meta: unknown, blob: Blob): Promise<{ base: string; id: string }> => {
+  const base = sharedUrl()
+  if (!base) throw new Error('no worker')
+  const form = new FormData()
+  form.set('meta', JSON.stringify(meta))
+  form.set('png', blob, 'card.png')
+  const ctl = new AbortController()
+  const timer = window.setTimeout(() => ctl.abort(), 20000)
+  try {
+    const r = await fetch(`${base}${path}`, { method: 'POST', body: form, signal: ctl.signal })
+    if (!r.ok) throw new Error(`share ${r.status}`)
+    const { id } = (await r.json()) as { id?: string }
+    if (!id || !/^[A-Za-z0-9]{10,32}$/.test(id)) throw new Error('bad id')
+    return { base, id }
+  } finally {
+    window.clearTimeout(timer)
+  }
+}

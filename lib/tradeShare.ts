@@ -4,7 +4,8 @@
 //
 // Everything here is pure: what each block on the card would say, whether it may be shown and why not, and the card
 // itself, built from only the blocks that are both allowed and switched on. The card is also exactly what the link
-// stores (workers/grades/src/trade.ts), so nothing hidden on the picture travels with it.
+// stores (workers/grades/src/trade.ts), so nothing hidden on the picture travels with it, apart from the deal itself:
+// the link opens the whole trade in the app (FAAB left off the picture included), where its teams are all named.
 //
 // In a pitch, a block is allowed only when it is good for the recipient: their lineup gain (and the week strip) when
 // it is a gain, their playoff odds when they rise, a starting slot of theirs that gets better, consensus value that
@@ -15,6 +16,7 @@ import type { Deal, DealRead } from './deal'
 import type { Slot } from './lineup'
 import { applyTrade, isWaiverFill, makeLineupEval, type Horizon, type WaiverFloor } from './trades'
 import type { PlayerMap } from './types'
+import { MAX_DEAL_PARTS, MAX_TRADE_META, parseTrade, tradeText } from '../workers/grades/src/tradeLink'
 
 export type ShareBlockKey = 'lineup' | 'weeks' | 'odds' | 'need' | 'value' | 'faab' | 'momentum'
 export const BLOCK_KEYS: ShareBlockKey[] = ['lineup', 'weeks', 'odds', 'need', 'value', 'faab', 'momentum']
@@ -33,6 +35,8 @@ export type ShareFacts = {
    * undefined while simulating, null when there is none.
    */
   leverage?: { playoffs: number; title: number; after?: number } | null
+  /** False when the sender is not in the deal: odds are simulated only for two-team trades they are in. */
+  mine?: boolean
   /** The recipient's starting slot that improves most this week. */
   fill?: { slot: string; before: number; after: number } | null
   /** The recipient's consensus value in minus out, pts/wk; null when there are no consensus prices. */
@@ -123,7 +127,7 @@ export const shareBlocks = (audience: Audience, facts: ShareFacts, names: (rid: 
   // points, written "pt" as the trade cards write it, and the odds themselves go underneath, so "+11.6" never reads
   // as fantasy points.
   const lev = facts.leverage
-  if (!two) out.push(off('odds', 'two-team trades only'))
+  if (!two || facts.mine === false) out.push(off('odds', 'odds are simulated only for two-team trades you’re in'))
   else if (lev === undefined) out.push(off('odds', 'still working out the odds'))
   else if (lev === null) out.push(off('odds', 'no season forecast for this league'))
   else if (lev.playoffs >= ODDS_EDGE) {
@@ -210,7 +214,7 @@ export type TradeCard = {
    */
   net?: number | null
   note: string | null
-  /** The deal itself, so the link can open it in the app. */
+  /** The whole deal, whatever the card shows, so the link opens the trade that was offered. */
   deal: { moves: [string, number, number][]; faab: [number, number, number][] }
 }
 
@@ -303,7 +307,9 @@ export const buildCard = (ctx: ShareContext, facts: ShareFacts, blocks: BlockSta
         focus: rid === pitch,
       }
     })
-    .filter((s): s is CardSide => !!s && (s.players.length > 0 || s.faab > 0 || deal.moves.some((m) => m.from === s.rosterId) || deal.faab.some((x) => x.from === s.rosterId && x.dollars > 0)))
+    // Every team in the deal has a side, even one whose only part is FAAB left off the card, so the picture and the
+    // deal the link opens name the same teams.
+    .filter((s): s is CardSide => !!s && (s.players.length > 0 || s.faab > 0 || deal.moves.some((m) => m.from === s.rosterId) || deal.faab.some((x) => (x.from === s.rosterId || x.to === s.rosterId) && x.dollars > 0)))
 
   const stats = blocks.filter((b) => on.get(b.key) && (opts.faab || b.key !== 'faab')).flatMap((b) => b.stats)
   const mine = pitch != null ? sideOf(read, pitch) : null
@@ -323,20 +329,21 @@ export const buildCard = (ctx: ShareContext, facts: ShareFacts, blocks: BlockSta
     strip: mine && on.get('weeks') ? mine.perWeek.map((w) => ({ week: w.week, delta: Math.round(w.delta * 10) / 10 })) : null,
     net: mine && on.get('weeks') ? Math.round(mine.lineup * 100) / 100 : null,
     note: note || null,
+    // Always the whole deal, whatever the card shows: the link must open the trade that was offered.
     deal: {
       moves: deal.moves.map((m) => [m.player, m.from, m.to]),
-      faab: opts.faab ? deal.faab.filter((x) => x.dollars > 0).map((x) => [x.from, x.to, x.dollars]) : [],
+      faab: deal.faab.filter((x) => x.dollars > 0).map((x) => [x.from, x.to, x.dollars]),
     },
   }
 }
 
-/** The words a link preview carries besides the picture. */
-export const cardText = (card: TradeCard) => {
-  const gets = (s: CardSide) => [...s.players.map((p) => p.name), s.faab ? `$${s.faab} FAAB` : ''].filter(Boolean).join(', ') || 'nothing'
-  const title = card.kind === 'pitch' ? `Trade idea for ${card.to}${card.from ? ` from ${card.from}` : ''}` : `Trade · ${card.league}`
-  const lines = card.sides.map((s) => `${s.head}: ${gets(s)}`)
-  const stats = card.stats.map((s) => `${s.label} ${s.value}${s.unit ? (s.unit.startsWith('/') ? s.unit : ` ${s.unit}`) : ''}`)
-  return { title: title.slice(0, 120), description: [...lines, ...stats].join(' · ').slice(0, 300) }
+/** The words a link preview carries besides the picture: the worker writes the same from what it stores. */
+export const cardText = (card: TradeCard) => tradeText(card)
+
+/** The image's file name: the recipient, or the league, never the sender. */
+export const cardFileName = (card: TradeCard, format: 'square' | 'og' | 'story') => {
+  const who = (card.to ?? card.league).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'trade'
+  return `trade-${who}-wk${card.week}${format === 'square' ? '' : `-${format}`}.png`
 }
 
 // ---- Where a starting slot gets better ----
@@ -379,70 +386,45 @@ export const slotFill = (input: {
 
 // ---- The deal in a link ----
 
-const PLAYER = /^[A-Za-z0-9_-]{1,24}$/
-
 /** A deal as a link carries it: `from.to.player` for each move and `from.to.$dollars` for each payment, comma-joined. */
 export const encodeDeal = (d: { moves: [string, number, number][]; faab: [number, number, number][] }) =>
   [...d.moves.map(([p, f, t]) => `${f}.${t}.${p}`), ...d.faab.map(([f, t, dollars]) => `${f}.${t}.$${dollars}`)].join(',')
 
 /** The deal back from a link, or null when it is not one (bad shape, too big, or moving nothing). */
-export const decodeDeal = (s: string | null | undefined): Deal | null => {
-  if (!s || s.length > 800) return null
-  const parts = s.split(',')
-  if (parts.length > 30) return null
-  const deal: Deal = { teams: [], moves: [], faab: [] }
-  const team = (t: number) => {
-    if (!deal.teams.includes(t)) deal.teams.push(t)
-  }
-  for (const part of parts) {
-    const m = /^(\d{1,4})\.(\d{1,4})\.(\$?)([A-Za-z0-9_-]{1,24})$/.exec(part)
-    if (!m) return null
-    const from = Number(m[1])
-    const to = Number(m[2])
-    if (from === to) return null
-    if (m[3]) {
-      if (!/^\d{1,4}$/.test(m[4])) return null
-      const dollars = Number(m[4])
-      if (dollars <= 0 || deal.faab.some((x) => x.from === from)) return null
-      deal.faab.push({ from, to, dollars })
-    } else {
-      if (!PLAYER.test(m[4]) || deal.moves.some((x) => x.player === m[4])) return null
-      deal.moves.push({ player: m[4], from, to })
-    }
-    team(from)
-    team(to)
-  }
-  if (deal.teams.length < 2 || deal.teams.length > 4 || (!deal.moves.length && !deal.faab.length)) return null
-  return deal
-}
+export const decodeDeal = (s: string | null | undefined): Deal | null => parseTrade(s)
 
 /**
- * What a link stores: the card's words and numbers as printed, and the deal for the app. Pictures, roster ids and
- * player ids stay behind, apart from the deal the link opens (its players and teams are the trade itself).
+ * What a link stores: the card's words and numbers as printed, and the deal for the app. Pictures stay behind; roster
+ * and player ids go only as far as the deal the link opens already carries them, so the worker can check that the
+ * deal is the one pictured. The title and description are not sent: the worker writes them from these fields.
  */
-export const linkMeta = (card: TradeCard) => {
-  const { title, description } = cardText(card)
-  return {
+export const linkMeta = (card: TradeCard) => ({
     kind: card.kind,
     league: card.league.slice(0, 80),
     leagueId: card.leagueId,
     season: card.season,
     week: card.week,
     provider: card.provider,
-    title,
-    description,
     to: card.to?.slice(0, 60) ?? null,
     from: card.from?.slice(0, 60) ?? null,
     note: card.note,
     sides: card.sides.map((s) => ({
+      rosterId: s.rosterId,
       head: s.head.slice(0, 80),
       focus: s.focus,
       faab: s.faab,
-      players: s.players.map((p) => ({ name: p.name.slice(0, 60), pos: p.pos, team: p.team, ppw: p.ppw, tag: p.tag, from: p.from?.slice(0, 60) ?? null })),
+      players: s.players.map((p) => ({ id: p.id, name: p.name.slice(0, 60), pos: p.pos, team: p.team, ppw: p.ppw, tag: p.tag, from: p.from?.slice(0, 60) ?? null })),
     })),
     stats: card.stats.map((s) => ({ label: s.label.slice(0, 60), value: s.value, unit: s.unit, sub: s.sub?.slice(0, 90) ?? null, tone: s.tone })),
     strip: card.strip,
     net: card.strip ? (card.net ?? null) : null,
     trade: encodeDeal(card.deal),
-  }
+})
+
+/** Why a card cannot become a link, in words for the sender, or null when it can. The worker holds the same limits. */
+export const linkProblem = (card: TradeCard): string | null => {
+  const parts = card.deal.moves.length + card.deal.faab.length
+  if (parts > MAX_DEAL_PARTS) return `This trade moves ${parts} players and payments, more than the ${MAX_DEAL_PARTS} a link can carry. Copy or download the image instead.`
+  if (!parseTrade(encodeDeal(card.deal)) || JSON.stringify(linkMeta(card)).length > MAX_TRADE_META) return 'This trade can’t be put in a link. Copy or download the image instead.'
+  return null
 }

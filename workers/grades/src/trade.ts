@@ -7,15 +7,17 @@
 //   t:<id>:png  the card
 //
 // Both expire after 120 days. Only what the card shows is accepted: every field is read, checked and capped, and
-// anything else in the request is dropped.
+// anything else in the request is dropped. The title and description are written here from those fields, never taken
+// from the request, and the deal the link opens must be the one pictured, so a link cannot say one trade and open
+// another.
 
 import { limited, send } from './common'
 import { LEAGUE_ID, SITE, tradeAppUrl } from './links'
 import { BOTS, CARD, checkPng, clean, esc, int, newId, readBody, text, TTL_SECONDS, ID, type ShareEnv } from './share'
+import { MAX_DEAL_PARTS, MAX_DEAL_TEAMS, MAX_TRADE_META, parseTrade, tradeText, type LinkDeal } from './tradeLink'
 
-/** The facts are a few kilobytes at most: four sides of long names, eight blocks and a note. */
-export const MAX_TRADE_META = 9_000
-const TRADE = /^\d{1,4}\.\d{1,4}\.\$?[A-Za-z0-9_-]{1,24}(,\d{1,4}\.\d{1,4}\.\$?[A-Za-z0-9_-]{1,24}){0,29}$/
+export { MAX_TRADE_META }
+const PLAYER_ID = /^[A-Za-z0-9_-]{1,24}$/
 const TAGS = ['buy low', 'sell high'] as const
 const TONES = ['pos', 'neg', 'neutral'] as const
 
@@ -31,13 +33,32 @@ export type TradeMeta = {
   to: string | null
   from: string | null
   note: string | null
-  sides: { head: string; focus: boolean; faab: number; players: { name: string; pos: string; team: string | null; ppw: number | null; tag: (typeof TAGS)[number] | null; from: string | null }[] }[]
+  sides: { rosterId: number; head: string; focus: boolean; faab: number; players: { id: string; name: string; pos: string; team: string | null; ppw: number | null; tag: (typeof TAGS)[number] | null; from: string | null }[] }[]
   stats: { label: string; value: string; unit: string | null; sub: string | null; tone: (typeof TONES)[number] }[]
   strip: { week: number; delta: number }[] | null
   /** With the strip, the lineup change a week its dashed line marks (lib/tradeShare `TradeCard.net`). */
   net: number | null
-  /** The deal as the app's link carries it (lib/tradeShare `encodeDeal`). */
+  /** The deal as the app's link carries it (lib/tradeShare `encodeDeal`): always the one the sides picture. */
   trade: string
+}
+
+/**
+ * Whether the deal is the one pictured: the same teams, every player on the side of the team he goes to and none left
+ * out, and FAAB, where it is shown, as the deal pays it (each side what it takes in; the recipient's figure, net).
+ */
+const pictured = (deal: LinkDeal, sides: TradeMeta['sides'], stats: TradeMeta['stats']) => {
+  const ids = sides.map((s) => s.rosterId)
+  if (new Set(ids).size !== ids.length || ids.length !== deal.teams.length || !deal.teams.every((t) => ids.includes(t))) return false
+  const listed = sides.flatMap((s) => s.players.map((p) => ({ id: p.id, to: s.rosterId })))
+  if (listed.length !== deal.moves.length || !listed.every((p) => deal.moves.some((m) => m.player === p.id && m.to === p.to))) return false
+  const paid = (rid: number, dir: 'from' | 'to') => deal.faab.filter((x) => x[dir] === rid).reduce((a, x) => a + x.dollars, 0)
+  // FAAB is on the card for every side or for none.
+  const shown = sides.some((s) => s.faab > 0)
+  if (!sides.every((s) => s.faab === (shown ? paid(s.rosterId, 'to') : 0))) return false
+  const focus = sides.find((s) => s.focus)
+  const faabStat = stats.find((s) => s.label === 'FAAB in')
+  if (faabStat && (!shown || !focus || faabStat.value !== `$${paid(focus.rosterId, 'to') - paid(focus.rosterId, 'from')}`)) return false
+  return true
 }
 
 const num = (v: unknown, lo: number, hi: number): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi ? Math.round(v * 100) / 100 : null)
@@ -54,45 +75,44 @@ export const parseTradeMeta = (raw: unknown): TradeMeta | string => {
   const season = typeof m.season === 'string' && /^\d{4}$/.test(m.season) ? m.season : null
   const week = int(m.week, 1, 30)
   const provider = m.provider === 'espn' ? 'espn' : m.provider === 'sleeper' ? 'sleeper' : null
-  const title = clean(m.title, 120)
-  const description = clean(m.description, 300)
   const to = opt(m.to, 60)
   const from = opt(m.from, 60)
   const note = opt(m.note, 100)
-  const trade = typeof m.trade === 'string' && m.trade.length <= 800 && TRADE.test(m.trade) ? m.trade : null
+  const trade = typeof m.trade === 'string' ? m.trade : null
+  const deal = parseTrade(trade)
   if (!kind) return 'bad kind'
   if (!league) return 'bad league'
   if (!leagueId) return 'bad leagueId'
   if (!season) return 'bad season'
   if (week == null) return 'bad week'
   if (!provider) return 'bad provider'
-  if (!title) return 'bad title'
-  if (!description) return 'bad description'
   if (to === undefined || (kind === 'pitch' && !to)) return 'bad to'
   if (from === undefined) return 'bad from'
   if (note === undefined) return 'bad note'
-  if (!trade) return 'bad trade'
+  if (!trade || !deal) return 'bad trade'
 
-  if (!Array.isArray(m.sides) || m.sides.length < 2 || m.sides.length > 4) return 'bad sides'
+  if (!Array.isArray(m.sides) || m.sides.length < 2 || m.sides.length > MAX_DEAL_TEAMS) return 'bad sides'
   const sides: TradeMeta['sides'] = []
   for (const s of m.sides) {
     const r = (s ?? {}) as Record<string, unknown>
+    const rosterId = int(r.rosterId, 0, 9999)
     const head = clean(r.head, 80)
     const faab = int(r.faab ?? 0, 0, 10_000)
-    if (!head || faab == null || !Array.isArray(r.players) || r.players.length > 10) return 'bad sides'
+    if (rosterId == null || !head || faab == null || !Array.isArray(r.players) || r.players.length > MAX_DEAL_PARTS) return 'bad sides'
     const players: TradeMeta['sides'][number]['players'] = []
     for (const p of r.players) {
       const q = (p ?? {}) as Record<string, unknown>
+      const pid = typeof q.id === 'string' && PLAYER_ID.test(q.id) ? q.id : null
       const name = clean(q.name, 60)
       const pos = typeof q.pos === 'string' && /^[A-Z0-9/]{0,6}$/.test(q.pos) ? q.pos : null
       const team = q.team == null ? null : typeof q.team === 'string' && /^[A-Za-z]{2,4}$/.test(q.team) ? q.team : undefined
       const ppw = q.ppw == null ? null : num(q.ppw, -10, 100)
       const tag = q.tag == null ? null : TAGS.find((t) => t === q.tag)
       const pfrom = opt(q.from, 60)
-      if (!name || pos == null || team === undefined || (q.ppw != null && ppw == null) || tag === undefined || pfrom === undefined) return 'bad player'
-      players.push({ name, pos, team, ppw, tag, from: pfrom })
+      if (!pid || !name || pos == null || team === undefined || (q.ppw != null && ppw == null) || tag === undefined || pfrom === undefined) return 'bad player'
+      players.push({ id: pid, name, pos, team, ppw, tag, from: pfrom })
     }
-    sides.push({ head, focus: r.focus === true, faab, players })
+    sides.push({ rosterId, head, focus: r.focus === true, faab, players })
   }
 
   if (!Array.isArray(m.stats) || m.stats.length > 8) return 'bad stats'
@@ -123,6 +143,8 @@ export const parseTradeMeta = (raw: unknown): TradeMeta | string => {
   // Older links have no net; their strip is drawn without the line.
   const net = strip && m.net != null ? num(m.net, -200, 200) : null
   if (strip && m.net != null && net == null) return 'bad net'
+  if (!pictured(deal, sides, stats)) return 'trade does not match the card'
+  const { title, description } = tradeText({ kind, league, to, from, sides, stats })
   return { kind, league, leagueId, season, week, provider, title, description, to, from, note, sides, stats, strip, net, trade }
 }
 

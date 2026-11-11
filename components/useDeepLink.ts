@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LeagueData } from '../lib/useLeagueData'
 import { appUrl, LEAGUE_ID } from '../workers/grades/src/links'
+import { MAX_TRADE_CHARS } from '../workers/grades/src/tradeLink'
 
 /**
  * A shared Power Rank link: `?league=<id>&season=<year>&reveal=<week>`. It is read once on arrival and kept in memory
@@ -17,7 +18,15 @@ export type DeepLink = {
   week: number | 'latest' | null
   /** A shared trade (lib/tradeShare `encodeDeal`), to open in the builder once the league is up. */
   trade?: string | null
+  /**
+   * Why a trade in the address was turned away (no league to open it in, or longer than any deal a link carries). The
+   * link is then not followed at all, but still keeps the reveal shut for the visit, as a trade link would.
+   */
+  refused?: string
 }
+
+const NO_LEAGUE = 'That trade link doesn’t say which league it is from, so it can’t open. Ask whoever sent it for a new one.'
+const TOO_LONG = 'That trade link is damaged or longer than any trade, so it can’t open. Ask whoever sent it for a new one.'
 
 /** The link in an address's query string, or null when it carries none. */
 export const parseDeepLink = (search: string): DeepLink | null => {
@@ -33,7 +42,13 @@ export const parseDeepLink = (search: string): DeepLink | null => {
     if (week === 0) week = 'latest'
   }
   const season = q.get('season')
-  return { league: league && LEAGUE_ID.test(league) ? league : null, season: season && /^\d{4}$/.test(season) ? season : null, week, ...(trade && trade.length <= 800 ? { trade } : {}) }
+  const okLeague = league && LEAGUE_ID.test(league) ? league : null
+  // A trade's roster ids mean something only in its own league: without one it would open against the visitor's.
+  if (trade != null) {
+    const refused = !okLeague ? NO_LEAGUE : trade.length > MAX_TRADE_CHARS ? TOO_LONG : null
+    if (refused) return { league: null, season: null, week: null, refused }
+  }
+  return { league: okLeague, season: season && /^\d{4}$/.test(season) ? season : null, week, ...(trade ? { trade } : {}) }
 }
 
 /** The plain address of a week's reveal in the app, for a link with no preview. */
@@ -55,6 +70,7 @@ const clearParams = () => {
 export type DeepNote = { text: string }
 
 const NOT_IN_TRADE = 'That trade is from a league this account is not in, so it can’t open here. Use “Switch league or user” in the menu to open it as a member.'
+const NOT_IN_LEAGUE = 'That link is for a league this account is not in, so this is your own league instead.'
 
 /** How long a requested switch of league (or season) may take before the link gives up on it. */
 const SWITCH_MS = 20000
@@ -86,6 +102,8 @@ export const useDeepLink = ({
 }) => {
   const [link, setLink] = useState<DeepLink | null>(null)
   const [note, setNote] = useState<DeepNote | null>(null)
+  // The address carried a trade this visit, opened or not: the reveal stays shut for it (pages/index.tsx).
+  const [sharedTrade, setSharedTrade] = useState(false)
   // After asking for the link's league: waiting for the load to start, then to land.
   const [switching, setSwitching] = useState(false)
   // After putting things back: waiting for the visitor's own league to come back before opening anything.
@@ -95,9 +113,26 @@ export const useDeepLink = ({
   const backTo = useRef<string | null>(null)
   const before = useRef<{ leagueId: string | null; season: string | null } | null>(null)
 
+  // A trade turned away on arrival: said at once, its parameters taken off once the league is up (Next puts the query
+  // back while it hydrates, so earlier would not hold).
+  const refused = useRef(false)
+
   useEffect(() => {
-    setLink(parseDeepLink(window.location.search))
+    const parsed = parseDeepLink(window.location.search)
+    if (parsed?.trade || parsed?.refused) setSharedTrade(true)
+    if (parsed?.refused) {
+      refused.current = true
+      setNote({ text: parsed.refused })
+      return
+    }
+    setLink(parsed)
   }, [])
+
+  useEffect(() => {
+    if (!refused.current || !data) return
+    refused.current = false
+    clearParams()
+  }, [data])
 
   const finish = useCallback((text?: string) => {
     clearParams()
@@ -111,26 +146,21 @@ export const useDeepLink = ({
   // the visitor's own league.
   const giveUp = useCallback(() => {
     const week = link?.week
-    const text = link?.trade ? NOT_IN_TRADE : 'That link is for a league this account is not in, so this is your own league instead.'
     if (before.current && link?.season) {
       const back = before.current
       sawLoad.current = false
       backTo.current = back.season ?? (data ? String(data.state.league_season ?? data.state.season) : null)
       selectLeague(back.leagueId, back.season)
-      setSwitching(false)
       setRestoring(true)
+      // A trade cannot be shown in the visitor's own league: the link is used up, with the note.
+      if (link.trade) return finish(NOT_IN_TRADE)
+      setSwitching(false)
       before.current = null
-      if (link.trade) {
-        setNote({ text: NOT_IN_TRADE })
-        setLink(null)
-        clearParams()
-        return
-      }
       setNote({ text: `You aren't in that league for ${link.season}, so this is week ${week && week !== 'latest' ? week : 'the latest'} of your own league.` })
       setLink({ league: null, season: null, week })
       return
     }
-    finish(text)
+    finish(link?.trade ? NOT_IN_TRADE : NOT_IN_LEAGUE)
   }, [link, selectLeague, finish, data])
 
   useEffect(() => {
@@ -154,7 +184,7 @@ export const useDeepLink = ({
         sawLoad.current = false
         setSwitching(true)
         selectLeague(link.league, link.season === current ? null : link.season)
-      } else finish(link.trade ? NOT_IN_TRADE : 'That link is for a league this account is not in, so this is your own league instead.')
+      } else finish(link.trade ? NOT_IN_TRADE : NOT_IN_LEAGUE)
       return
     }
     // Switching: it has landed once a load has come and gone.
@@ -190,5 +220,5 @@ export const useDeepLink = ({
   const dismiss = useCallback(() => setNote(null), [])
   /** A shared trade, once its league is on screen: open it in the builder (SharedTradeOpener), then `finish`. */
   const trade = ready?.trade ?? null
-  return { link, ready: ready && ready.week != null ? { week: ready.week } : null, trade, finish, note, dismiss }
+  return { link, ready: ready && ready.week != null ? { week: ready.week } : null, trade, sharedTrade, finish, note, dismiss }
 }
