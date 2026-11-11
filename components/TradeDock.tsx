@@ -10,6 +10,7 @@ import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import TradeBuilder, { BuilderHeader, CLOSE, Glyph, headline, useDealPricing, useDealRead, type DealUpdate } from './TradeBuilder'
 import { AddIcon } from './icons'
 import { CompareProvider, CompareToggle } from './useCompare'
+import { ShareTradeButton } from './TradeShare'
 import { cx, fmtSigned, reducedMotion, useMedia, usePhone } from './ui'
 
 // The trade builder's home: up to three trades for the whole app, kept above the pages so they survive being
@@ -262,7 +263,12 @@ const Body = ({ state, set, api, trade, layout, titleId, onMinimize, onClose }: 
             summary={dealSummary(trade.deal, me, name)}
             tabs={tabs}
             onSwitch={api.openTrade}
-            actions={<CompareToggle deal={trade.deal} tradeId={id} className="max-md:hidden" />}
+            actions={
+              <>
+                <ShareTradeButton deal={trade.deal} variant="icon" />
+                <CompareToggle deal={trade.deal} tradeId={id} className="max-md:hidden" />
+              </>
+            }
             onNew={() => api.open()}
             onMinimize={onMinimize}
             onClose={onClose}

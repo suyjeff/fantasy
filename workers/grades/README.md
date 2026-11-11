@@ -1,7 +1,9 @@
 # ff-grades
 
 A tiny Cloudflare Worker with two jobs for the fantasy app: it lets everyone's "Would they?" trade
-grades inform the trade odds for every user, and it holds the link previews for shared Power Ranks. The
+grades inform the trade odds for every user, and it holds the link previews for shared Power Ranks
+and shared trades (`POST /trade`, then `/t/<id>`: a page with the trade card and an "Open in Fantasy"
+button, and `/t/<id>.png`; only what the card shows is stored). The
 site stays static; without this worker (or without `FF_GRADES_URL`) the app behaves exactly as before,
 with grades kept in the browser and shared rankings falling back to a plain link.
 
