@@ -676,6 +676,18 @@ html.ff-page body {
   }
 }
 
+/* A suggested-trade card (TradeCard) lays out by its own width, not the viewport's: the sidebar and the two-column
+   grid make a card narrow on a wide screen too. Narrow, Open in builder takes the footer's spare width, so the row
+   reads as one bar of actions rather than a ragged cluster. */
+.ff .ff-tcard {
+  container-type: inline-size;
+}
+@container (max-width: 419px) {
+  .ff .ff-tcard-fill {
+    flex: 1 1 auto;
+  }
+}
+
 /* The wide-screen side sheet (phones use SwipeSheet, which enters by scrolling). It slides in from the right on
    the iOS sheet curve and leaves the way it came, a little faster. Transitions, not keyframes: closing it while it
    is still arriving turns it around from wherever it is. The scrim follows. Reduced motion cross-fades instead. */

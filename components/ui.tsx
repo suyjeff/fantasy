@@ -401,6 +401,7 @@ export const Segmented = <K extends string>({
   label,
   block,
   manual,
+  disabled,
 }: {
   options: SegOption<NoInfer<K>>[]
   value: K
@@ -411,8 +412,10 @@ export const Segmented = <K extends string>({
   block?: boolean
   /** Arrows move focus only; Enter or Space picks. For choices that save something (a grade), not a view switch. */
   manual?: boolean
+  /** Shown, with the option in effect still marked, but locked. */
+  disabled?: boolean
 }) => (
-  <FadeStrip role="radiogroup" aria-label={label} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex')}>
+  <FadeStrip role="radiogroup" aria-label={label} aria-disabled={disabled || undefined} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex', disabled && 'pointer-events-none opacity-50 [&>button]:cursor-default')}>
     {options.map((o, i) => {
       const active = o.key === value
       return (
@@ -420,6 +423,7 @@ export const Segmented = <K extends string>({
           key={o.key}
           role="radio"
           aria-checked={active}
+          disabled={disabled}
           tabIndex={active || (i === 0 && !options.some((x) => x.key === value)) ? 0 : -1}
           title={o.title}
           onClick={() => onChange(o.key)}

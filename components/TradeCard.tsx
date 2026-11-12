@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import type { Analysis } from '../lib/analysis'
 import { bandTone, type AcceptRead } from '../lib/behavior'
 import { leverageOf, leverageRun, type Forecast, type ForecastInput, type Leverage, type TradeSides } from '../lib/forecast'
@@ -9,7 +9,7 @@ import { ContextNotes } from './ContextNotes'
 import { dealFromIdea } from '../lib/deal'
 import { CompareToggle } from './useCompare'
 import { ShareTradeButton } from './TradeShare'
-import { BuildIcon } from './icons'
+import { BuildIcon, ChevronIcon } from './icons'
 import { InsightMark } from './InsightMark'
 import { useFantasy, useTradeRead } from './FantasyContext'
 import { PRICING_VERSION } from '../lib/currency'
@@ -256,6 +256,56 @@ const GradeBar = ({ idea, base, nm, posOf }: { idea: TradeIdea; base: AcceptRead
   )
 }
 
+/**
+ * The other ways to land the same players from this team, as tabs under the header. Each says what it sends (its
+ * shape) and what it does for you, so that there is a choice, and how the options differ, shows before any click.
+ * Every tab is in the tab order; the arrow keys also step between them.
+ */
+const OptionTabs = ({ versions, v, setV, getName }: { versions: TradeIdea[]; v: number; setV: (i: number) => void; getName: string }) => {
+  const id = useId()
+  const onKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+    if (!step) return
+    e.preventDefault()
+    const next = (v + step + versions.length) % versions.length
+    setV(next)
+    e.currentTarget.querySelectorAll('button')[next]?.focus()
+  }
+  return (
+    <div className="border-b border-ff-line bg-ff-sunken/50 px-3 pb-2 pt-1.5">
+      <div id={id} className="ff-label mb-1 truncate">
+        {versions.length} ways to get {getName}
+      </div>
+      <div role="group" aria-labelledby={id} onKeyDown={onKey} className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-1">
+        {versions.map((x, i) => {
+          const on = i === v
+          const shape = `${x.give.length}-for-${x.get.length}`
+          return (
+            <button
+              key={i}
+              type="button"
+              aria-pressed={on}
+              onClick={() => setV(i)}
+              className={cx(
+                'ff-press flex min-h-9 min-w-0 flex-col items-start justify-center border px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/50 max-md:min-h-11',
+                on ? 'border-ff-accent bg-ff-panel text-ff-text shadow-[inset_0_-2px_0_rgb(var(--ff-accent))]' : 'border-ff-line bg-ff-panel/50 text-ff-muted hover:border-ff-line2 hover:bg-ff-panel hover:text-ff-text',
+              )}
+            >
+              <span className="text-[12px] font-medium">
+                Option {i + 1}
+                <span className="sr-only"> of {versions.length},</span>
+              </span>
+              <span className="font-mono text-[10px]">
+                {shape} · {fmtSigned(x.myGain, 1)}/wk
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 const TradeCard = ({
   versions,
   data,
@@ -277,6 +327,7 @@ const TradeCard = ({
   const { models, grades } = useFantasy()
   const [v, setV] = useState(0)
   const [open, setOpen] = useState(false)
+  const detailId = useId()
   const idea = versions[Math.min(v, versions.length - 1)]
   const team = analysis.teamById[idea.partnerId]
   const season = analysis.seasonById[idea.partnerId]
@@ -305,45 +356,51 @@ const TradeCard = ({
   const playoffTone = lev && lev.me.playoffs > 0.002 ? 'pos' : lev && lev.me.playoffs < -0.002 ? 'neg' : undefined
 
   return (
-    <article className={cx('flex min-w-0 flex-col border border-ff-line bg-ff-panel transition-opacity', read.ruledOut && 'opacity-60 hover:opacity-100 focus-within:opacity-100')}>
-      <header className="flex items-center justify-between gap-2 border-b border-ff-line px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Avatar src={team?.avatar ?? null} name={team?.name ?? '?'} size={24} />
-          <div className="min-w-0 leading-tight">
-            <div className="flex min-w-0 items-center gap-2 text-[13.5px] font-medium text-ff-text">
+    <article className={cx('ff-tcard flex min-w-0 flex-col border border-ff-line bg-ff-panel transition-opacity', read.ruledOut && 'opacity-60 hover:opacity-100 focus-within:opacity-100')}>
+      {/* The name and the tags share a line while the name keeps 8rem; past that the tags wrap under it. The meta
+          line runs the full width below, so the tags never squeeze it, and ends in an ellipsis if it must. */}
+      <header className="flex items-start gap-2 border-b border-ff-line px-3 py-2">
+        <Avatar src={team?.avatar ?? null} name={team?.name ?? '?'} size={24} />
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+            <div className="flex min-w-0 flex-[1_1_8rem] items-center gap-2 text-[13.5px] font-medium text-ff-text">
               <span className="truncate">{team?.name}</span>
               {gradeMoved && <InsightMark label={gradeMoved === 'up' ? 'odds up' : 'odds down'} title={`Your grades ${gradeMoved === 'up' ? 'raised' : 'lowered'} this team's odds`} className="max-sm:[&>span]:sr-only" />}
             </div>
-            <div className="mt-0.5 flex items-center gap-1.5 truncate font-mono text-[10.5px] text-ff-muted">
-              {season && (
-                <span className="text-ff-text2">
-                  {season.wins}-{season.losses}
-                  {season.ties ? `-${season.ties}` : ''}
-                </span>
-              )}
-              {mood && mood.urgency !== 0 && (
-                <span className={mood.streak > 0 ? 'text-ff-pos' : 'text-ff-neg'} title={mood.text ?? undefined}>
-                  · {streakText(mood.streak)}
-                </span>
-              )}
-              {odds && <span>· PO {simOdds(odds, 'playoffs')}</span>}
-              {need && <span>· needs {need}</span>}
+            <div className="flex shrink-0 items-center gap-1.5">
+              {tag && <Badge tone="accent">{tag}</Badge>}
+              <Badge title={SHAPE_LABEL[idea.shape]}>
+                {idea.give.length}-for-{idea.get.length}
+              </Badge>
             </div>
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {tag && <Badge tone="accent">{tag}</Badge>}
-          <Badge title={SHAPE_LABEL[idea.shape]}>
-            {idea.give.length}-for-{idea.get.length}
-          </Badge>
+          <div className="mt-0.5 truncate font-mono text-[10.5px] text-ff-muted">
+            {season && (
+              <span className="text-ff-text2">
+                {season.wins}-{season.losses}
+                {season.ties ? `-${season.ties}` : ''}
+              </span>
+            )}
+            {mood && mood.urgency !== 0 && (
+              <span className={mood.streak > 0 ? 'text-ff-pos' : 'text-ff-neg'} title={mood.text ?? undefined}>
+                {' · '}
+                {streakText(mood.streak)}
+              </span>
+            )}
+            {odds && <span>{` · PO ${simOdds(odds, 'playoffs')}`}</span>}
+            {need && <span>{` · needs ${need}`}</span>}
+          </div>
         </div>
       </header>
+
+      {versions.length > 1 && <OptionTabs versions={versions} v={v} setV={setV} getName={idea.get.length === 1 ? nm(idea.get[0]) : idea.get.map((id) => nm(id).split(' ').slice(-1)[0]).join(' + ')} />}
 
       {/* Cards sit in a grid whose rows share the tallest card's height: this section takes up the slack, so the
           send and get columns (and the rule between them) run to the verdict and the footer stays at the bottom. */}
       <div className="grid flex-1 grid-cols-1 sm:grid-cols-2">
-        <div className="min-w-0 border-b border-ff-line px-3 pb-1.5 pt-2 sm:border-b-0 sm:border-r">
-          <div className="ff-label">You send</div>
+        {/* Switching options swaps what you send: the column fades in afresh, so the change is seen where it happens. */}
+        <div key={v} className={cx('min-w-0 border-b border-ff-line px-3 pb-1.5 pt-2 sm:border-b-0 sm:border-r', versions.length > 1 && 'ff-fade-in')}>
+          <div className="ff-label">You send{versions.length > 1 && <span className="normal-case tracking-normal text-ff-accent">{` · option ${v + 1}`}</span>}</div>
           {idea.give.map((id) => (
             <PlayerLine key={id} id={id} data={data} analysis={analysis} side="give" />
           ))}
@@ -411,85 +468,80 @@ const TradeCard = ({
               {r.text}
             </Chip>
           ))}
-          {!open && signals.length > Math.min(2, shown.length) && (
-            <button onClick={() => setOpen(true)} className="ff-hit px-1 font-mono text-[10.5px] text-ff-muted hover:text-ff-text sm:hidden">
-              +{signals.length - Math.min(2, shown.length)} more
-            </button>
-          )}
-          {!open && signals.length > shown.length && (
-            <button onClick={() => setOpen(true)} className="hidden px-1 font-mono text-[10.5px] text-ff-muted hover:text-ff-text sm:inline">
-              +{signals.length - shown.length} more
-            </button>
-          )}
         </div>
       )}
 
-      {open && (
-        <div className="space-y-2.5 border-t border-ff-line bg-ff-sunken/40 px-3 py-2.5 text-[11.5px] text-ff-muted">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Figure label="They gain" value={fmtSigned(idea.theirGain, 2)} unit="/wk" title="Points per week added to their best lineup" />
-            <Figure
-              label="Your ask"
-              value={fmtSigned(idea.valueAsk, 1)}
-              unit="/wk"
-              title="Trade value you take minus what you send, priced as managers price players: consensus rank and draft slot counted, stars dear, streamers cheap, players they drafted dearer. Positive means you ask for a premium."
-            />
-            {read.perceivedAsk != null && (
-              <Figure label="By consensus" value={fmtSigned(-read.perceivedAsk, 1)} unit="/wk" title="What they come out with in FantasyPros consensus value, priced the same way. Negative reads as them overpaying." />
-            )}
-            {lev && <Figure label="Their playoffs" value={pt(lev.partner.playoffs)} unit="pt" title="Change in their playoff odds" />}
-          </div>
-          <div>
-            <div className="ff-label mb-1">your gain by week</div>
-            <WeekBars weeks={idea.perWeek.map((w) => ({ week: w.week, value: w.mine }))} highlight={data.playoffWeeks} barWidth={7} height={28} />
-          </div>
-          {(idea.myCost > 0.05 || idea.myCuts.length > 0 || idea.theirCuts.length > 0) && (
-            <ul className="space-y-0.5 leading-snug">
-              {idea.myCost > 0.05 && (
-                <li>
-                  Sending costs your lineup <span className="num text-ff-text2">{idea.myCost.toFixed(2)}</span>/wk before the return.
-                </li>
+      {/* The expander names what it opens, and how many reasons are folded away (two show on a phone, three wider). */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls={detailId}
+        className="group flex min-h-9 w-full items-center gap-2 border-t border-ff-line px-3 text-left text-[12px] hover:bg-ff-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ff-accent/50 max-md:min-h-11"
+      >
+        <span className="shrink-0 font-medium text-ff-text">{open ? 'Hide details' : 'Show details'}</span>
+        {!open && (
+          <span className="min-w-0 truncate text-ff-muted">
+            {signals.length > 2 && <span className="sm:hidden">+{signals.length - 2} reasons · </span>}
+            {signals.length > 3 && <span className="max-sm:hidden">+{signals.length - 3} reasons · </span>}
+            their side, value, week by week
+          </span>
+        )}
+        <span aria-hidden className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center border border-ff-line text-ff-text2 group-hover:border-ff-line2 group-hover:text-ff-text">
+          <ChevronIcon className={cx('motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-ff-out', open && 'rotate-180')} />
+        </span>
+      </button>
+
+      {/* Always mounted so it can slide open: the row grows from 0 to its height, and closed it leaves the tab order. */}
+      <div id={detailId} className={cx('grid transition-[grid-template-rows] duration-[220ms] ease-ff-drawer motion-reduce:transition-none', open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+        <div className="min-h-0 overflow-hidden" inert={!open}>
+          <div className="space-y-2.5 border-t border-ff-line bg-ff-sunken/40 px-3 py-2.5 text-[11.5px] text-ff-muted">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Figure label="They gain" value={fmtSigned(idea.theirGain, 2)} unit="/wk" title="Points per week added to their best lineup" />
+              <Figure
+                label="Your ask"
+                value={fmtSigned(idea.valueAsk, 1)}
+                unit="/wk"
+                title="Trade value you take minus what you send, priced as managers price players: consensus rank and draft slot counted, stars dear, streamers cheap, players they drafted dearer. Positive means you ask for a premium."
+              />
+              {read.perceivedAsk != null && (
+                <Figure label="By consensus" value={fmtSigned(-read.perceivedAsk, 1)} unit="/wk" title="What they come out with in FantasyPros consensus value, priced the same way. Negative reads as them overpaying." />
               )}
-              {idea.myCuts.length > 0 && <li>You drop {idea.myCuts.map(nm).join(', ')} to make room.</li>}
-              {idea.theirCuts.length > 0 && <li>They drop {idea.theirCuts.map(nm).join(', ')}.</li>}
-            </ul>
-          )}
+              {lev && <Figure label="Their playoffs" value={pt(lev.partner.playoffs)} unit="pt" title="Change in their playoff odds" />}
+            </div>
+            <div>
+              <div className="ff-label mb-1">your gain by week</div>
+              <WeekBars weeks={idea.perWeek.map((w) => ({ week: w.week, value: w.mine }))} highlight={data.playoffWeeks} barWidth={7} height={28} />
+            </div>
+            {(idea.myCost > 0.05 || idea.myCuts.length > 0 || idea.theirCuts.length > 0) && (
+              <ul className="space-y-0.5 leading-snug">
+                {idea.myCost > 0.05 && (
+                  <li>
+                    Sending costs your lineup <span className="num text-ff-text2">{idea.myCost.toFixed(2)}</span>/wk before the return.
+                  </li>
+                )}
+                {idea.myCuts.length > 0 && <li>You drop {idea.myCuts.map(nm).join(', ')} to make room.</li>}
+                {idea.theirCuts.length > 0 && <li>They drop {idea.theirCuts.map(nm).join(', ')}.</li>}
+              </ul>
+            )}
+          </div>
         </div>
-      )}
+      </div>
 
       <GradeBar idea={idea} base={base} nm={nm} posOf={(id) => players[id]?.pos} />
 
-      {/* At the narrowest widths the actions wrap under the details and versions rather than run over them. */}
-      <footer className="mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 border-t border-ff-line px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="ff-hit whitespace-nowrap py-1 font-mono text-[11px] text-ff-muted hover:text-ff-text">
-            {open ? 'less ▴' : 'details ▾'}
-          </button>
-          {versions.length > 1 && (
-            <span className="flex items-center border border-ff-line font-mono text-[10.5px] text-ff-muted" title="Other ways to build the same deal">
-              <button className="px-1.5 py-0.5 hover:text-ff-text disabled:opacity-30" disabled={v === 0} onClick={() => setV(v - 1)} aria-label="Previous version">
-                ‹
-              </button>
-              <span className="text-ff-text2">
-                {v + 1}/{versions.length}
-              </span>
-              <button className="px-1.5 py-0.5 hover:text-ff-text disabled:opacity-30" disabled={v >= versions.length - 1} onClick={() => setV(v + 1)} aria-label="Next version">
-                ›
-              </button>
-            </span>
-          )}
-        </div>
-        {onBuild && (
-          <span className="ml-auto flex shrink-0 items-center gap-1.5">
-            {asDeal && <ShareTradeButton deal={asDeal} label={`Share this trade with ${team?.name ?? 'them'}`} />}
-            {asDeal && <CompareToggle deal={asDeal} size="sm" />}
-            <Button size="sm" variant="aqua" className="ff-aqua-soft" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
-              <BuildIcon size={12} />
-              Open in builder
-            </Button>
-          </span>
-        )}
-      </footer>
+      {/* One row of actions at every width, all one height (40px on a phone, 32px wider). On a narrow card Open in
+          builder takes the spare width (ff-tcard-fill); share is an icon below md. */}
+      {onBuild && (
+        <footer className="mt-auto flex items-center justify-end gap-2 border-t border-ff-line px-3 py-2">
+          {asDeal && <ShareTradeButton deal={asDeal} label={`Share this trade with ${team?.name ?? 'them'}`} className="md:!h-8 md:!px-3 md:!text-[12.5px]" />}
+          {asDeal && <CompareToggle deal={asDeal} />}
+          <Button variant="soft" className="ff-tcard-fill" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
+            <BuildIcon size={13} />
+            Open in builder
+          </Button>
+        </footer>
+      )}
     </article>
   )
 }

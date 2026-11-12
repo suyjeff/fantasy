@@ -423,9 +423,7 @@ const TradesView = ({
                 <Button size="md" variant={moreOpen ? 'primary' : 'outline'} onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}>
                   Filters
                   {activeFilters > 0 && <span className="num text-ff-warn">{activeFilters}</span>}
-                  <span aria-hidden className={cx('text-[10px] motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-ff-out', moreOpen && 'rotate-180')}>
-                    ▾
-                  </span>
+                  <ChevronIcon className={cx('motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-ff-out', moreOpen && 'rotate-180')} />
                 </Button>
               )}
             </div>
