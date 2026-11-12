@@ -88,3 +88,13 @@ export const InfoIcon = ({ className, size }: { className?: string; size?: numbe
     <rect x="6.5" y="3.5" width="1" height="1" fill="currentColor" stroke="none" />
   </Svg>
 )
+
+const CHEVRON_TURN = { down: undefined, up: 'rotate(180 7 7)', left: 'rotate(90 7 7)', right: 'rotate(-90 7 7)' } as const
+
+/** The app's one chevron: an open line V for every expander, dropdown, pager and "go" hint. Takes the text colour;
+ *  rotate it with a class (e.g. `rotate-180` when open) or point it with `dir`. */
+export const ChevronIcon = ({ dir = 'down', className, size = 12 }: { dir?: keyof typeof CHEVRON_TURN; className?: string; size?: number }) => (
+  <svg aria-hidden width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" className={cx('inline-block shrink-0', className)}>
+    <path d="M3 5.25l4 4 4-4" transform={CHEVRON_TURN[dir]} />
+  </svg>
+)
