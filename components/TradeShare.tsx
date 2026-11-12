@@ -268,6 +268,8 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
   const [drawn, setDrawn] = useState(false)
   // Whether this size had to cut the note short to fit: said by the note field, so it never goes quietly.
   const [noteCut, setNoteCut] = useState(false)
+  // Likewise the week-by-week strip, when it is switched on and this size has no room for it.
+  const [weeksLeft, setWeeksLeft] = useState(false)
   // The picture is fitted to its frame by measurement: CSS alone either stretches a canvas or overflows the frame.
   const [box, setBox] = useState<{ w: number; h: number } | null>(null)
   useEffect(() => {
@@ -294,13 +296,14 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
     const scale = Math.min(2, (shownW * dpr) / FORMATS[format].w)
     const draw = () => {
       if (!live) return
-      const said = { noteCut: false }
-      drawTradeCard(el, card, format, pal, {}, { scale, said })
+      const said = { noteCut: false, weeksLeft: false }
+      drawTradeCard(el, card, format, pal, { scale, said })
       setNoteCut(said.noteCut)
+      setWeeksLeft(!!said.weeksLeft)
       setDrawn(true)
     }
     const raf = requestAnimationFrame(draw)
-    const srcs = cardSources(card, {})
+    const srcs = cardSources(card)
     if (!picturesReady(srcs)) Promise.all([loadCardFonts(), loadPictures(srcs)]).then(() => requestAnimationFrame(draw))
     else loadCardFonts().then(() => requestAnimationFrame(draw))
     return () => {
@@ -510,6 +513,11 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
             />
           )
         })}
+        {weeksLeft && (
+          <p className="mt-1.5 font-mono text-[10.5px] leading-snug text-ff-muted">
+            Week by week doesn’t fit the {fmtLabel.label} card.{format !== 'story' ? ' Try Tall.' : ''}
+          </p>
+        )}
         {audience.kind === 'pitch' && <p className="mt-1.5 text-[11.5px] leading-snug text-ff-muted">Your own gain, your ask and the odds they say yes never go on the card.</p>}
       </Section>
       <Section title="Details">
@@ -707,9 +715,9 @@ export const TradeShareSheet = ({ deal, onClose }: { deal: Deal; onClose: () => 
 
 /**
  * The Share control for a trade. `icon`: a square icon button (a header); `cell`: an icon filling its share of a row of
- * them (a Compare column); `compact`: icon only on a phone, icon and word from md up (a card's footer); `full`: both.
+ * them (a Compare column); `compact`: icon only on a phone, icon and word from md up (a card's footer).
  */
-export const ShareTradeButton = ({ deal, variant = 'compact', className, label = 'Share this trade' }: { deal: Deal; variant?: 'icon' | 'compact' | 'full' | 'cell'; className?: string; label?: string }) => {
+export const ShareTradeButton = ({ deal, variant = 'compact', className, label = 'Share this trade' }: { deal: Deal; variant?: 'icon' | 'compact' | 'cell'; className?: string; label?: string }) => {
   const [open, setOpen] = useState(false)
   const ready = dealActive(deal) && deal.teams.length > 1
   const icon = variant === 'icon'
@@ -720,18 +728,17 @@ export const ShareTradeButton = ({ deal, variant = 'compact', className, label =
         onClick={() => setOpen(true)}
         disabled={!ready}
         aria-haspopup="dialog"
-        aria-label={variant === 'full' ? undefined : label}
+        aria-label={label}
         title={ready ? label : 'Add players to share the trade'}
         className={cx(
           'ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-ff-text2 hover:bg-ff-raised hover:text-ff-text disabled:pointer-events-none disabled:opacity-40',
-          icon ? 'h-10 w-10' : variant === 'cell' ? 'h-10 min-w-0 flex-1 border border-ff-line text-[13px] md:h-8' : variant === 'compact' ? 'h-10 w-10 border border-ff-line md:h-7 md:w-auto md:px-2 md:text-[11.5px]' : 'h-10 border border-ff-line px-3 text-[12.5px] md:h-8',
+          icon ? 'h-10 w-10' : variant === 'cell' ? 'h-10 min-w-0 flex-1 border border-ff-line text-[13px] md:h-8' : 'h-10 w-10 border border-ff-line md:h-8 md:w-auto md:px-3 md:text-[12.5px]',
           open && 'bg-ff-raised text-ff-text',
           className,
         )}
       >
         <Glyph d={SHARE} size={13} />
         {variant === 'compact' && <span className="max-md:hidden">Share</span>}
-        {variant === 'full' && 'Share'}
       </button>
       {open && <TradeShareSheet deal={deal} onClose={() => setOpen(false)} />}
     </>
@@ -750,7 +757,7 @@ export const SharedTradeOpener = ({ trade, finish }: { trade: string | null; fin
     if (!trade) return
     const deal = decodeDeal(trade)
     if (!deal) return finish('That trade link is incomplete, so it can’t open. Ask whoever sent it for a new one.')
-    if (!dock) return finish('This account has no team in that league, so the trade can’t open in the builder. Use “Switch league or user” in the menu to open it as a member.')
+    if (!dock) return finish('This account has no team in that league, so the trade can’t open in the builder. Use “Switch user” (or “Switch league or team” for ESPN) in Settings to open it as a member.')
     if (deal.teams.some((t) => !analysis.teamById[t])) return finish('A team in that trade has left the league, so it can’t open. Ask whoever sent it for a new one.')
     const moved = deal.moves.filter((m) => !analysis.teamById[m.from]?.players.includes(m.player))
     const live: Deal = { ...deal, moves: deal.moves.filter((m) => !moved.includes(m)) }

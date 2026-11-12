@@ -5,10 +5,10 @@ import { cx, useMedia } from './ui'
 export type Density = 'compact' | 'comfortable'
 
 /** Four chips of a theme's own colours: page, panel, accent, and the first series. */
-export const Swatch = ({ theme, compact }: { theme: Theme; compact?: boolean }) => {
+export const Swatch = ({ theme }: { theme: Theme }) => {
   const t = theme.dark ?? theme.light!
   const l = theme.light ?? theme.dark!
-  const chips = compact ? [t.bg, t.accent] : [l.panel, t.bg, t.accent, t.s[1]]
+  const chips = [l.panel, t.bg, t.accent, t.s[1]]
   return (
     <span aria-hidden className="inline-flex shrink-0 border border-ff-line2">
       {chips.map((c, i) => (
@@ -22,10 +22,10 @@ export const Swatch = ({ theme, compact }: { theme: Theme; compact?: boolean }) 
  * The app in miniature, in a theme's own colours: sidebar with the current page lit, a header rule, and a card with
  * a label, a figure, a gain and a loss, a chart line and an accent button. Drawn on a fixed grid, so it scales to any width.
  */
-export const ThemePreview = ({ theme, mode, className }: { theme: Theme; mode: Mode; className?: string }) => {
+const ThemePreview = ({ theme, mode }: { theme: Theme; mode: Mode }) => {
   const t = tokensFor(theme, mode)
   return (
-    <svg aria-hidden viewBox="0 0 120 72" shapeRendering="crispEdges" className={cx('block h-auto w-full', className)}>
+    <svg aria-hidden viewBox="0 0 120 72" shapeRendering="crispEdges" className="block h-auto w-full">
       <rect width="120" height="72" fill={t.bg} />
       {/* Sidebar */}
       <rect width="30" height="72" fill={t.panel} />
@@ -56,8 +56,8 @@ export const ThemePreview = ({ theme, mode, className }: { theme: Theme; mode: M
 }
 
 
-/** One theme as a picker tile: its miniature over its name. `sm` for tight spaces (phones, popovers). */
-export const ThemeTile = ({ theme, mode, checked, name, onPick, size = 'md' }: { theme: Theme; mode: Mode; checked: boolean; name: string; onPick: () => void; size?: 'sm' | 'md' }) => {
+/** One theme as a picker tile: its miniature over its name. `sm` for tight spaces (phones). */
+const ThemeTile = ({ theme, mode, checked, name, onPick, size = 'md' }: { theme: Theme; mode: Mode; checked: boolean; name: string; onPick: () => void; size?: 'sm' | 'md' }) => {
   // The few themes that come in one mode only say so, on the miniature itself in its own colours.
   const only = theme.light && theme.dark ? null : theme.light ? 'light' : 'dark'
   const t = tokensFor(theme, mode)
@@ -95,12 +95,12 @@ export const ThemeTile = ({ theme, mode, checked, name, onPick, size = 'md' }: {
  * Every theme as a grid of tiles, a native radio group (arrows move and pick). A theme with both modes is drawn in the
  * mode the scheme picks, so switching Light or Dark redraws the grid; the rest show the only mode they have.
  */
-const ThemePicker = ({ value, onChange, scheme, size = 'md', label = 'Theme' }: { value: string; onChange: (id: string) => void; scheme: Scheme; size?: 'sm' | 'md'; label?: string }) => {
+const ThemePicker = ({ value, onChange, scheme, size = 'md' }: { value: string; onChange: (id: string) => void; scheme: Scheme; size?: 'sm' | 'md' }) => {
   const name = useId()
   const systemDark = useMedia('(prefers-color-scheme: dark)')
   return (
     <fieldset className="min-w-0">
-      <legend className="sr-only">{label}</legend>
+      <legend className="sr-only">Theme</legend>
       <div className={cx('grid', size === 'sm' ? 'grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-1.5' : 'grid-cols-[repeat(auto-fill,minmax(136px,1fr))] gap-2')}>
         {THEMES.map((t) => (
           <ThemeTile key={t.id} theme={t} mode={resolveMode(t, scheme, systemDark)} name={name} size={size} checked={t.id === value} onPick={() => onChange(t.id)} />

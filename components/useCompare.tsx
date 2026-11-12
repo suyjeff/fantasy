@@ -150,9 +150,8 @@ export const SlotKey = ({ slot, className }: { slot: number; className?: string 
 /**
  * Add a deal to the comparison, or see that it is in (and take it out). Where the deal came from the comparison and
  * has changed since (`tradeId` links it), it offers to update that column, or add the change as a column of its own.
- * `size`: 'sm' on a trade card, 'md' in the builder.
  */
-export const CompareToggle = ({ deal, tradeId, size = 'md', className }: { deal: Deal; tradeId?: string; size?: 'sm' | 'md'; className?: string }) => {
+export const CompareToggle = ({ deal, tradeId, className }: { deal: Deal; tradeId?: string; className?: string }) => {
   const c = useCompare()
   const item = c?.find(deal) ?? null
   useEffect(() => {
@@ -162,8 +161,7 @@ export const CompareToggle = ({ deal, tradeId, size = 'md', className }: { deal:
   const ready = dealActive(deal) && deal.teams.length > 1
   // An empty trade has nothing to put in a column's place.
   const linked = !item && tradeId && ready ? c.linkOf(tradeId) : null
-  const h = size === 'sm' ? 'h-7 px-2 text-[11.5px] max-md:h-10 max-[359px]:min-w-10' : 'h-10 px-3 text-[12.5px] md:h-8'
-  const base = cx('ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border', h, className)
+  const base = cx('ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border h-10 px-3 text-[12.5px] md:h-8', className)
   if (item)
     return (
       <button
@@ -174,8 +172,7 @@ export const CompareToggle = ({ deal, tradeId, size = 'md', className }: { deal:
         className={cx(base, 'group border-ff-pos/40 bg-ff-pos/[0.08] text-ff-text hover:border-ff-neg/40 hover:bg-ff-neg/[0.06]')}
       >
         <SlotKey slot={item.slot} />
-        {/* On a narrow card the tick says it; the words stay for screen readers. */}
-        <span className={cx(size === 'sm' && 'max-[359px]:sr-only')}>In compare</span>
+        In compare
         {/* The tick turns to a cross under the pointer, the same size, so nothing shifts. */}
         <span className="text-ff-pos group-hover:hidden">
           <Check />
@@ -224,8 +221,8 @@ export const CompareToggle = ({ deal, tradeId, size = 'md', className }: { deal:
       title={ready ? 'Add to the comparison on the Trades page' : 'Put players in the trade to compare it'}
       className={cx(base, 'border-ff-line2 bg-ff-panel text-ff-text hover:bg-ff-raised disabled:text-ff-muted disabled:hover:bg-ff-panel')}
     >
-      <AddIcon size={size === 'sm' ? 11 : 12} />
-      <span className={cx(size === 'sm' && 'max-[359px]:sr-only')}>{size === 'sm' ? 'Compare' : 'Add to compare'}</span>
+      <AddIcon size={12} />
+      Add to compare
     </button>
   )
 }

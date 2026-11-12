@@ -35,12 +35,12 @@ const MONO = `"Chivo Mono", ui-monospace, Menlo, Consolas, monospace, ${EMOJI}`
 const pictures = new Map<string, HTMLImageElement | null>()
 const pending = new Map<string, Promise<HTMLImageElement | null>>()
 
-export const playerSrc = (id: string, pos: string) => playerImage(id, { pos } as TrimmedPlayer)
+const playerSrc = (id: string, pos: string) => playerImage(id, { pos } as TrimmedPlayer)
 
 /** Every picture a card draws. */
-export const cardSources = (card: TradeCard, avatars: Record<number, string | null>) => [
+export const cardSources = (card: TradeCard) => [
   ...card.sides.flatMap((s) => s.players.map((p) => playerSrc(p.id, p.pos))),
-  ...card.sides.map((s) => s.avatar ?? avatars[s.rosterId] ?? null).filter((x): x is string => !!x),
+  ...card.sides.map((s) => s.avatar ?? null).filter((x): x is string => !!x),
 ]
 
 /** Fetches what is not here yet; resolves once every one has landed or failed. */
@@ -222,7 +222,7 @@ const makePen = (ctx: Ctx, audit?: TextBox[]) => {
   return { width, cut, first, put, wrap }
 }
 
-type Env = { ctx: Ctx; p: Palette; pen: Pen; S: Spec; card: TradeCard; avatars: Record<number, string | null>; memo: Map<string, unknown>; said?: DrawOptions['said'] }
+type Env = { ctx: Ctx; p: Palette; pen: Pen; S: Spec; card: TradeCard; memo: Map<string, unknown>; said?: DrawOptions['said'] }
 const memo = <T,>(e: Env, key: string, make: () => T): T => {
   if (!e.memo.has(key)) e.memo.set(key, make())
   return e.memo.get(key) as T
@@ -254,7 +254,7 @@ const picture = (e: Env, src: string | null, letter: string, x: number, y: numbe
 // ---- Blocks ----
 
 /** A block planned for a width: the height it needs, its score, and how to draw it at a top edge. */
-type Plan = { h: number; score: number; what: string; draw: (x: number, y: number, h: number) => void }
+type Plan = { h: number; score: number; what: string; draw: (x: number, y: number) => void }
 
 // The sides. A side is a head ("MIND GOBLINS GETS") over its rows. A row is a player, the FAAB the side takes in, or,
 // past what fits, "+3 MORE". Rows come in two kinds: `rich` (a face, the name, and under it a line of position, team
@@ -295,6 +295,9 @@ const sideMeasures = (S: Spec, o: SideOpt) => {
   return { name, meta, face, gapLine, textH, rowH }
 }
 
+/** A head said on one line, in the shape a ledger's head takes. */
+const oneLine = ({ text, loss }: { text: string; loss: number }) => ({ lines: [text], loss })
+
 /** "MIND GOBLINS GETS" in a width, the team's name giving way and the verb always kept. */
 const headText = (e: Env, s: CardSide, room: number) =>
   memo(e, `head|${s.rosterId}|${Math.round(room)}`, () => {
@@ -330,7 +333,7 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
   const ledgerHead = (s: CardSide, room: number) => {
     const full = headText(e, s, Infinity).text
     const two = pen.wrap(full, headF, room, 2)
-    return rowsOf(s) > 1 && two.join(' ') === full && two.every((l) => pen.width(l, headF) <= room) ? { lines: two, loss: 0 } : (({ text, loss }) => ({ lines: [text], loss }))(headText(e, s, room))
+    return rowsOf(s) > 1 && two.join(' ') === full && two.every((l) => pen.width(l, headF) <= room) ? { lines: two, loss: 0 } : oneLine(headText(e, s, room))
   }
   const headCol = o.ledger ? Math.ceil(Math.min(w * 0.34, Math.max(...card.sides.map((s) => Math.max(...ledgerHead(s, w * 0.34 - S.u * 4).lines.map((l) => pen.width(l, headF)))))) + S.u * 4) : 0
   const rowsW = w - headCol
@@ -355,14 +358,14 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
     }
     const rows = Math.ceil(items.length / o.cols)
     // The head, with its avatar and, on the first side with the room, the unit of the figures at the right.
-    const src = s.avatar ?? e.avatars[s.rosterId] ?? null
+    const src = s.avatar ?? null
     const av = src ? Math.round(S.min * 1.2) : 0
     const left = av ? av + S.u * 1.5 : 0
     const unitW = unit && !unitDone ? pen.width(unit, headF) + S.u * 3 : 0
-    let head = o.ledger ? ledgerHead(s, headCol - S.u * 4) : (({ text, loss }) => ({ lines: [text], loss }))(headText(e, s, w - left - unitW))
+    let head = o.ledger ? ledgerHead(s, headCol - S.u * 4) : oneLine(headText(e, s, w - left - unitW))
     let hasUnit = !!unitW
     if (unitW && head.loss > 0) {
-      head = (({ text, loss }) => ({ lines: [text], loss }))(headText(e, s, w - left))
+      head = oneLine(headText(e, s, w - left))
       hasUnit = false
     }
     if (hasUnit) unitDone = true
@@ -402,11 +405,11 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
     what: `sides ${o.ledger ? 'ledger' : 'stack'} ${o.kind}${o.tight ? ' tight' : ''}${o.kind === 'rich' ? '+face' : ''} x${o.cols}${o.cap < Infinity ? ` cap${o.cap}` : ''}${showPpw || !hasPpw ? '' : ' noppw'}${o.zoom !== 1 ? ` zoom${o.zoom}` : ''} loss${loss}`,
     draw: (x0, y0) => {
       let y = y0
-      sides.forEach((x, i) => {
+      sides.forEach((x) => {
         const bh = blockOf(x)
         const tone = x.s.focus ? p.accent : p.text2
         if (o.ledger) {
-          rule(e, x0, y - 1, w, i ? p.line2 : p.line2)
+          rule(e, x0, y - 1, w)
           const hb = { x: x0, y, w: headCol - S.u * 4, h: bh }
           x.head.lines.forEach((l, k) => pen.put(l, x0, y + firstBase + k * headLH, headF, rgb(tone), hb))
         } else {
@@ -481,8 +484,7 @@ const drawRow = (e: Env, s: CardSide, it: Item, r: Rect, o: SideOpt, m: RowCtx) 
     pen.put(name, x0, nb, nf, rgb(p.text), nameBox)
     // Under the name, from its edge: position, team and sender, each giving way in turn, then the timing tag.
     const tag = pl.tag ? pl.tag.toUpperCase() : null
-    const tagF: Font = { ...m.metaF }
-    const tagW = tag ? pen.width(tag, tagF) + S.u * 2 : 0
+    const tagW = tag ? pen.width(tag, m.metaF) + S.u * 2 : 0
     const parts = [pl.pos, pl.team ?? 'FA'].filter(Boolean)
     const fromWays = pl.from ? nameVariants(pl.from).map((n) => `from ${n}`) : []
     const lineWays = [...fromWays.map((f) => [...parts, f].join(' · ')), parts.join(' · '), pl.pos]
@@ -496,7 +498,7 @@ const drawRow = (e: Env, s: CardSide, it: Item, r: Rect, o: SideOpt, m: RowCtx) 
       line = pen.first(lineWays, lineF, avail)
     }
     const lw = pen.put(line, x0, mb, lineF, rgb(p.muted), metaBox)
-    if (withTag && tag) chip(e, tag, x0 + lw + S.u * 2, mb, tagF, metaBox)
+    if (withTag && tag) chip(e, tag, x0 + lw + S.u * 2, mb, m.metaF, metaBox)
   } else {
     pen.put(pl.pos, r.x, nb, m.metaF, rgb(p.muted), metaBox)
     pen.put(name, x0, nb, nf, rgb(p.text), nameBox)
@@ -540,7 +542,6 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
   const stats = dropped ? all.slice(0, cap - 1) : all
   const more = dropped ? dropped + 1 : 0
   const lf = label(S.min)
-  const unitF: Font = label(S.min)
   const subF: Font = { px: S.min }
   const toneOf = (s: CardStat) => (s.tone === 'pos' ? p.pos : s.tone === 'neg' ? p.neg : p.text)
   const top = S.u * 4
@@ -553,7 +554,7 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
     const rows = stats.map((s) => {
       for (const unit of unitWays(s.unit))
         for (const lab of statLabels(card, s)) {
-          const vw = pen.width(s.value, vf) + (unit ? S.u * 1.5 + pen.width(unit, unitF) : 0)
+          const vw = pen.width(s.value, vf) + (unit ? S.u * 1.5 + pen.width(unit, lf) : 0)
           if (pen.width(lab, lf) + vw + S.u * 4 <= w) {
             loss += (lab !== statLabels(card, s)[0] ? 0.5 : 0) + (unit !== unitWays(s.unit)[0] ? 0.5 : 0)
             return { s, lab, unit, vw }
@@ -562,7 +563,7 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
       // Else the label cut short beside the shortest unit, while a few letters of it still show.
       const ways = statLabels(card, s)
       const unit = unitWays(s.unit).at(-1)!
-      const vw = pen.width(s.value, vf) + (unit ? S.u * 1.5 + pen.width(unit, unitF) : 0)
+      const vw = pen.width(s.value, vf) + (unit ? S.u * 1.5 + pen.width(unit, lf) : 0)
       const lab = pen.cut(ways[ways.length - 1], lf, w - vw - S.u * 4)
       if (graphemes(lab.replace(/…$/, '')).length < 3) return null
       loss += 2
@@ -585,7 +586,7 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
           pen.put(row.lab, x, base, lf, rgb(p.muted), { ...box, w: w - row.vw - S.u * 4 })
           const vx = x + w - row.vw
           const vw = pen.put(row.s.value, vx, base, vf, rgb(toneOf(row.s)), { ...box, x: vx, w: row.vw })
-          if (row.unit) pen.put(row.unit, vx + vw + S.u * 1.5, base, unitF, rgb(p.muted), { ...box, x: vx, w: row.vw })
+          if (row.unit) pen.put(row.unit, vx + vw + S.u * 1.5, base, lf, rgb(p.muted), { ...box, x: vx, w: row.vw })
         })
         if (more) {
           const ry = y + top + live.length * rh
@@ -606,28 +607,27 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
   if (rowsOf.length > 1 && rowsOf[rowsOf.length - 1].length === 1 && o.cols > 2) return null
   // One grid for every row, so a short last row lines up under the first.
   const cw = (w - gap * (o.cols - 1)) / o.cols
-  const unitFor = (s: CardStat, px: number, room: number) => unitWays(s.unit).find((u) => pen.width(s.value, { px, w: 500, mono: true }) + (u ? S.u * 1.5 + pen.width(u, unitF) : 0) <= room) ?? null
+  const unitFor = (s: CardStat, px: number) => unitWays(s.unit).find((u) => pen.width(s.value, { px, w: 500, mono: true }) + (u ? S.u * 1.5 + pen.width(u, lf) : 0) <= cw) ?? null
   let px = S.value
   const least = Math.round(S.value * 0.7)
-  const fitsAll = (x: number) => rowsOf.every((row) => row.every((s) => unitFor(s, x, cw) === unitWays(s.unit)[0]))
+  const fitsAll = (x: number) => rowsOf.every((row) => row.every((s) => unitFor(s, x) === unitWays(s.unit)[0]))
   while (px > least && !fitsAll(px)) px -= 2
   let loss = 0
   const cells = rowsOf.map((row) =>
     row.map((s) => {
-      const room = cw
-      const unit = unitFor(s, px, room)
+      const unit = unitFor(s, px)
       if (unit == null) return null
       if (unit !== unitWays(s.unit)[0]) loss += 0.5
       const ways = statLabels(card, s)
-      const lab = pen.first(ways, lf, room)
+      const lab = pen.first(ways, lf, cw)
       if (lab !== ways[0]) loss += ways.includes(lab) ? 0.5 : 4
       let sub: string | null = null
       if (o.sub && s.sub) {
         const sw = subVariants(s.sub)
-        sub = sw.find((t) => pen.width(t, subF) <= room) ?? null
+        sub = sw.find((t) => pen.width(t, subF) <= cw) ?? null
         if (sub !== sw[0]) loss += sub ? 0.25 : 1
       }
-      return { s, lab, unit, sub, room }
+      return { s, lab, unit, sub }
     }),
   )
   if (cells.some((r) => r.some((c) => !c))) return null
@@ -656,7 +656,7 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
           pen.put(c.lab, cx, base, lf, rgb(p.muted), box)
           base += S.u * 3 + px * CAP
           const vw = pen.put(c.s.value, cx, base, { px, w: 500, mono: true }, rgb(toneOf(c.s)), box)
-          if (c.unit) pen.put(c.unit, cx + vw + S.u * 1.5, base, unitF, rgb(p.muted), box)
+          if (c.unit) pen.put(c.unit, cx + vw + S.u * 1.5, base, lf, rgb(p.muted), box)
           if (c.sub) pen.put(c.sub, cx, base + S.u * 3 + S.min * CAP, subF, rgb(p.text2), box)
         })
         ty += tileH[ri] + rowGap
@@ -683,6 +683,7 @@ const planStrip = (e: Env, w: number): Plan => {
     score: 8,
     what: 'strip',
     draw: (x, y) => {
+      if (e.said) e.said.weeksLeft = false
       rule(e, x, y, w)
       const hb = { x, y, w, h: top + S.min }
       const base = y + top + S.min * CAP
@@ -787,7 +788,8 @@ const heightOf = (plans: Plan[], gap: number) => plans.reduce((a, x) => a + x.h,
 
 /**
  * The best set of blocks for a column `w` by `h`: the sides, the figures, the strip and the note, each in the fullest
- * form that leaves room for the rest. A note is never left off; the figures and the strip only when they cannot fit.
+ * form that leaves room for the rest. The note and the figures are always kept (a column with no room for them is
+ * none); only the strip may be left off, when there is no room for it.
  */
 const chooseColumn = (e: Env, w: number, h: number, parts: { sides: boolean; stats: boolean; strip: boolean; note: boolean }): Column | null =>
   memo(e, `col|${w}|${Math.floor(h)}|${JSON.stringify(parts)}`, () => {
@@ -805,7 +807,7 @@ const chooseColumn = (e: Env, w: number, h: number, parts: { sides: boolean; sta
             const plans = [n, s, st, sp].filter((x): x is Plan => !!x)
             const need = heightOf(plans, gap)
             if (!plans.length || need > h) continue
-            const score = plans.reduce((a, x) => a + x.score, 0) - (parts.stats && card.stats.length && !st ? 30 : 0)
+            const score = plans.reduce((a, x) => a + x.score, 0)
             if (!best || score > best.score) best = { plans, score, h: need }
           }
     return best
@@ -820,7 +822,7 @@ const place = (e: Env, plans: Plan[], r: Rect, centre = true) => {
   const used = plans.reduce((a, x) => a + x.h, 0) + g * (n - 1)
   let y = r.y + (centre ? Math.max(0, (r.h - used) / 2) : 0)
   for (const x of plans) {
-    x.draw(r.x, Math.round(y), x.h)
+    x.draw(r.x, Math.round(y))
     y += x.h + g
   }
 }
@@ -927,11 +929,11 @@ export type DrawOptions = {
   /** Filled with the blocks the layout chose, for tuning. */
   trace?: string[]
   /** Filled with what the card had to shorten that the sender wrote: the note, cut to fit. */
-  said?: { noteCut: boolean }
+  said?: { noteCut: boolean; /** The week-by-week strip was asked for and the card had no room for it. */ weeksLeft?: boolean }
 }
 
 /** Draws the card onto `canvas` (sized to the format). Synchronous: whatever pictures are here are drawn. */
-export const drawTradeCard = (canvas: HTMLCanvasElement, card: TradeCard, format: CardFormat, palette: Palette, avatars: Record<number, string | null> = {}, opt: DrawOptions = {}) => {
+export const drawTradeCard = (canvas: HTMLCanvasElement, card: TradeCard, format: CardFormat, palette: Palette, opt: DrawOptions = {}) => {
   const S = SPECS[format]
   const scale = opt.scale ?? 1
   const cw = Math.max(1, Math.round(S.W * scale))
@@ -945,8 +947,11 @@ export const drawTradeCard = (canvas: HTMLCanvasElement, card: TradeCard, format
   const p = legible(palette)
   ctx.fillStyle = rgb(p.panel)
   ctx.fillRect(0, 0, S.W, S.H)
-  if (opt.said) opt.said.noteCut = false
-  const e: Env = { ctx, p, pen: makePen(ctx, opt.audit), S, card, avatars, memo: new Map(), said: opt.said }
+  if (opt.said) {
+    opt.said.noteCut = false
+    opt.said.weeksLeft = !!card.strip
+  }
+  const e: Env = { ctx, p, pen: makePen(ctx, opt.audit), S, card, memo: new Map(), said: opt.said }
   const gap = MIN_GAP(S)
   const top = drawHeader(e) + gap
   const bottom = drawFooter(e) - gap
@@ -986,7 +991,7 @@ export const drawTradeCard = (canvas: HTMLCanvasElement, card: TradeCard, format
           score: left.score + right.score + (note?.score ?? 0) + 2,
           plans: [...(note ? [note] : []), ...left.plans, ...right.plans],
           draw: () => {
-            note?.draw(area.x, area.y, note.h)
+            note?.draw(area.x, area.y)
             // Both columns from one top edge, so their first rules line up; the pair centred as one.
             const h = Math.max(left.h, right.h)
             const col = { ...below, y: below.y + Math.max(0, (below.h - h) / 2), h }
@@ -1059,7 +1064,7 @@ export const cardIssues = (audit: TextBox[], format: CardFormat) => {
 }
 
 /** The finished card in a new canvas: fonts and pictures first, then the draw. */
-export const renderTradeCard = async (card: TradeCard, format: CardFormat, p: Palette, avatars: Record<number, string | null> = {}) => {
-  await Promise.all([loadCardFonts(), loadPictures(cardSources(card, avatars))])
-  return drawTradeCard(document.createElement('canvas'), card, format, p, avatars)
+export const renderTradeCard = async (card: TradeCard, format: CardFormat, p: Palette) => {
+  await Promise.all([loadCardFonts(), loadPictures(cardSources(card))])
+  return drawTradeCard(document.createElement('canvas'), card, format, p)
 }

@@ -99,9 +99,7 @@ const loadPrefs = (): Prefs => {
   try {
     const raw = window.localStorage.getItem(PREFS_KEY)
     if (!raw) return base
-    const p = JSON.parse(raw) as Partial<Prefs> & { settingsOpen?: unknown }
-    // The sidebar's old settings box remembered whether it was open; Settings is a page now.
-    delete p.settingsOpen
+    const p = JSON.parse(raw) as Partial<Prefs>
     // Prefs saved before onboarding existed carry a username but no flag: they get the (pre-filled) form once.
     const known = p.provider === 'espn' ? !!p.espnLeagueId : !!p.username
     // A saved theme that has since been retired (gray, neutral, stone) falls back to the default.
@@ -423,13 +421,15 @@ const FantasyPage = () => {
         </div>
       )}
 
+      {/* Settings render here, once, whether or not a league has loaded, so a league change or data arriving never remounts them.
+          They work before a league loads, or when it fails to, so a wrong season or user can be put right. */}
+      {section === 'settings' && settings}
       {data && analysis && models && prefs ? (
         <FantasyProvider value={{ data, analysis, models, adjust, grades, go: (s, sub) => route.go(s, sub ?? undefined), ...sheetApi }}>
         {/* The trade builder's one deal, kept here so it outlives the page that opened it. */}
         <TradeDockProvider>
         <div key={data.league.league_id} ref={view} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'dash' && <DashboardView />}
-          {section === 'settings' && settings}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'waivers' && <WaiversView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'me' && <MeView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} />}
@@ -481,11 +481,8 @@ const FantasyPage = () => {
         />
         </TradeDockProvider>
         </FantasyProvider>
-      ) : section === 'settings' ? (
-        // Settings work before a league loads, or when it fails to, so a wrong season or user can be put right.
-        settings
       ) : (
-        !error && (
+        section !== 'settings' && !error && (
           // Padding, not margin: a top margin here collapses through to the page and shows a strip of body.
           <div className="pb-6">
             <div className="ff-bleed ff-gutter flex h-11 items-center gap-2.5 border-b border-ff-line font-mono text-[11.5px] text-ff-muted">

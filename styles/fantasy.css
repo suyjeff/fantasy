@@ -1094,20 +1094,9 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
 }
 
-/* The phone drawer is a touch surface: the settings controls (made 28px for a pointer) reach 40px, and the
-   menus they open get 44px rows. Scoped to the drawer, so the desktop sidebar keeps its density. */
+/* The phone drawer is a touch surface: the menus its controls open get 44px rows. */
 @media (max-width: 767px) {
-  .ff .ff-drawer #ff-settings .h-7 {
-    height: 2.5rem;
-  }
-  .ff .ff-drawer #ff-settings button {
-    min-height: 2.5rem;
-  }
-  .ff .ff-drawer #ff-settings button.w-7 {
-    width: 2.5rem;
-  }
-  .ff .ff-drawer [role='option'],
-  .ff .ff-drawer [role='menuitem'] {
+  .ff .ff-drawer [role='option'] {
     min-height: 2.75rem;
   }
 }

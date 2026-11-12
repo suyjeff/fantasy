@@ -488,7 +488,7 @@ const TradeCard = ({
         <span className="shrink-0 font-medium text-ff-text">{open ? 'Hide details' : 'Show details'}</span>
         {!open && (
           <span className="min-w-0 truncate text-ff-muted">
-            {signals.length > 2 && <span className="sm:hidden">+{signals.length - 2} reasons · </span>}
+            {signals.length > 2 && <span className="sm:hidden">+{signals.length - 2} {signals.length - 2 === 1 ? 'reason' : 'reasons'} · </span>}
             {signals.length > 3 && <span className="max-sm:hidden">+{signals.length - 3} reasons · </span>}
             their side, value, week by week
           </span>
@@ -540,7 +540,7 @@ const TradeCard = ({
           still Open in builder takes a row of its own (ff-tcard-fill, in fantasy.css); share is an icon below md. */}
       {onBuild && (
         <footer className="mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-ff-line px-3 py-2">
-          {asDeal && <ShareTradeButton deal={asDeal} label={`Share this trade with ${team?.name ?? 'them'}`} className="md:!h-8 md:!px-3 md:!text-[12.5px]" />}
+          {asDeal && <ShareTradeButton deal={asDeal} label={`Share this trade with ${team?.name ?? 'them'}`} />}
           {asDeal && <CompareToggle deal={asDeal} className="ff-tcard-fill" />}
           <Button variant="soft" className="ff-tcard-fill ff-tcard-own-row" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
             <BuildIcon size={13} />

@@ -1,9 +1,8 @@
-import React, { useId, type ReactNode } from 'react'
+import React, { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import type { Prefs } from '../../pages/index'
 import { themeById, type Scheme } from '../../lib/themes'
 import type { HorizonMode } from '../../lib/useLeagueData'
 import ThemePicker, { type Density } from '../ThemePicker'
-import { StartOver } from '../UserMenu'
 import { Button, Dropdown, PageHeader, Segmented, cx, usePhone } from '../ui'
 
 const HORIZON_LONG: Record<HorizonMode, string> = {
@@ -43,6 +42,41 @@ const Row = ({ label, hint, children, wide }: { label: ReactNode; hint?: ReactNo
 const span = (weeks: number[]) =>
   weeks.length ? <span className="whitespace-nowrap">{weeks.length === 1 ? `week ${weeks[0]}` : `weeks ${weeks[0]}–${weeks[weeks.length - 1]}`}</span> : null
 
+/** Everything this page has kept in this browser goes: settings, grades, reads, the board, cached data. */
+const startOver = () => {
+  try {
+    for (const k of Object.keys(window.localStorage)) if (k.startsWith('ff:')) window.localStorage.removeItem(k)
+  } catch {
+    // Storage blocked: nothing was kept to begin with.
+  }
+  window.location.reload()
+}
+
+/** Start over, asking once more in place before it clears; the safe choice takes focus. */
+const StartOver = () => {
+  const [confirm, setConfirm] = useState(false)
+  const cancel = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (confirm) cancel.current?.focus({ preventScroll: true })
+  }, [confirm])
+  if (!confirm)
+    return (
+      <Button className="text-ff-neg hover:text-ff-neg" onClick={() => setConfirm(true)}>
+        Start over…
+      </Button>
+    )
+  return (
+    <span role="group" aria-label="Start over" className="flex flex-wrap gap-1.5">
+      <button type="button" onClick={startOver} className="h-8 border border-ff-neg/50 bg-ff-neg/10 px-3 text-[12.5px] font-medium text-ff-neg hover:bg-ff-neg/15 max-md:h-10">
+        Clear and restart
+      </button>
+      <button ref={cancel} type="button" onClick={() => setConfirm(false)} className="h-8 border border-ff-line bg-ff-panel px-3 text-[12.5px] text-ff-text2 hover:bg-ff-raised max-md:h-10">
+        Cancel
+      </button>
+    </span>
+  )
+}
+
 /**
  * Every preference on one page, in groups. Changes apply and save as they are made. Works before a league has
  * loaded (or when it failed to), so a wrong season or user can always be put right from here.
@@ -75,6 +109,13 @@ const SettingsView = ({
   const priced = span(horizonWeeks)
   const playoffs = prefs.horizon === 'playoffs'
   const weightId = useId()
+  // Dragging only moves this local value; the pref (which reloads the league) is written on release.
+  const [weight, setWeight] = useState(prefs.playoffWeight)
+  useEffect(() => setWeight(prefs.playoffWeight), [prefs.playoffWeight])
+  const commitWeight = (e: { currentTarget: HTMLInputElement }) => {
+    const w = Number(e.currentTarget.value)
+    if (w !== prefs.playoffWeight) update({ playoffWeight: w })
+  }
 
   return (
     <>
@@ -171,15 +212,18 @@ const SettingsView = ({
                   min={0}
                   max={3}
                   step={0.5}
-                  value={prefs.playoffWeight}
+                  value={weight}
                   disabled={!playoffs}
                   aria-labelledby={weightId}
-                  aria-valuetext={`${prefs.playoffWeight} times a regular week`}
-                  onChange={(e) => update({ playoffWeight: Number(e.target.value) })}
+                  aria-valuetext={`${weight} times a regular week`}
+                  onChange={(e) => setWeight(Number(e.target.value))}
+                  onPointerUp={commitWeight}
+                  onKeyUp={commitWeight}
+                  onBlur={commitWeight}
                   className="ff-range min-w-0 flex-1 disabled:cursor-default max-md:h-10"
-                  style={{ ['--fill' as string]: `${(prefs.playoffWeight / 3) * 100}%` }}
+                  style={{ ['--fill' as string]: `${(weight / 3) * 100}%` }}
                 />
-                <span className="num w-9 shrink-0 text-right text-[13px] text-ff-text">{prefs.playoffWeight}×</span>
+                <span className="num w-9 shrink-0 text-right text-[13px] text-ff-text">{weight}×</span>
               </span>
             </Row>
           )}

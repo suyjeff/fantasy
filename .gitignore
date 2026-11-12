@@ -14,3 +14,6 @@ next-env.d.ts
 /research/data/
 /research/*.log
 __pycache__/
+
+# Written by next dev
+/AGENTS.md

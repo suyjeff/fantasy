@@ -143,7 +143,7 @@ const makeCard = (shape: string, names: keyof typeof NAMES, blocks: 'all' | 'one
 const draw = (card: TradeCard, format: CardFormat) => {
   const audit: TextBox[] = []
   const trace: string[] = []
-  drawTradeCard(fakeCanvas(), card, format, DARK, {}, { audit, trace })
+  drawTradeCard(fakeCanvas(), card, format, DARK, { audit, trace })
   return { audit, trace, texts: audit.map((t) => t.text) }
 }
 
