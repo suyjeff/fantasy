@@ -3,6 +3,7 @@ import { clearsLabel, type Availability } from '../lib/availability'
 import type { TrimmedPlayer } from '../lib/types'
 import { chance, share } from '../lib/format'
 import { ShowMore } from './views/ShowMore'
+import { ChevronIcon } from './icons'
 
 // ---------- Formatting ----------
 
@@ -400,6 +401,7 @@ export const Segmented = <K extends string>({
   label,
   block,
   manual,
+  disabled,
 }: {
   options: SegOption<NoInfer<K>>[]
   value: K
@@ -410,8 +412,10 @@ export const Segmented = <K extends string>({
   block?: boolean
   /** Arrows move focus only; Enter or Space picks. For choices that save something (a grade), not a view switch. */
   manual?: boolean
+  /** Shown, with the option in effect still marked, but locked. */
+  disabled?: boolean
 }) => (
-  <FadeStrip role="radiogroup" aria-label={label} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex')}>
+  <FadeStrip role="radiogroup" aria-label={label} aria-disabled={disabled || undefined} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex', disabled && 'pointer-events-none opacity-50 [&>button]:cursor-default')}>
     {options.map((o, i) => {
       const active = o.key === value
       return (
@@ -419,6 +423,7 @@ export const Segmented = <K extends string>({
           key={o.key}
           role="radio"
           aria-checked={active}
+          disabled={disabled}
           tabIndex={active || (i === 0 && !options.some((x) => x.key === value)) ? 0 : -1}
           title={o.title}
           onClick={() => onChange(o.key)}
@@ -664,8 +669,8 @@ export const Dropdown = ({
         ) : (
           <>
             <span className="min-w-0 flex-1 truncate pl-2.5 pr-2">{current?.face ?? current?.label ?? '—'}</span>
-            <span aria-hidden className="flex h-full w-7 shrink-0 items-center justify-center border-l border-ff-line font-mono text-[10px] text-ff-muted">
-              {open ? '▴' : '▾'}
+            <span aria-hidden className="flex h-full w-7 shrink-0 items-center justify-center border-l border-ff-line text-ff-muted">
+              <ChevronIcon dir={open ? 'up' : 'down'} />
             </span>
           </>
         )}
@@ -763,8 +768,9 @@ export const Button = ({
 }: {
   children: ReactNode
   onClick?: () => void
-  /** aqua: the one action a view exists for (build a trade); primary: a confirming action. */
-  variant?: 'outline' | 'ghost' | 'primary' | 'aqua'
+  /** aqua: the one action a view exists for (build a trade); primary: a confirming action; soft: an accent action
+   *  repeated down a list (Open in builder), tinted so the aqua one stays the loudest on the page. */
+  variant?: 'outline' | 'ghost' | 'primary' | 'aqua' | 'soft'
   size?: 'sm' | 'md'
   className?: string
   title?: string
@@ -783,6 +789,7 @@ export const Button = ({
       size === 'sm' ? 'h-7 px-2 text-[11.5px] max-md:h-10' : 'h-8 px-3 text-[12.5px] max-md:h-10',
       variant === 'primary' && 'bg-ff-text text-ff-panel hover:bg-ff-text/85',
       variant === 'aqua' && 'ff-aqua',
+      variant === 'soft' && 'border border-ff-accent/40 bg-ff-accent/[0.09] font-medium text-ff-accent hover:border-ff-accent/60 hover:bg-ff-accent/[0.15]',
       variant === 'outline' && 'border border-ff-line bg-ff-panel text-ff-text hover:border-ff-line2 hover:bg-ff-raised',
       variant === 'ghost' && 'text-ff-muted hover:bg-ff-raised hover:text-ff-text',
       className,
@@ -1645,9 +1652,9 @@ export function Table<T>({
                       onClick={() => setOpen(allOpen ? new Set() : new Set(expandable))}
                       aria-label={allOpen ? 'Collapse all rows' : 'Expand all rows'}
                       title={allOpen ? 'Collapse all' : 'Expand all'}
-                      className="flex h-8 w-7 items-center justify-center font-mono text-[10px] text-ff-muted hover:text-ff-text max-md:w-10"
+                      className="flex h-8 w-7 items-center justify-center font-mono text-ff-muted hover:text-ff-text max-md:w-10"
                     >
-                      <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', allOpen && 'rotate-90')}>›</span>
+                      <ChevronIcon dir="right" size={10} className={cx('motion-safe:transition-transform motion-safe:duration-150', allOpen && 'rotate-90')} />
                     </button>
                   )}
                 </th>
@@ -1673,7 +1680,7 @@ export function Table<T>({
                       className="-mx-1 inline-flex h-8 select-none items-center whitespace-nowrap px-1 uppercase hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
                     >
                       {c.label}
-                      {sortKey === c.key && <span aria-hidden className="ml-0.5 text-ff-text">{desc ? '▾' : '▴'}</span>}
+                      {sortKey === c.key && <span aria-hidden className="ml-0.5 text-ff-text"><ChevronIcon dir={desc ? 'down' : 'up'} size={10} className="align-[-1px]" /></span>}
                     </button>
                   ) : (
                     c.label
@@ -1732,9 +1739,9 @@ export function Table<T>({
                         aria-expanded={isOpen}
                         aria-controls={`${id}-${k}`}
                         aria-label={isOpen ? 'Hide details' : 'Show details'}
-                        className="flex h-[38px] w-7 items-center justify-center font-mono text-[11px] text-ff-muted hover:text-ff-text max-md:h-11 max-md:w-10"
+                        className="flex h-[38px] w-7 items-center justify-center text-ff-muted hover:text-ff-text max-md:h-11 max-md:w-10"
                       >
-                        <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', isOpen && 'rotate-90 text-ff-accent')}>›</span>
+                        <ChevronIcon dir="right" size={12} className={cx('motion-safe:transition-transform motion-safe:duration-150', isOpen && 'rotate-90 text-ff-accent')} />
                       </button>
                     )}
                   </td>

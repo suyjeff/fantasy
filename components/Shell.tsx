@@ -2,12 +2,12 @@ import React, { useEffect, useLayoutEffect, useRef, useState, type ReactNode } f
 import Head from 'next/head'
 import { MONKE } from './brand'
 import Tour, { TOUR } from './Tour'
-import { PanelIcon } from './icons'
+import { ChevronIcon, PanelIcon } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { lockScroll } from './scrollLock'
 import { Avatar, Dropdown, PhoneBarContext, cx, shortcutLabel, usePhone, type PhoneBarSlot } from './ui'
 
-export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'matchups', 'power', 'playoffs', 'teams', 'players', 'monke', 'model'] as const
+export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'matchups', 'power', 'playoffs', 'teams', 'players', 'monke', 'model', 'settings'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 type Group = 'Overview' | 'Your team' | 'League' | 'Engine'
@@ -30,6 +30,9 @@ export const SECTIONS: Section[] = [
 ]
 const GROUPS: Group[] = ['Overview', 'Your team', 'League', 'Engine']
 
+/** A section's name; Settings sits at the sidebar's foot rather than in the numbered register. */
+export const sectionLabel = (key: SectionKey) => (key === 'settings' ? 'Settings' : SECTIONS.find((s) => s.key === key)?.label)
+
 export { MONKE }
 
 /** The two-digit register number shown beside a section, which is also its keyboard shortcut. */
@@ -49,10 +52,6 @@ export type ShellProps = {
   leagueMeta?: string
   /** `onOpen` makes the row a button to your team's page. */
   me?: { name: string; avatar: string | null; line: string; onOpen?: () => void } | null
-  controls?: ReactNode
-  /** The settings box, folded to one line or open. */
-  controlsOpen?: boolean
-  onControls?: (open: boolean) => void
   loading: boolean
   progress: string
   onRefresh: () => void
@@ -69,7 +68,7 @@ export type ShellProps = {
   /** The desktop sidebar shown (the default) or folded away; folding needs `onSidebar`. */
   sidebar?: boolean
   onSidebar?: (open: boolean) => void
-  /** A banner at the foot of the sections, above the settings (the weekly power-rank reveal). Given the drawer's close on phones. */
+  /** A banner at the foot of the sections, above the Settings link (the weekly power-rank reveal). Given the drawer's close on phones. */
   navFooter?: (close?: () => void) => ReactNode
 }
 
@@ -128,7 +127,6 @@ const SidebarBody = ({
   onLeague,
   leagueMeta,
   me,
-  controls,
   loading,
   progress,
   onRefresh,
@@ -139,8 +137,6 @@ const SidebarBody = ({
   onSearch,
   tourKey,
   clearToggle,
-  controlsOpen,
-  onControls,
   navFooter,
 }: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void; tourKey?: string | null; /** Leave room at the left of the header for the fixed sidebar toggle. */ clearToggle?: boolean }) => (
   <div className="flex h-full flex-col">
@@ -172,9 +168,7 @@ const SidebarBody = ({
               <span className="mt-0.5 block truncate text-[13px] font-medium text-ff-text">{cur?.label ?? '—'}</span>
               {leagueMeta && <span className="block truncate font-mono text-[10.5px] text-ff-muted">{leagueMeta}</span>}
             </span>
-            <span aria-hidden className="shrink-0 font-mono text-[10px] text-ff-muted">
-              {open ? '▴' : '▾'}
-            </span>
+            <ChevronIcon dir={open ? 'up' : 'down'} size={10} className="text-ff-muted" />
           </span>
         )}
       />
@@ -200,9 +194,7 @@ const SidebarBody = ({
             className="group/me flex min-h-11 w-full items-center gap-2 border-t border-ff-line px-3 py-2 text-left transition-colors hover:bg-ff-raised focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent md:min-h-0"
           >
             {who}
-            <span aria-hidden className="shrink-0 font-mono text-[12px] text-ff-muted group-hover/me:text-ff-text2">
-              ›
-            </span>
+            <ChevronIcon dir="right" size={10} className="text-ff-muted group-hover/me:text-ff-text2" />
           </button>
         ) : (
           <div className="flex items-center gap-2 border-t border-ff-line px-3 py-2">{who}</div>
@@ -225,9 +217,7 @@ const SidebarBody = ({
           )}
           aria-keyshortcuts="Meta+K Control+K"
         >
-          <span aria-hidden className="font-mono text-ff-accent">
-            ›
-          </span>
+          <ChevronIcon dir="right" size={10} className="text-ff-accent" />
           <span className="flex-1">Jump to…</span>
           <kbd className="font-mono text-[10px] max-md:hidden">{shortcutLabel()}</kbd>
         </button>
@@ -277,28 +267,22 @@ const SidebarBody = ({
 
     {navFooter?.(onClose)}
 
-    {controls && (
-      <div className="shrink-0 border-t border-ff-line">
-        {/* Settings fold to one line, opened when needed. */}
-        <button
-          type="button"
-          aria-expanded={!!controlsOpen}
-          aria-controls="ff-settings"
-          onClick={() => onControls?.(!controlsOpen)}
-          className="flex h-11 w-full items-center gap-2 px-3 text-left hover:bg-ff-raised md:h-9"
-        >
-          <span className="ff-label min-w-0 flex-1">Settings</span>
-          <span aria-hidden className={cx('font-mono text-[10px] text-ff-muted motion-safe:transition-transform motion-safe:duration-150', controlsOpen && 'rotate-180')}>
-            ▴
-          </span>
-        </button>
-        {controlsOpen && (
-          <div id="ff-settings" className="space-y-3 px-3 pb-3">
-            {controls}
-          </div>
+    <div className="shrink-0 border-t border-ff-line">
+      <button
+        type="button"
+        onClick={() => onNavigate('settings')}
+        aria-current={section === 'settings' ? 'page' : undefined}
+        aria-keyshortcuts=","
+        className={cx(
+          'group flex h-11 w-full items-center gap-3 px-3 text-left text-[14px] transition-colors md:h-8 md:text-[13px]',
+          section === 'settings' ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-text2 hover:bg-ff-raised/60 hover:text-ff-text',
         )}
-      </div>
-    )}
+      >
+        <span className="flex-1">Settings</span>
+        <kbd className="hidden h-[18px] min-w-[18px] items-center justify-center border border-ff-line px-1 font-mono text-[10px] text-ff-muted md:inline-flex md:opacity-0 md:group-hover:opacity-100">,</kbd>
+        <ChevronIcon dir="right" size={10} className="text-ff-muted md:hidden" />
+      </button>
+    </div>
 
     <div className="shrink-0 border-t border-ff-line px-3 pb-2.5 pt-2 font-mono text-[10.5px] text-ff-muted">
       <div className="flex h-10 items-center justify-between gap-2 md:h-6">
@@ -376,6 +360,9 @@ const Shell = (props: ShellProps) => {
         e.preventDefault()
         onNavigate(SECTIONS[n - 1].key)
         window.scrollTo({ top: 0 })
+      } else if (e.key === ',') {
+        onNavigate('settings')
+        window.scrollTo({ top: 0 })
       } else if (e.key === 'r' || e.key === 'R') onRefresh()
       else if (e.key === '[' && onSidebar && !phone) onSidebar(!sidebarOpen)
     }
@@ -417,7 +404,6 @@ const Shell = (props: ShellProps) => {
     const dx = left(sidebarOpen ? 0 : 220) - left(sidebarOpen ? 220 : 0)
     el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 170, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' })
   }, [sidebarOpen, phone])
-  const current = SECTIONS.find((s) => s.key === section)
   const leagueName = leagues.find((l) => l.id === leagueId)?.name
 
   return (
@@ -449,7 +435,7 @@ const Shell = (props: ShellProps) => {
           <PanelIcon />
         </button>
         <div className="min-w-0 flex-1 px-3 leading-tight">
-          <div className="truncate text-[15px] font-medium">{bar ? bar.title : current?.label}</div>
+          <div className="truncate text-[15px] font-medium">{bar ? bar.title : sectionLabel(section)}</div>
           {(bar ? bar.sub : leagueName) && <div className="truncate font-mono text-[10.5px] text-ff-muted">{bar ? bar.sub : leagueName}</div>}
         </div>
         {props.onSearch && (

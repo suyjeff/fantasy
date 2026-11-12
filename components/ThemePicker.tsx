@@ -1,16 +1,14 @@
-import React, { useEffect, useId, useRef, useState } from 'react'
-import { THEMES, themeById, type Scheme, type Theme } from '../lib/themes'
-import { Segmented, cx } from './ui'
+import React, { useId } from 'react'
+import { THEMES, resolveMode, tokensFor, type Mode, type Scheme, type Theme } from '../lib/themes'
+import { cx, useMedia } from './ui'
 
 export type Density = 'compact' | 'comfortable'
 
-const MODE_LABEL: Record<Scheme, string> = { system: 'Auto', light: 'Light', dark: 'Dark' }
-
 /** Four chips of a theme's own colours: page, panel, accent, and the first series. */
-export const Swatch = ({ theme, compact }: { theme: Theme; compact?: boolean }) => {
+export const Swatch = ({ theme }: { theme: Theme }) => {
   const t = theme.dark ?? theme.light!
   const l = theme.light ?? theme.dark!
-  const chips = compact ? [t.bg, t.accent] : [l.panel, t.bg, t.accent, t.s[1]]
+  const chips = [l.panel, t.bg, t.accent, t.s[1]]
   return (
     <span aria-hidden className="inline-flex shrink-0 border border-ff-line2">
       {chips.map((c, i) => (
@@ -20,152 +18,96 @@ export const Swatch = ({ theme, compact }: { theme: Theme; compact?: boolean }) 
   )
 }
 
-const ThemeOption = ({ theme, checked, name, onPick }: { theme: Theme; checked: boolean; name: string; onPick: () => void }) => (
-  <label
-    className={cx(
-      'relative flex min-w-0 cursor-pointer items-center gap-2 border px-2 py-1.5 text-[12px] transition-colors',
-      checked ? 'border-ff-accent bg-ff-accent/10 text-ff-text' : 'border-ff-line text-ff-text2 hover:border-ff-line2 hover:text-ff-text',
-      'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-ff-accent',
-    )}
-  >
-    <input type="radio" name={name} checked={checked} onChange={onPick} className="sr-only" />
-    <Swatch theme={theme} compact />
-    <span className="min-w-0 flex-1 truncate">{theme.label}</span>
-    {/* Most themes come in both; the few that don't say which one they are. */}
-    {!(theme.light && theme.dark) && <span className="font-mono text-[9.5px] text-ff-muted">{theme.light ? 'light' : 'dark'}</span>}
-  </label>
-)
-
 /**
- * Display settings for the settings rail: theme, light or dark, and density. One row that opens a
- * small panel, so the rail stays short and every choice is spelled out (no glyph to decode).
+ * The app in miniature, in a theme's own colours: sidebar with the current page lit, a header rule, and a card with
+ * a label, a figure, a gain and a loss, a chart line and an accent button. Drawn on a fixed grid, so it scales to any width.
  */
-const DisplayMenu = ({
-  theme: themeId,
-  onTheme,
-  scheme,
-  onScheme,
-  density,
-  onDensity,
-}: {
-  theme: string
-  onTheme: (id: string) => void
-  scheme: Scheme
-  onScheme: (s: Scheme) => void
-  density: Density
-  onDensity: (d: Density) => void
-}) => {
-  const [open, setOpen] = useState(false)
-  const id = useId()
-  const wrap = useRef<HTMLDivElement>(null)
-  const button = useRef<HTMLButtonElement>(null)
-  const panel = useRef<HTMLDivElement>(null)
-  const theme = themeById(themeId)
-  const both = !!(theme.light && theme.dark)
-
-  useEffect(() => {
-    if (!open) return
-    // Focus the checked theme, the choice people come here for most.
-    panel.current?.querySelector<HTMLInputElement>('input:checked')?.focus({ preventScroll: true })
-    const away = (e: PointerEvent) => !wrap.current?.contains(e.target as Node) && setOpen(false)
-    const key = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      e.stopPropagation()
-      setOpen(false)
-      button.current?.focus()
-    }
-    // Tabbing out closes it, like a menu. Focus landing outside is the signal, not a blur: a click on padding or on a
-    // control that takes no focus (Safari buttons) blurs with no target and must not close the panel under the pointer.
-    const focusOut = (e: FocusEvent) => !wrap.current?.contains(e.target as Node) && setOpen(false)
-    document.addEventListener('pointerdown', away)
-    document.addEventListener('keydown', key, true)
-    document.addEventListener('focusin', focusOut)
-    return () => {
-      document.removeEventListener('focusin', focusOut)
-      document.removeEventListener('pointerdown', away)
-      document.removeEventListener('keydown', key, true)
-    }
-  }, [open])
-
+const ThemePreview = ({ theme, mode }: { theme: Theme; mode: Mode }) => {
+  const t = tokensFor(theme, mode)
   return (
-    <div ref={wrap} className="relative min-w-0 flex-1">
-      <button
-        ref={button}
-        type="button"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={`${id}-panel`}
-        onClick={() => setOpen((x) => !x)}
-        className={cx(
-          'flex h-7 w-full min-w-0 items-center gap-1.5 border bg-ff-panel pl-2 pr-1.5 text-left text-[12px] text-ff-text transition-colors',
-          open ? 'border-ff-line2' : 'border-ff-line hover:border-ff-line2',
-        )}
-      >
-        <Swatch theme={theme} compact />
-        <span className="min-w-0 flex-1 truncate">
-          {theme.label}
-          <span className="text-ff-muted"> · {both ? MODE_LABEL[scheme] : theme.light ? 'Light' : 'Dark'}</span>
-        </span>
-        <span aria-hidden className={cx('font-mono text-[10px] text-ff-muted motion-safe:transition-transform motion-safe:duration-150', open && 'rotate-180')}>
-          ▾
-        </span>
-      </button>
-      {open && (
-        <div
-          ref={panel}
-          id={`${id}-panel`}
-          role="dialog"
-          aria-label="Display"
-          className="ff-pop ff-pop-up absolute bottom-full left-0 z-50 mb-1 w-[288px] max-w-[calc(100vw-24px)] border border-ff-line2 bg-ff-panel shadow-[0_12px_32px_-12px_rgb(0_0_0/0.35)]"
-        >
-          <div className="space-y-2.5 border-b border-ff-line p-3">
-            <div className="flex items-center justify-between gap-3">
-              <span className="ff-label">Mode</span>
-              {both ? (
-                <Segmented<Scheme>
-                  size="sm"
-                  label="Mode"
-                  value={scheme}
-                  onChange={onScheme}
-                  options={[
-                    { key: 'system', label: 'Auto', title: 'Follow your device' },
-                    { key: 'light', label: 'Light' },
-                    { key: 'dark', label: 'Dark' },
-                  ]}
-                />
-              ) : (
-                <span className="font-mono text-[11px] text-ff-muted">
-                  {theme.label} is {theme.light ? 'light' : 'dark'} only
-                </span>
-              )}
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="ff-label">Density</span>
-              <Segmented<Density>
-                size="sm"
-                label="Density"
-                value={density}
-                onChange={onDensity}
-                options={[
-                  { key: 'compact', label: 'Compact', title: 'More on screen' },
-                  { key: 'comfortable', label: 'Comfortable', title: 'Larger type, roomier rows' },
-                ]}
-              />
-            </div>
-          </div>
-          <fieldset className="max-h-[min(340px,50dvh)] overflow-y-auto overscroll-contain p-3">
-            <legend className="ff-label float-left mb-1.5 w-full">Theme</legend>
-            <div className="clear-both grid grid-cols-2 gap-1">
-              {THEMES.map((t) => (
-                <ThemeOption key={t.id} theme={t} name={`${id}-theme`} checked={t.id === theme.id} onPick={() => onTheme(t.id)} />
-              ))}
-            </div>
-          </fieldset>
-        </div>
-      )}
-    </div>
+    <svg aria-hidden viewBox="0 0 120 72" shapeRendering="crispEdges" className="block h-auto w-full">
+      <rect width="120" height="72" fill={t.bg} />
+      {/* Sidebar */}
+      <rect width="30" height="72" fill={t.panel} />
+      <rect x="30" width="1" height="72" fill={t.line} />
+      <rect x="5" y="5" width="15" height="3" fill={t.text} />
+      <rect y="14" width="30" height="7" fill={t.raised} />
+      <rect y="14" width="1.5" height="7" fill={t.accent} />
+      <rect x="5" y="16.5" width="16" height="2" fill={t.text} />
+      {[26, 33, 40, 47].map((y, i) => (
+        <rect key={y} x="5" y={y} width={[13, 17, 11, 15][i]} height="2" fill={t.text2} opacity="0.75" />
+      ))}
+      {/* Page header */}
+      <rect x="31" y="12" width="89" height="1" fill={t.line} />
+      <rect x="36" y="5" width="24" height="3" fill={t.text} />
+      <rect x="64" y="5.5" width="14" height="2" fill={t.muted} />
+      {/* A card */}
+      <rect x="36" y="18" width="79" height="49" fill={t.panel} stroke={t.line} strokeWidth="1" />
+      <rect x="41" y="23" width="18" height="2" fill={t.muted} />
+      <rect x="41" y="29" width="24" height="6" fill={t.text} />
+      <rect x="41" y="39" width="12" height="3" fill={t.pos} />
+      <rect x="56" y="39" width="9" height="3" fill={t.neg} />
+      <rect x="94" y="22" width="17" height="7" fill={t.accent} />
+      <rect x="98" y="25" width="9" height="1" fill={t.onAccent} />
+      <polyline points="41,61 52,56 62,58 73,50 84,53 95,46 110,48" fill="none" stroke={t.accent} strokeWidth="1.5" shapeRendering="geometricPrecision" />
+      <rect x="41" y="62" width="69" height="1" fill={t.line} />
+    </svg>
   )
 }
 
-export default DisplayMenu
+
+/** One theme as a picker tile: its miniature over its name. `sm` for tight spaces (phones). */
+const ThemeTile = ({ theme, mode, checked, name, onPick, size = 'md' }: { theme: Theme; mode: Mode; checked: boolean; name: string; onPick: () => void; size?: 'sm' | 'md' }) => {
+  // The few themes that come in one mode only say so, on the miniature itself in its own colours.
+  const only = theme.light && theme.dark ? null : theme.light ? 'light' : 'dark'
+  const t = tokensFor(theme, mode)
+  return (
+    <label
+      title={only ? `${theme.label} (${only} only)` : theme.label}
+      className={cx(
+        'relative flex min-w-0 cursor-pointer flex-col border bg-ff-panel transition-colors',
+        checked ? 'border-ff-accent shadow-[0_0_0_1px_rgb(var(--ff-accent))]' : 'border-ff-line hover:border-ff-line2',
+        'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ff-accent',
+      )}
+    >
+      <input type="radio" name={name} value={theme.id} checked={checked} onChange={onPick} className="sr-only" />
+      <span className="relative block border-b border-ff-line">
+        <ThemePreview theme={theme} mode={mode} />
+        {only && (
+          <span className="absolute bottom-1 right-1 border px-1 font-mono text-[9px] leading-[13px]" style={{ background: t.panel, color: t.text2, borderColor: t.line2 }}>
+            {only}
+          </span>
+        )}
+      </span>
+      <span className={cx('flex min-w-0 items-center gap-1.5', size === 'sm' ? 'h-7 px-1.5 text-[11px]' : 'h-9 px-2 text-[12.5px]')}>
+        <span className={cx('min-w-0 flex-1 truncate', checked ? 'font-medium text-ff-text' : 'text-ff-text2')}>{theme.label}</span>
+        {checked && (
+          <span aria-hidden className="shrink-0 font-mono text-[11px] text-ff-accent">
+            ✓
+          </span>
+        )}
+      </span>
+    </label>
+  )
+}
+
+/**
+ * Every theme as a grid of tiles, a native radio group (arrows move and pick). A theme with both modes is drawn in the
+ * mode the scheme picks, so switching Light or Dark redraws the grid; the rest show the only mode they have.
+ */
+const ThemePicker = ({ value, onChange, scheme, size = 'md' }: { value: string; onChange: (id: string) => void; scheme: Scheme; size?: 'sm' | 'md' }) => {
+  const name = useId()
+  const systemDark = useMedia('(prefers-color-scheme: dark)')
+  return (
+    <fieldset className="min-w-0">
+      <legend className="sr-only">Theme</legend>
+      <div className={cx('grid', size === 'sm' ? 'grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-1.5' : 'grid-cols-[repeat(auto-fill,minmax(136px,1fr))] gap-2')}>
+        {THEMES.map((t) => (
+          <ThemeTile key={t.id} theme={t} mode={resolveMode(t, scheme, systemDark)} name={name} size={size} checked={t.id === value} onPick={() => onChange(t.id)} />
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
+export default ThemePicker

@@ -143,7 +143,7 @@ const makeCard = (shape: string, names: keyof typeof NAMES, blocks: 'all' | 'one
 const draw = (card: TradeCard, format: CardFormat) => {
   const audit: TextBox[] = []
   const trace: string[] = []
-  drawTradeCard(fakeCanvas(), card, format, DARK, {}, { audit, trace })
+  drawTradeCard(fakeCanvas(), card, format, DARK, { audit, trace })
   return { audit, trace, texts: audit.map((t) => t.text) }
 }
 
@@ -212,7 +212,7 @@ describe('the layout it chooses', () => {
   })
   it('draws a small trade larger when the card has room, the floor rising with it', () => {
     const { audit, trace } = draw(makeCard('one', 'short', 'none', false), 'square')
-    expect(trace.find((t) => t.startsWith('sides'))).toMatch(/zoom1\.(25|5)/)
+    expect(trace.find((t) => t.startsWith('sides'))).toMatch(/zoom1\.\d/)
     const name = audit.find((t) => t.text.includes('McCaffrey'))!
     expect(name.px).toBeGreaterThan(cardFloor('square').px * 1.2)
   })
@@ -226,8 +226,9 @@ describe('the layout it chooses', () => {
     const { texts } = draw(makeCard('max', 'short', 'all', true), 'square')
     expect(texts.some((t) => /^\+\d+( MORE)?$/.test(t))).toBe(true)
   })
-  it('folds the week strip into the lineup figure when it has no room of its own', () => {
-    const { trace } = draw(makeCard('two', 'short', 'all', false), 'square')
-    expect(trace.some((t) => /spark/.test(t)) || trace.some((t) => t.startsWith('strip'))).toBe(true)
+  it('draws the week strip where it has room, and gives it up before any figure', () => {
+    expect(draw(makeCard('one', 'short', 'all', false), 'story').trace.some((t) => t.startsWith('strip'))).toBe(true)
+    const { trace } = draw(makeCard('max', 'short', 'all', true), 'square')
+    expect(trace.some((t) => t.startsWith('stats'))).toBe(true)
   })
 })

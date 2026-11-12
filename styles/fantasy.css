@@ -676,6 +676,37 @@ html.ff-page body {
   }
 }
 
+/* A suggested-trade card (TradeCard) lays out by its own width, not the viewport's: the sidebar and the two-column
+   grid make a card narrow on a wide screen too. Narrow, Compare and Open in builder share the footer's spare width,
+   so the row reads as one bar of actions; narrower still, Open in builder takes a full-width row of its own under
+   Share and Compare, rather than the row running out of the card. */
+.ff .ff-tcard {
+  container-type: inline-size;
+}
+@container (max-width: 419px) {
+  .ff .ff-tcard-fill {
+    flex: 1 1 auto;
+  }
+}
+@container (max-width: 379px) {
+  .ff .ff-tcard-fill.ff-tcard-own-row {
+    flex-basis: 100%;
+  }
+}
+/* Send and get side by side, and the details' four figures in one row, only where each still fits its label. */
+@container (min-width: 480px) {
+  .ff .ff-tcard-sides {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ff .ff-tcard-figs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .ff .ff-tcard-sides > :first-child {
+    border-bottom-width: 0;
+    border-right-width: 1px;
+  }
+}
+
 /* The wide-screen side sheet (phones use SwipeSheet, which enters by scrolling). It slides in from the right on
    the iOS sheet curve and leaves the way it came, a little faster. Transitions, not keyframes: closing it while it
    is still arriving turns it around from wherever it is. The scrim follows. Reduced motion cross-fades instead. */
@@ -1063,20 +1094,9 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
 }
 
-/* The phone drawer is a touch surface: the settings controls (made 28px for a pointer) reach 40px, and the
-   menus they open get 44px rows. Scoped to the drawer, so the desktop sidebar keeps its density. */
+/* The phone drawer is a touch surface: the menus its controls open get 44px rows. */
 @media (max-width: 767px) {
-  .ff .ff-drawer #ff-settings .h-7 {
-    height: 2.5rem;
-  }
-  .ff .ff-drawer #ff-settings button {
-    min-height: 2.5rem;
-  }
-  .ff .ff-drawer #ff-settings button.w-7 {
-    width: 2.5rem;
-  }
-  .ff .ff-drawer [role='option'],
-  .ff .ff-drawer [role='menuitem'] {
+  .ff .ff-drawer [role='option'] {
     min-height: 2.75rem;
   }
 }

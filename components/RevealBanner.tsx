@@ -2,6 +2,7 @@ import React, { type CSSProperties } from 'react'
 import type { Analysis } from '../lib/analysis'
 import { countdown, dropsLabel, type Recap } from '../lib/recap'
 import { cx } from './ui'
+import { ChevronIcon } from './icons'
 import { useNow } from './useReveal'
 
 // The way back into the weekly power-rank reveal: a themed banner on the Power page and a smaller one at the
@@ -180,9 +181,7 @@ export const PowerBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap
             aria-label={`Replay the week ${recap.week} power rank reveal`}
           >
             <span className="max-sm:hidden">Replay</span> wk {recap.week}
-            <span aria-hidden className="ff-rv-nudge inline-block">
-              ▸
-            </span>
+            <ChevronIcon dir="right" className="ff-rv-nudge" />
           </button>
         )}
       </div>
@@ -214,13 +213,9 @@ export const PowerBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap
       </span>
       <span className="relative flex h-8 shrink-0 items-center gap-1.5 border border-ff-accent/60 bg-ff-panel/50 px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] max-sm:hidden">
         Replay
-        <span aria-hidden className="ff-rv-nudge inline-block">
-          ▸
-        </span>
+        <ChevronIcon dir="right" className="ff-rv-nudge" />
       </span>
-      <span aria-hidden className="ff-rv-nudge relative font-mono text-[14px] sm:hidden">
-        ▸
-      </span>
+      <ChevronIcon dir="right" size={14} className="ff-rv-nudge relative sm:hidden" />
     </button>
   )
 }
@@ -289,9 +284,7 @@ export const NavBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap |
             )}
           </span>
         </span>
-        <span aria-hidden className="ff-rv-nudge relative font-mono text-[12px] text-ff-text2">
-          ▸
-        </span>
+        <ChevronIcon dir="right" className="ff-rv-nudge relative text-ff-text2" />
       </button>
     </div>
   )

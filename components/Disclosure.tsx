@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react'
 import { cx } from './ui'
+import { ChevronIcon } from './icons'
 
 /**
  * One closed-by-default disclosure for the working and small print behind a page: the part you read once, not
@@ -37,9 +38,7 @@ export const Disclosure = ({
     >
       <summary className="ff-label flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 hover:text-ff-text [&::-webkit-details-marker]:hidden">
         <span className="min-w-0">{summary}</span>
-        <span aria-hidden className="shrink-0 text-[11px] motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-ff-out group-open:rotate-180">
-          ▾
-        </span>
+        <ChevronIcon className="motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-ff-out group-open:rotate-180" />
       </summary>
       <div className={cx('border-t border-ff-line px-3 py-2.5', className)}>{children}</div>
     </details>

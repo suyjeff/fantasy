@@ -37,6 +37,7 @@ import {
 } from '../ui'
 import { Disclosure } from '../Disclosure'
 import RosterTable, { type Basis } from './RosterTable'
+import { ChevronIcon } from '../icons'
 
 // Phones get a page per section, so the team's summary (figures, moves, scout) is a page of its own there.
 // Wide screens show it above the tabs, and a link to the phone-only page lands on the roster.
@@ -229,8 +230,8 @@ const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<Teams
         ← All teams
       </button>
       <span className="flex min-w-0 flex-1 items-stretch border border-ff-line bg-ff-panel md:flex-none">
-        <button type="button" onClick={() => step(-1)} aria-label="Previous team" className="h-7 w-7 border-r border-ff-line font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text">
-          ‹
+        <button type="button" onClick={() => step(-1)} aria-label="Previous team" className="flex h-7 w-7 items-center justify-center border-r border-ff-line text-ff-muted hover:bg-ff-raised hover:text-ff-text">
+          <ChevronIcon dir="left" />
         </button>
         <Dropdown
           label="Team"
@@ -242,14 +243,12 @@ const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<Teams
           renderButton={(cur, open) => (
             <span className="flex h-7 w-full items-center gap-1.5 px-2 text-left text-[12px] text-ff-text hover:bg-ff-raised md:w-[190px]">
               <span className="min-w-0 flex-1 truncate">{cur?.label}</span>
-              <span aria-hidden className="font-mono text-[10px] text-ff-muted">
-                {open ? '▴' : '▾'}
-              </span>
+              <ChevronIcon dir={open ? 'up' : 'down'} className="text-ff-muted" />
             </span>
           )}
         />
-        <button type="button" onClick={() => step(1)} aria-label="Next team" className="h-7 w-7 border-l border-ff-line font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text">
-          ›
+        <button type="button" onClick={() => step(1)} aria-label="Next team" className="flex h-7 w-7 items-center justify-center border-l border-ff-line text-ff-muted hover:bg-ff-raised hover:text-ff-text">
+          <ChevronIcon dir="right" />
         </button>
       </span>
     </div>

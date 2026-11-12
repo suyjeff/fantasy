@@ -9,6 +9,7 @@ import { ShareButton } from './RevealShare'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { lockScroll } from './scrollLock'
 import { cx, reducedMotion, usePhone } from './ui'
+import { ChevronIcon } from './icons'
 import type { RevealApi, RevealSource } from './useReveal'
 
 // The weekly power-rank reveal: two acts (RevealActs.tsx), then the recap.
@@ -289,7 +290,10 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
       <span className="flex-1" />
       {intro ? (
         <button type="button" onClick={skip} className="h-8 shrink-0 whitespace-nowrap px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-md:h-10">
-          Skip ›
+          <span className="inline-flex items-center gap-1">
+            Skip
+            <ChevronIcon dir="right" />
+          </span>
         </button>
       ) : (
         <>
