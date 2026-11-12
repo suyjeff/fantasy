@@ -11,6 +11,7 @@ import { Badge, Button, Empty, N, Panel, Reasons, Stat, StatGrid, cx, fmt, fmtSi
 import { Callout } from '../Callout'
 import { InsightMark } from '../InsightMark'
 import { Disclosure } from '../Disclosure'
+import { ChevronIcon } from '../icons'
 
 /** The bid's basis in words, so a range of "$1-1" never has to explain itself. */
 const bidNote = (b: BidAdvice, min: number) =>
@@ -341,8 +342,9 @@ const WaiverMoves = ({
           title={`Streams for week ${week ?? ''}`}
           pad={false}
           actions={
-            <button type="button" onClick={onStream} className="text-ff-accent underline-offset-2 hover:underline">
-              All streamers ›
+            <button type="button" onClick={onStream} className="inline-flex items-center gap-1 text-ff-accent underline-offset-2 hover:underline">
+              All streamers
+              <ChevronIcon dir="right" />
             </button>
           }
         >
@@ -442,7 +444,8 @@ const WaiverMoves = ({
       <div className="flex flex-col items-stretch gap-2 border border-dashed border-ff-line2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[12.5px] text-ff-text2">Want someone else? Browse every free agent by position, projection and trend.</p>
         <Button onClick={onBrowse} className="shrink-0 max-md:h-11">
-          Browse free agents ›
+          Browse free agents
+          <ChevronIcon dir="right" className="ml-1" />
         </Button>
       </div>
 

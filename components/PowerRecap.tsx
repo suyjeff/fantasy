@@ -5,6 +5,7 @@ import { useFantasy } from './FantasyContext'
 import { Crown } from './RevealBanner'
 import { ShareButton } from './RevealShare'
 import { Avatar, PlayerAvatar, PosTag, Segmented, cx, fmt, odds as chance, pct } from './ui'
+import { ChevronIcon } from './icons'
 
 // What the reveal settles into: the new ranking with each team's move, and the week that made it. On wide screens
 // the ranking holds the left column and the week reads down the right; on phones they are three pages under tabs.
@@ -560,9 +561,7 @@ const PowerRecap = ({
             >
               <RowBody team={t} rank={t.rankAfter} crowned={i === 0} hatDelay={entering && !from ? 400 : 0} />
               {phone && (
-                <span aria-hidden className={cx('-mr-1 w-3 font-mono text-[10px] text-ff-muted motion-safe:transition-transform motion-safe:duration-200', selected && 'rotate-180')}>
-                  ▾
-                </span>
+                <ChevronIcon className={cx('-mr-1 text-ff-muted motion-safe:transition-transform motion-safe:duration-200', selected && 'rotate-180')} />
               )}
             </button>
             {phone && selected && (

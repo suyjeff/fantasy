@@ -15,7 +15,7 @@ import {
 } from '../lib/deal'
 import type { TradeIdea } from '../lib/trades'
 import { useFantasy, useTradeRead } from './FantasyContext'
-import { AddIcon, TradeIcon } from './icons'
+import { AddIcon, ChevronIcon, TradeIcon } from './icons'
 import { Disclosure } from './Disclosure'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
@@ -179,7 +179,7 @@ const RemoveButton = ({ label, onClick }: { label: string; onClick: () => void }
   </button>
 )
 
-/** "to Team X ▾": where a player or a FAAB payment goes, in a deal of three or four. */
+/** "to Team X" with a caret: where a player or a FAAB payment goes, in a deal of three or four. */
 const DestPicker = ({ label, value, teams, onChange }: { label: string; value: number; teams: number[]; onChange: (to: number) => void }) => {
   const { analysis } = useFantasy()
   const me = analysis.myRosterId
@@ -194,9 +194,7 @@ const DestPicker = ({ label, value, teams, onChange }: { label: string; value: n
         <span className="flex h-10 max-w-[124px] items-center gap-1 border border-ff-line px-2 font-mono text-[11px] text-ff-text2 hover:border-ff-line2 md:h-7 md:px-1.5 md:text-[10.5px]">
           <span className="text-ff-muted">to</span>
           <span className="truncate">{cur?.label}</span>
-          <span aria-hidden className="text-ff-muted">
-            {open ? '▴' : '▾'}
-          </span>
+          <ChevronIcon dir={open ? 'up' : 'down'} size={10} className="text-ff-muted" />
         </span>
       )}
     />
