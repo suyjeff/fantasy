@@ -264,7 +264,7 @@ type Plan = { h: number; score: number; what: string; draw: (x: number, y: numbe
 
 type Kind = 'rich' | 'line'
 /** `ledger`: each side a band, its head in a column at the left and its rows beside it, for many teams in little height. */
-type SideOpt = { kind: Kind; cols: number; cap: number; zoom: number; ppw: boolean; ledger?: boolean }
+type SideOpt = { kind: Kind; cols: number; cap: number; zoom: number; ppw: boolean; ledger?: boolean; tight?: boolean }
 type Item = { t: 'player'; i: number } | { t: 'faab' } | { t: 'none' } | { t: 'more'; n: number }
 
 const itemsOf = (s: CardSide) => {
@@ -280,6 +280,9 @@ const nameForms = (name: string) => {
   return v.length === 3 ? v : v.length === 2 ? [v[0], v[0], v[1]] : [v[0], v[0], v[0]]
 }
 
+/** Who sends a player, in a deal of three or more: a phrase, so in the words' face. */
+const fromText = (team: string) => `from ${nameVariants(team)[0]}`
+
 /** The measures of one way of setting the sides. */
 const sideMeasures = (S: Spec, o: SideOpt) => {
   const z = o.zoom
@@ -288,7 +291,7 @@ const sideMeasures = (S: Spec, o: SideOpt) => {
   const face = Math.round(S.face * z)
   const gapLine = Math.round(S.u * 2 * z)
   const textH = name * CAP + gapLine + meta * CAP
-  const rowH = o.kind === 'rich' ? Math.round(Math.max(face, textH + S.u * 2) + S.u * 3) : Math.round(name * CAP + S.u * 4 * Math.min(z, 1.2))
+  const rowH = o.kind === 'rich' ? Math.round(Math.max(face, textH + S.u * 2) + S.u * 3) : Math.round(name * CAP + S.u * (o.tight ? 3 : 4) * Math.min(z, 1.2))
   return { name, meta, face, gapLine, textH, rowH }
 }
 
@@ -367,7 +370,7 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
 
     // Every name on the side in one form and one size: the fullest form all of them fit, then a little smaller, then cut.
     const players = items.filter((it): it is { t: 'player'; i: number } => it.t === 'player').map((it) => s.players[it.i])
-    const fromW = (pl: (typeof players)[number]) => (o.kind === 'line' && pl.from && o.cols === 1 ? pen.width(`FROM ${nameVariants(pl.from)[0].toUpperCase()}`, metaF) + gap : 0)
+    const fromW = (pl: (typeof players)[number]) => (o.kind === 'line' && pl.from && o.cols === 1 ? pen.width(fromText(pl.from), { px: m.meta }) + gap : 0)
     const showFrom = o.kind === 'line' && o.cols === 1 && players.every((pl) => !pl.from || nameRoom0 - fromW(pl) >= S.name * 4)
     if (o.kind === 'line' && players.some((pl) => pl.from) && !showFrom) loss += 2
     const roomOf = (pl: (typeof players)[number]) => nameRoom0 - (showFrom ? fromW(pl) : 0)
@@ -387,16 +390,16 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
     return { s, items, rows, head, hasUnit, src, av, left, level, px, showFrom }
   })
 
-  const sideGap = o.ledger ? 0 : S.wide ? S.u * 4 : S.u * 5
+  const sideGap = o.ledger ? 0 : S.wide || o.tight ? S.u * 4 : S.u * 5
   // A ledger's head sits on the baseline of its first row, its second line under it.
   const firstBase = o.kind === 'rich' ? m.rowH / 2 : Math.round(m.rowH / 2 + (m.name * CAP) / 2)
   const blockOf = (x: (typeof sides)[number]) => (o.ledger ? Math.max(x.rows * m.rowH, firstBase + (x.head.lines.length - 1) * headLH + S.min * DESC + S.u * 2) : headH + x.rows * m.rowH)
   const h = sides.reduce((a, x) => a + blockOf(x), 0) + sideGap * (sides.length - 1)
-  const kindScore = (o.kind === 'rich' ? 60 : 50 - (o.cols - 1) * 6) - (o.ledger ? 8 : 0)
+  const kindScore = (o.kind === 'rich' ? 60 : 50 - (o.cols - 1) * 6) - (o.ledger ? 8 : 0) - (o.tight ? 3 : 0)
   return {
     h,
     score: kindScore + (o.zoom - 1) * 20 - loss * 2.5,
-    what: `sides ${o.ledger ? 'ledger' : 'stack'} ${o.kind}${o.kind === 'rich' ? '+face' : ''} x${o.cols}${o.cap < Infinity ? ` cap${o.cap}` : ''}${showPpw || !hasPpw ? '' : ' noppw'}${o.zoom !== 1 ? ` zoom${o.zoom}` : ''} loss${loss}`,
+    what: `sides ${o.ledger ? 'ledger' : 'stack'} ${o.kind}${o.tight ? ' tight' : ''}${o.kind === 'rich' ? '+face' : ''} x${o.cols}${o.cap < Infinity ? ` cap${o.cap}` : ''}${showPpw || !hasPpw ? '' : ' noppw'}${o.zoom !== 1 ? ` zoom${o.zoom}` : ''} loss${loss}`,
     draw: (x0, y0) => {
       let y = y0
       sides.forEach((x, i) => {
@@ -471,7 +474,7 @@ const drawRow = (e: Env, s: CardSide, it: Item, r: Rect, o: SideOpt, m: RowCtx) 
   const pl = s.players[it.i]
   const forms = nameForms(pl.name)
   const nf = m.nameF(m.px)
-  const room = nameBox.w - (m.showFrom && pl.from ? pen.width(`FROM ${nameVariants(pl.from)[0].toUpperCase()}`, m.metaF) + m.gap : 0)
+  const room = nameBox.w - (m.showFrom && pl.from ? pen.width(fromText(pl.from), { px: m.meta }) + m.gap : 0)
   const name = pen.cut(forms[m.level], nf, room)
   if (rich) {
     picture(e, playerSrc(pl.id, pl.pos), graphemes(pl.name.trim())[0] ?? '?', r.x, Math.round(cy - m.face / 2), m.face)
@@ -497,7 +500,7 @@ const drawRow = (e: Env, s: CardSide, it: Item, r: Rect, o: SideOpt, m: RowCtx) 
   } else {
     pen.put(pl.pos, r.x, nb, m.metaF, rgb(p.muted), metaBox)
     pen.put(name, x0, nb, nf, rgb(p.text), nameBox)
-    if (m.showFrom && pl.from) pen.put(`FROM ${nameVariants(pl.from)[0].toUpperCase()}`, right, nb, m.metaF, rgb(p.muted), nameBox, 'right')
+    if (m.showFrom && pl.from) pen.put(fromText(pl.from), right, nb, { px: m.meta }, rgb(p.muted), nameBox, 'right')
   }
   if (m.ppwW && pl.ppw != null) pen.put(pl.ppw.toFixed(1), r.x + r.w, nb, m.ppwF, rgb(p.text2), { x: r.x + r.w - m.ppwW, y: r.y, w: m.ppwW, h: r.h }, 'right')
 }
@@ -546,7 +549,7 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
     const vpx = Math.round(S.name * 0.95)
     const vf: Font = { px: vpx, w: 500, mono: true }
     const rh = Math.round(vpx * CAP + S.u * 4)
-    let loss = dropped * 15
+    let loss = dropped * 25
     const rows = stats.map((s) => {
       for (const unit of unitWays(s.unit))
         for (const lab of statLabels(card, s)) {
@@ -758,6 +761,7 @@ const sideOpts = (e: Env): SideOpt[] => {
   if (total <= 4) out.push({ kind: 'line', cols: 1, cap: Infinity, zoom: 1.15, ppw: true })
   for (const ppw of [true, false]) {
     out.push({ kind: 'line', cols: 1, cap: Infinity, zoom: 1, ppw })
+    out.push({ kind: 'line', cols: 1, cap: Infinity, zoom: 1, ppw, tight: true })
     if (most > 1) out.push({ kind: 'line', cols: 2, cap: Infinity, zoom: 1, ppw })
     for (let cap = Math.min(8, most - 1); cap >= 1; cap--) out.push({ kind: 'line', cols: 1, cap, zoom: 1, ppw })
     for (let cap = Math.min(8, Math.ceil(most / 2) - 1); cap >= 1; cap--) out.push({ kind: 'line', cols: 2, cap, zoom: 1, ppw })
@@ -778,7 +782,7 @@ const statOpts = (e: Env, wide: boolean): StatOpt[] => {
 }
 
 type Column = { plans: Plan[]; score: number; h: number }
-const MIN_GAP = (S: Spec) => (S.wide ? S.u * 4 : S.u * 5)
+const MIN_GAP = (S: Spec) => S.u * 4
 const heightOf = (plans: Plan[], gap: number) => plans.reduce((a, x) => a + x.h, 0) + gap * Math.max(0, plans.length - 1)
 
 /**
@@ -812,7 +816,7 @@ const place = (e: Env, plans: Plan[], r: Rect, centre = true) => {
   const { S } = e
   const need = heightOf(plans, MIN_GAP(S))
   const n = plans.length
-  const g = n > 1 && centre ? Math.min(S.u * 9, MIN_GAP(S) + Math.max(0, r.h - need) / (n - 1)) : MIN_GAP(S)
+  const g = n > 1 && centre ? Math.min(S.u * 7, MIN_GAP(S) + Math.max(0, r.h - need) / (n - 1)) : MIN_GAP(S)
   const used = plans.reduce((a, x) => a + x.h, 0) + g * (n - 1)
   let y = r.y + (centre ? Math.max(0, (r.h - used) / 2) : 0)
   for (const x of plans) {

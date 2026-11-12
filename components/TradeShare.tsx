@@ -33,7 +33,7 @@ import { CLOSE, Glyph, useDealRead } from './TradeBuilder'
 import { useLeverages, useTradeSides } from './TradeCard'
 import { useTradeDock } from './TradeDock'
 import { cardSources, drawTradeCard, FORMATS, loadCardFonts, loadPictures, paletteOf, picturesReady, renderTradeCard, type CardFormat, type CardTheme } from './tradeShareCard'
-import { Avatar, Segmented, cx, usePhone } from './ui'
+import { Avatar, Button, Segmented, cx, usePhone } from './ui'
 
 // Sharing a trade: a Share button on every place a trade shows (a suggested card, the builder, a Compare column) opens
 // this sheet. It shows the card as it will be sent and the few choices that shape it: who it is for, which figures go
@@ -148,22 +148,6 @@ const Section = ({ title, children, aside }: { title: string; children: ReactNod
     </div>
     {children}
   </section>
-)
-
-const ActionBtn = ({ children, onClick, disabled, primary, label, wide }: { children: ReactNode; onClick: () => void; disabled?: boolean; primary?: boolean; label?: string; wide?: boolean }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={disabled}
-    aria-label={label}
-    className={cx(
-      'ff-press inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap border px-2 font-mono text-[11px] uppercase tracking-[0.08em] disabled:cursor-default disabled:opacity-50 md:h-9',
-      wide && 'col-span-2',
-      primary ? 'border-[rgb(var(--ff-accent-deep))] bg-[rgb(var(--ff-accent-deep))] text-[rgb(var(--ff-on-accent))] enabled:hover:brightness-110' : 'border-ff-line2 text-ff-text2 enabled:hover:bg-ff-raised enabled:hover:text-ff-text',
-    )}
-  >
-    {children}
-  </button>
 )
 
 // ---- What was made, kept by what it was made from ----
@@ -591,7 +575,7 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
   const ways = [
     phone ? shareWay : null,
     canCopyImage ? { key: 'copy', label: 'Copy image', run: copyImage, disabled: !card } : null,
-    { key: 'download', label: 'Download PNG', run: download, disabled: !card },
+    { key: 'download', label: 'Download', run: download, disabled: !card },
     phone ? null : shareWay,
     worker
       ? {
@@ -617,12 +601,13 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
       )}
       {/* One button per way out, and no two doing the same: where the image cannot be copied, downloading it is the
           first choice rather than a second button that says the same thing. On a phone with a share sheet, Share leads:
-          it is how a picture gets into a chat there. Three on a phone: the first takes the row. */}
-      <div className={cx('grid gap-2', phone ? 'grid-cols-2' : ['grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4'][ways.length - 1])}>
+          it is how a picture gets into a chat there. Two to a row at every width (the panel is narrow on a desktop too),
+          so each label has its padding; with an odd number the first, the main one, takes a row of its own. */}
+      <div className="grid grid-cols-2 gap-2">
         {ways.map((w, i) => (
-          <ActionBtn key={w.key} primary={i === 0} onClick={w.run} disabled={w.disabled} wide={phone && ways.length === 3 && i === 0}>
+          <Button key={w.key} variant={i === 0 ? 'primary' : 'outline'} onClick={w.run} disabled={w.disabled} className={cx('w-full min-w-0 px-3 md:h-9', ways.length % 2 === 1 && i === 0 && 'col-span-2')}>
             {w.label}
-          </ActionBtn>
+          </Button>
         ))}
       </div>
       <p role="status" aria-live="polite" className={cx('mt-2 min-h-[1.2em] font-mono text-[11px] leading-snug', status?.tone === 'bad' ? 'text-ff-neg' : 'text-ff-muted')}>

@@ -502,7 +502,7 @@ const TradeCard = ({
       <div id={detailId} className={cx('grid transition-[grid-template-rows] duration-[220ms] ease-ff-drawer motion-reduce:transition-none', open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
         <div className="min-h-0 overflow-hidden" inert={!open}>
           <div className="space-y-2.5 border-t border-ff-line bg-ff-sunken/40 px-3 py-2.5 text-[11.5px] text-ff-muted">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="ff-tcard-figs grid grid-cols-2 gap-3">
               <Figure label="They gain" value={fmtSigned(idea.theirGain, 2)} unit="/wk" title="Points per week added to their best lineup" />
               <Figure
                 label="Your ask"
