@@ -428,3 +428,107 @@ export const linkProblem = (card: TradeCard): string | null => {
   if (!parseTrade(encodeDeal(card.deal)) || JSON.stringify(linkMeta(card)).length > MAX_TRADE_META) return 'This trade can’t be put in a link. Copy or download the image instead.'
   return null
 }
+
+// ---- Shorter ways to say a name ----
+//
+// The card is read as a chat thumbnail, so its type never shrinks past a floor; a name too long for its place says
+// less instead, in steps that keep it recognisable. These give the steps, longest first; the card takes the first that
+// fits. All are cut by whole characters as a reader sees them (an emoji, an accented letter), never mid-character.
+
+const segmenter = typeof Intl !== 'undefined' && 'Segmenter' in Intl ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null
+
+/** The characters of a string as a reader counts them: "👨‍👩‍👧" is one, "é" written as e and an accent is one. */
+const split = new Map<string, string[]>()
+export const graphemes = (s: string): string[] => {
+  let g = split.get(s)
+  if (!g) {
+    g = segmenter ? Array.from(segmenter.segment(s), (x) => x.segment) : Array.from(s)
+    // The card asks for the same few names thousands of times as it tries layouts; kept, within reason.
+    if (split.size > 2000) split.clear()
+    split.set(s, g)
+  }
+  return g
+}
+
+/** Words that end a phrase badly when it is cut just after them ("Team Name Of…"). */
+const TRAILING = /([\s,.:;·\-–—&+]+|\s+(of|the|and|a|an|to|in|on|for|de|la|el|von|van)\b)+$/i
+
+/**
+ * A team name, from the whole of it to the least that still says who: the name; without a leading "The"; its first
+ * words with an ellipsis; its initials (two words or more); its first word. "The Mahomes Alone Crew" gives "Mahomes
+ * Alone Crew", "Mahomes Alone…", "MAC", "Mahomes…".
+ */
+const variants = new Map<string, string[]>()
+export const nameVariants = (raw: string): string[] => {
+  const hit = variants.get(raw)
+  if (hit) return hit
+  const out = nameVariants0(raw)
+  if (variants.size > 500) variants.clear()
+  variants.set(raw, out)
+  return out
+}
+const nameVariants0 = (raw: string): string[] => {
+  const s = raw.trim().replace(/\s+/g, ' ')
+  const out: string[] = []
+  const add = (v: string) => {
+    const t = v.trim()
+    if (t && t !== '…' && !out.includes(t)) out.push(t)
+  }
+  add(s)
+  const bare = s.replace(/^the\s+/i, '') || s
+  add(bare)
+  const words = bare.split(' ')
+  for (let k = words.length - 1; k >= 2; k--) add(`${words.slice(0, k).join(' ').replace(TRAILING, '')}…`)
+  if (words.length >= 2) {
+    const initials = words.map((w) => graphemes(w.replace(/^[^\p{L}\p{N}\p{Extended_Pictographic}]+/u, ''))[0] ?? '').join('').toUpperCase()
+    if (graphemes(initials).length >= 2) add(initials)
+  }
+  if (words.length >= 2) add(`${words[0].replace(TRAILING, '')}…`)
+  return out
+}
+
+const SUFFIX = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i
+
+/**
+ * A player's name, longest first: "Amon-Ra St. Brown", "A. St. Brown", "St. Brown". A suffix stays with the
+ * initialled form ("D. Samuel Sr.") and goes from the surname alone ("Samuel").
+ */
+export const playerNameVariants = (raw: string): string[] => {
+  const s = raw.trim().replace(/\s+/g, ' ')
+  const parts = s.split(' ')
+  if (parts.length < 2) return [s]
+  const [first, ...rest] = parts
+  // "A.J." is already as short as a first name gets.
+  const initial = /\./.test(first) ? first : `${graphemes(first)[0]}.`
+  const core = rest.length > 1 && SUFFIX.test(rest[rest.length - 1]) ? rest.slice(0, -1) : rest
+  return [...new Set([s, `${initial} ${rest.join(' ')}`, core.join(' ')])]
+}
+
+/**
+ * A figure's note, longest first, by dropping its last part: "48% → 60% · title +3.0 pt" gives "48% → 60%"; "St.
+ * Brown: down week: 4.2 vs 14.0 expected" gives "St. Brown: down week"; "better 9 of 11 weeks" gives "better 9 of 11
+ * wks".
+ */
+export const subVariants = (raw: string): string[] => {
+  const out: string[] = []
+  const add = (v: string) => {
+    const t = v.trim()
+    if (t && !out.includes(t)) out.push(t)
+  }
+  const short = (v: string) => v.replace(/\bweeks\b/g, 'wks')
+  // A part of a single word ("lineup") says little alone, so it is the first to go.
+  const parts = raw.split(' · ')
+  const full = parts.filter((x) => x.includes(' ') || parts.length === 1)
+  add(raw)
+  add(short(raw))
+  for (const ps of [full, parts]) {
+    for (let k = ps.length; k >= 1; k--) {
+      const v = ps.slice(0, k).join(' · ')
+      add(v)
+      add(short(v))
+    }
+  }
+  const clauses = (full[0] ?? parts[0]).split(': ')
+  for (let k = clauses.length - 1; k >= 1; k--) add(clauses.slice(0, k).join(': '))
+  return out
+}

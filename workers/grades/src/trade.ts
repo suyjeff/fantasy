@@ -176,19 +176,24 @@ const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).
 const stripSvg = (strip: NonNullable<TradeMeta['strip']>, net: number | null) => {
   const w = 28
   const h = 64
-  const mid = h / 2
-  const max = Math.max(0.5, ...strip.map((s) => Math.abs(s.delta)), Math.abs(net ?? 0))
-  const y = (v: number) => mid - (v / max) * (mid - 4)
+  // As on the card: with no losing week the zero line sits at the foot and the bars use the height; otherwise it sits
+  // where gains and losses split it, so the week numbers always sit just under the bars.
+  const up = Math.max(0.5, ...strip.map((s) => s.delta), net ?? 0)
+  const down = Math.max(0, ...strip.map((s) => -s.delta), -(net ?? 0))
+  const span = h - 4
+  const mid = 2 + span * (up / (up + down))
+  const k = span / (up + down)
+  const y = (v: number) => mid - v * k
   const bars = strip
     .map((s, i) => {
-      const len = Math.max(1, (Math.abs(s.delta) / max) * (mid - 4))
+      const len = Math.max(1, Math.abs(s.delta) * k)
       const top = s.delta >= 0 ? mid - len : mid
       return `<rect x="${i * w + 6}" y="${top.toFixed(1)}" width="${w - 12}" height="${len.toFixed(1)}" fill="${Math.abs(s.delta) < 0.05 ? '#3f3f46' : s.delta > 0 ? '#2ec470' : '#f46666'}"><title>Week ${s.week}: ${signed(s.delta)}</title></rect><text x="${i * w + w / 2}" y="${h + 14}" text-anchor="middle">${s.week}</text>`
     })
     .join('')
   const line = net != null ? `<line x1="0" x2="${strip.length * w}" y1="${y(net).toFixed(1)}" y2="${y(net).toFixed(1)}" stroke="#fafafa" stroke-width="1.5" stroke-dasharray="4 3"/>` : ''
   const label = `Lineup change by week${net != null ? `, ${signed(net)} a week overall` : ''}: ${strip.map((s) => `week ${s.week} ${signed(s.delta)}`).join(', ')}`
-  return `<svg class="strip" viewBox="0 0 ${strip.length * w} ${h + 18}" role="img" aria-label="${esc(label)}"><line x1="0" x2="${strip.length * w}" y1="${mid}" y2="${mid}" stroke="#71717a" stroke-width="1.5"/>${bars}${line}</svg>`
+  return `<svg class="strip" viewBox="0 0 ${strip.length * w} ${h + 18}" role="img" aria-label="${esc(label)}"><line x1="0" x2="${strip.length * w}" y1="${mid.toFixed(1)}" y2="${mid.toFixed(1)}" stroke="#71717a" stroke-width="1.5"/>${bars}${line}</svg>`
 }
 
 /** The strip's heading line: the lineup change a week, and how many of the weeks are better. */
