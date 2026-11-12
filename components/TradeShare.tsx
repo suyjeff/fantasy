@@ -282,6 +282,8 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
   const canvas = useRef<HTMLCanvasElement>(null)
   const frame = useRef<HTMLDivElement>(null)
   const [drawn, setDrawn] = useState(false)
+  // Whether this size had to cut the note short to fit: said by the note field, so it never goes quietly.
+  const [noteCut, setNoteCut] = useState(false)
   // The picture is fitted to its frame by measurement: CSS alone either stretches a canvas or overflows the frame.
   const [box, setBox] = useState<{ w: number; h: number } | null>(null)
   useEffect(() => {
@@ -291,13 +293,26 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+  // Drawn at the size it is shown, in the screen's own pixels (zooming in or a sharper screen redraws it), so the
+  // preview is as crisp as the image it stands for rather than a large picture scaled down.
+  const shownW = box ? Math.floor(FORMATS[format].w * Math.min(box.w / FORMATS[format].w, box.h / FORMATS[format].h)) : 0
+  const [dpr, setDpr] = useState(() => (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1))
+  useEffect(() => {
+    const mq = window.matchMedia(`(resolution: ${dpr}dppx)`)
+    const on = () => setDpr(window.devicePixelRatio || 1)
+    mq.addEventListener?.('change', on)
+    return () => mq.removeEventListener?.('change', on)
+  }, [dpr])
   useEffect(() => {
     const el = canvas.current
-    if (!el || !card) return
+    if (!el || !card || !shownW) return
     let live = true
+    const scale = Math.min(2, (shownW * dpr) / FORMATS[format].w)
     const draw = () => {
       if (!live) return
-      drawTradeCard(el, card, format, pal)
+      const said = { noteCut: false }
+      drawTradeCard(el, card, format, pal, {}, { scale, said })
+      setNoteCut(said.noteCut)
       setDrawn(true)
     }
     const raf = requestAnimationFrame(draw)
@@ -308,7 +323,7 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
       live = false
       cancelAnimationFrame(raf)
     }
-  }, [card, format, pal])
+  }, [card, format, pal, shownW, dpr])
 
   // The PNG, made a beat after the last change, so Share has a file in hand when tapped (a share sheet opens only
   // straight from a tap).
@@ -363,8 +378,10 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
   const shareFile = () => {
     const f = readyFile
     if (!f || !card) return
+    // The title doubles as the caption, for chat apps that drop a shared file's title. It names the teams only: never
+    // a figure of the sender's.
     const { title } = cardText(card)
-    navigator.share({ files: [f], title }).then(
+    navigator.share({ files: [f], title, text: title }).then(
       () => say(null),
       (e) => ((e as DOMException)?.name === 'AbortError' ? say(null) : say({ tone: 'bad', text: 'Could not open the share sheet. Download the image instead.' })),
     )
@@ -421,8 +438,12 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
   const preview = (
     <div className={cx('flex flex-col gap-2', phone ? 'top-0 z-[2] border-b border-ff-line bg-ff-panel px-4 pb-3 pt-1 [@media(min-height:700px)]:sticky' : 'min-h-0 flex-1 p-5')}>
       <div
-        className={cx('relative flex items-center justify-center border border-ff-line bg-ff-sunken', phone ? 'shrink-0 p-2' : 'min-h-0 flex-1 p-5')}
-        style={phone ? { height: 'min(34dvh, calc(100vw - 50px))' } : undefined}
+        // Pinned, it keeps to a third of the screen; on a short one (a phone on its side, or zoomed in) it scrolls away
+        // with the choices, so it may take most of the height.
+        className={cx(
+          'relative flex items-center justify-center border border-ff-line bg-ff-sunken',
+          phone ? 'h-[min(34dvh,calc(100vw-50px))] shrink-0 p-2 [@media(max-height:699px)]:h-[min(72dvh,calc(100vw-50px))]' : 'min-h-0 flex-1 p-5',
+        )}
       >
         <div ref={frame} className="absolute inset-2 md:inset-5" aria-hidden />
         <canvas
@@ -538,10 +559,15 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
             value={note}
             maxLength={NOTE_MAX}
             onChange={(e) => setNote(e.target.value)}
-            aria-describedby={`${titleId}-note-n`}
+            aria-describedby={noteCut && note ? `${titleId}-note-n ${titleId}-note-cut` : `${titleId}-note-n`}
             placeholder={audience.kind === 'pitch' ? 'Open to tweaks. Let me know!' : 'Thoughts on this one?'}
             className="h-10 w-full border border-ff-line bg-ff-sunken px-2.5 text-[13px] text-ff-text max-md:text-[16px] placeholder:text-ff-muted focus:border-ff-accent focus:outline-none md:h-9"
           />
+          {noteCut && note && (
+            <p id={`${titleId}-note-cut`} className="mt-1 font-mono text-[10.5px] leading-snug text-ff-muted">
+              Too long for the {fmtLabel.label} card, so it’s cut short there.{worker ? ' It’s whole on the link.' : ''}
+            </p>
+          )}
         </div>
       </Section>
       <Section title="Colours">
@@ -561,7 +587,21 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
     </>
   )
 
-  const ways = (canCopyImage ? 1 : 0) + 1 + (canShareFiles ? 1 : 0) + (worker ? 1 : 0)
+  const shareWay = canShareFiles ? { key: 'share', label: readyFile ? 'Share…' : 'Preparing…', run: shareFile, disabled: !readyFile } : null
+  const ways = [
+    phone ? shareWay : null,
+    canCopyImage ? { key: 'copy', label: 'Copy image', run: copyImage, disabled: !card } : null,
+    { key: 'download', label: 'Download PNG', run: download, disabled: !card },
+    phone ? null : shareWay,
+    worker
+      ? {
+          key: 'link',
+          label: curLink?.state === 'working' ? 'Making link…' : curLink?.state === 'failed' ? 'Retry link' : curLink?.state === 'blocked' ? 'No link' : 'Copy link',
+          run: copyLink,
+          disabled: !card || curLink?.state === 'working' || curLink?.state === 'blocked',
+        }
+      : null,
+  ].filter((w): w is { key: string; label: string; run: () => void; disabled: boolean } => !!w)
   const shown_ = curLink?.state === 'ready' && curLink.url ? curLink.url.replace(/^https?:\/\//, '') : null
   const actions = (
     <div className="border-t border-ff-line bg-ff-panel px-4 py-3">
@@ -576,26 +616,14 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
         </div>
       )}
       {/* One button per way out, and no two doing the same: where the image cannot be copied, downloading it is the
-          first choice rather than a second button that says the same thing. Three on a phone: the first takes the row. */}
-      <div className={cx('grid gap-2', phone ? 'grid-cols-2' : ['grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4'][ways - 1])}>
-        {canCopyImage && (
-          <ActionBtn primary onClick={copyImage} disabled={!card} wide={phone && ways === 3}>
-            Copy image
+          first choice rather than a second button that says the same thing. On a phone with a share sheet, Share leads:
+          it is how a picture gets into a chat there. Three on a phone: the first takes the row. */}
+      <div className={cx('grid gap-2', phone ? 'grid-cols-2' : ['grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4'][ways.length - 1])}>
+        {ways.map((w, i) => (
+          <ActionBtn key={w.key} primary={i === 0} onClick={w.run} disabled={w.disabled} wide={phone && ways.length === 3 && i === 0}>
+            {w.label}
           </ActionBtn>
-        )}
-        <ActionBtn primary={!canCopyImage} onClick={download} disabled={!card} wide={phone && ways === 3 && !canCopyImage}>
-          Download PNG
-        </ActionBtn>
-        {canShareFiles && (
-          <ActionBtn onClick={shareFile} disabled={!readyFile}>
-            {readyFile ? 'Share…' : 'Preparing…'}
-          </ActionBtn>
-        )}
-        {worker ? (
-          <ActionBtn onClick={copyLink} disabled={!card || curLink?.state === 'working' || curLink?.state === 'blocked'}>
-            {curLink?.state === 'working' ? 'Making link…' : curLink?.state === 'failed' ? 'Retry link' : curLink?.state === 'blocked' ? 'No link' : 'Copy link'}
-          </ActionBtn>
-        ) : null}
+        ))}
       </div>
       <p role="status" aria-live="polite" className={cx('mt-2 min-h-[1.2em] font-mono text-[11px] leading-snug', status?.tone === 'bad' ? 'text-ff-neg' : 'text-ff-muted')}>
         {status?.text ?? (worker ? (curLink?.state === 'ready' ? 'The link shows the wide card in a message and opens the trade in the app.' : curLink?.state === 'blocked' ? curLink.reason : '') : 'Sharing by link isn’t set up here. Copy or download the image instead.')}
