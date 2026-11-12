@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FantasyProvider } from '../components/FantasyContext'
 import SheetHost, { sheetKey, type SheetRef } from '../components/SheetHost'
 import { TradeDockProvider } from '../components/TradeDock'
-import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../components/Shell'
-import { Label, Segmented, Select, cx, simOdds } from '../components/ui'
+import Shell, { SECTION_KEYS, sectionLabel, type SectionKey } from '../components/Shell'
+import { cx, simOdds } from '../components/ui'
 import DashboardView from '../components/views/DashboardView'
 import Onboarding, { type OnboardResult } from '../components/Onboarding'
 import MeView from '../components/views/MeView'
@@ -38,8 +38,8 @@ import {
 import { useRoute } from '../lib/useRoute'
 import { DEFAULT_MODEL, type ModelConfig } from '../lib/war'
 import { DEFAULT_THEME, themeById, type Scheme } from '../lib/themes'
-import UserMenu from '../components/UserMenu'
-import DisplayMenu, { type Density } from '../components/ThemePicker'
+import { type Density } from '../components/ThemePicker'
+import SettingsView from '../components/views/SettingsView'
 import CommandPalette from '../components/CommandPalette'
 import { useTheme } from '../lib/useTheme'
 import { RevealHost } from '../components/PowerReveal'
@@ -74,17 +74,9 @@ export type Prefs = {
   density: Density
   /** The desktop sidebar: shown, or folded away behind a show-sidebar button. */
   sidebar: boolean
-  /** The sidebar's settings box, opened or folded to a one-line summary. */
-  settingsOpen: boolean
 }
 
 const TOUR_KEY = 'ff:tour:v1'
-
-const HORIZON_LONG: Record<HorizonMode, string> = {
-  next6: 'The next six regular-season weeks',
-  regular: 'Everything left before the fantasy playoffs',
-  playoffs: 'Everything left, fantasy playoffs included',
-}
 
 const loadPrefs = (): Prefs => {
   const base: Prefs = {
@@ -103,12 +95,13 @@ const loadPrefs = (): Prefs => {
     scheme: 'system',
     density: 'compact',
     sidebar: true,
-    settingsOpen: false,
   }
   try {
     const raw = window.localStorage.getItem(PREFS_KEY)
     if (!raw) return base
-    const p = JSON.parse(raw) as Partial<Prefs>
+    const p = JSON.parse(raw) as Partial<Prefs> & { settingsOpen?: unknown }
+    // The sidebar's old settings box remembered whether it was open; Settings is a page now.
+    delete p.settingsOpen
     // Prefs saved before onboarding existed carry a username but no flag: they get the (pre-filled) form once.
     const known = p.provider === 'espn' ? !!p.espnLeagueId : !!p.username
     // A saved theme that has since been retired (gray, neutral, stone) falls back to the default.
@@ -336,99 +329,21 @@ const FantasyPage = () => {
   const mySim = myTeam && models?.forecast ? models.forecast.sim[myTeam.rosterId] : null
   const horizonWeeks = data?.horizon.map((h) => h.week) ?? []
 
-  // Sidebar settings: one row per setting, label on the left, control filling the rest, all on the same 28px rhythm.
-  const row = 'flex h-7 items-center gap-2'
-  const key = 'ff-label w-[52px] shrink-0'
-  const controls = prefs && (
-    <>
-      <div className="space-y-1.5">
-        <div className="flex items-baseline justify-between gap-2">
-          <Label>Pricing horizon</Label>
-          {horizonWeeks.length > 0 && (
-            <span className="num text-[10.5px] text-ff-muted" title={HORIZON_LONG[prefs.horizon]}>
-              wk {horizonWeeks[0]}–{horizonWeeks[horizonWeeks.length - 1]}
-            </span>
-          )}
-        </div>
-        <Segmented<HorizonMode>
-          size="sm"
-          block
-          label="Pricing horizon"
-          value={prefs.horizon}
-          onChange={(h) => update({ horizon: h })}
-          options={[
-            { key: 'next6', label: '6 wks', title: HORIZON_LONG.next6 },
-            { key: 'regular', label: 'Season', title: HORIZON_LONG.regular },
-            { key: 'playoffs', label: '+ Playoffs', title: HORIZON_LONG.playoffs },
-          ]}
-        />
-        {prefs.horizon === 'playoffs' && (data?.playoffWeeks.length ?? 0) > 0 && (
-          <div className={row} title={`How much the fantasy playoff weeks (${data!.playoffWeeks.join(', ')}) count against a regular week`}>
-            <span className={key}>Weight</span>
-            <span className="flex h-full flex-1 items-center border border-ff-line bg-ff-panel">
-              {(
-                [
-                  ['−', -0.5],
-                  ['+', 0.5],
-                ] as const
-              ).map(([label, step], i) => (
-                <React.Fragment key={label}>
-                  {i === 1 && <span className="num flex-1 text-center text-[12px] text-ff-text">{prefs.playoffWeight}×</span>}
-                  <button
-                    className={cx('h-full w-7 text-ff-muted hover:bg-ff-raised hover:text-ff-text', i === 0 ? 'border-r border-ff-line' : 'border-l border-ff-line')}
-                    aria-label={step < 0 ? 'Count playoff weeks less' : 'Count playoff weeks more'}
-                    onClick={() => update({ playoffWeight: Math.max(0, Math.min(3, prefs.playoffWeight + step)) })}
-                  >
-                    {label}
-                  </button>
-                </React.Fragment>
-              ))}
-            </span>
-          </div>
-        )}
-      </div>
-      <div className="space-y-1.5">
-        <div className={row}>
-          <span className={key}>User</span>
-          <UserMenu
-            provider={prefs.provider}
-            username={prefs.provider === 'espn' ? `ESPN ${prefs.espnLeagueId ?? ''}` : prefs.username}
-            onSwitch={() => update({ onboarded: false })}
-            onTour={() => setTour(true)}
-          />
-        </div>
-        <div className={row}>
-          <span className={key}>Season</span>
-          <Select
-            label="Season"
-            value={prefs.season ?? seasonOptions[0]}
-            onChange={(v) => update({ season: v === seasonOptions[0] ? null : v, leagueId: null })}
-            className="flex-1 font-mono text-[11.5px] [&>button]:h-7"
-          >
-            {seasonOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className={row}>
-          <span className={key}>Display</span>
-          <DisplayMenu
-            theme={prefs.theme}
-            onTheme={(t) => update({ theme: t })}
-            scheme={prefs.scheme}
-            onScheme={(m) => update({ scheme: m })}
-            density={prefs.density}
-            onDensity={(d) => update({ density: d })}
-          />
-        </div>
-      </div>
-    </>
+  const settings = prefs && (
+    <SettingsView
+      prefs={prefs}
+      update={update}
+      leagues={(data?.leagues ?? []).map((l) => ({ id: l.league_id, name: l.name }))}
+      leagueId={data?.league.league_id ?? null}
+      seasons={seasonOptions}
+      horizonWeeks={horizonWeeks}
+      playoffWeeks={data?.playoffWeeks ?? []}
+      onTour={() => setTour(true)}
+    />
   )
 
   const section = route.section as SectionKey
-  const title = data ? `${SECTIONS.find((s) => s.key === route.section)?.label ?? 'Fantasy'} · ${data.league.name}` : 'Fantasy'
+  const title = data ? `${sectionLabel(section) ?? 'Fantasy'} · ${data.league.name}` : 'Fantasy'
   const status = [
     data?.state.season_type === 'regular' ? { label: 'WEEK', value: String(data.state.week), title: 'NFL week, from Sleeper\'s calendar' } : null,
     models?.forecast ? { label: 'SIMS', value: models.forecast.sims.toLocaleString(), title: 'Seasons simulated for the playoff odds' } : null,
@@ -468,9 +383,6 @@ const FantasyPage = () => {
       onLeague={(id) => update({ leagueId: id })}
       leagueMeta={data ? `${data.league.season} · ${data.league.total_rosters} teams${data.state.season_type === 'regular' && data.league.season === data.state.season ? ` · wk ${data.state.week}` : ''}` : undefined}
       me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: `${mySeason ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : ''}${mySim ? ` · ${simOdds(mySim, 'playoffs')} playoffs` : myPower ? ` · power rank #${myPower.rank} of ${analysis!.teams.length}` : ''}`, onOpen: () => route.go('teams', String(myTeam.rosterId)) } : null}
-      controls={controls}
-      controlsOpen={prefs.settingsOpen}
-      onControls={(open) => update({ settingsOpen: open })}
       loading={loading}
       progress={progress}
       onRefresh={reload}
@@ -517,6 +429,7 @@ const FantasyPage = () => {
         <TradeDockProvider>
         <div key={data.league.league_id} ref={view} className={cx(loading && 'opacity-60 transition-opacity')}>
           {section === 'dash' && <DashboardView />}
+          {section === 'settings' && settings}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'waivers' && <WaiversView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'me' && <MeView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} onTeam={(id) => route.go('teams', String(id))} />}
@@ -568,6 +481,9 @@ const FantasyPage = () => {
         />
         </TradeDockProvider>
         </FantasyProvider>
+      ) : section === 'settings' ? (
+        // Settings work before a league loads, or when it fails to, so a wrong season or user can be put right.
+        settings
       ) : (
         !error && (
           // Padding, not margin: a top margin here collapses through to the page and shows a strip of body.

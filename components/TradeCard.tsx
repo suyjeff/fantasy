@@ -14,6 +14,7 @@ import { InsightMark } from './InsightMark'
 import { useFantasy, useTradeRead } from './FantasyContext'
 import { PRICING_VERSION } from '../lib/currency'
 import { formText } from '../lib/momentum'
+import { lastName } from '../lib/names'
 import { streakText } from '../lib/power'
 import { GRADE_LABEL, WHY_LABEL, ideaKey, type Grade, type GradeWhy } from '../lib/grades'
 import { Avatar, Badge, Button, Chip, Figure, PlayerAvatar, Segmented, WeekBars, cx, fmtSigned, isOut, pct, simOdds } from './ui'
@@ -261,7 +262,7 @@ const GradeBar = ({ idea, base, nm, posOf }: { idea: TradeIdea; base: AcceptRead
  * shape) and what it does for you, so that there is a choice, and how the options differ, shows before any click.
  * Every tab is in the tab order; the arrow keys also step between them.
  */
-const OptionTabs = ({ versions, v, setV, getName }: { versions: TradeIdea[]; v: number; setV: (i: number) => void; getName: string }) => {
+const OptionTabs = ({ versions, v, setV, getName, nm }: { versions: TradeIdea[]; v: number; setV: (i: number) => void; getName: string; nm: (id: string) => string }) => {
   const id = useId()
   const onKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
@@ -276,10 +277,11 @@ const OptionTabs = ({ versions, v, setV, getName }: { versions: TradeIdea[]; v: 
       <div id={id} className="ff-label mb-1 truncate">
         {versions.length} ways to get {getName}
       </div>
-      <div role="group" aria-labelledby={id} onKeyDown={onKey} className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-1">
+      <div role="group" aria-labelledby={id} onKeyDown={onKey} className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-1">
         {versions.map((x, i) => {
           const on = i === v
-          const shape = `${x.give.length}-for-${x.get.length}`
+          // What sets this option apart: the players only some options send (the rest go in every one), else its shape.
+          const own = x.give.filter((p) => !versions.every((o) => o.give.includes(p)))
           return (
             <button
               key={i}
@@ -287,16 +289,19 @@ const OptionTabs = ({ versions, v, setV, getName }: { versions: TradeIdea[]; v: 
               aria-pressed={on}
               onClick={() => setV(i)}
               className={cx(
-                'ff-press flex min-h-9 min-w-0 flex-col items-start justify-center border px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/50 max-md:min-h-11',
-                on ? 'border-ff-accent bg-ff-panel text-ff-text shadow-[inset_0_-2px_0_rgb(var(--ff-accent))]' : 'border-ff-line bg-ff-panel/50 text-ff-muted hover:border-ff-line2 hover:bg-ff-panel hover:text-ff-text',
+                'ff-press flex min-h-10 min-w-0 flex-col justify-center gap-0.5 border px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/50 max-md:min-h-11',
+                on ? 'border-ff-accent bg-ff-panel text-ff-text shadow-[inset_0_-2px_0_rgb(var(--ff-accent))]' : 'border-ff-line bg-ff-panel/60 text-ff-text2 hover:border-ff-line2 hover:bg-ff-panel hover:text-ff-text',
               )}
             >
-              <span className="text-[12px] font-medium">
-                Option {i + 1}
-                <span className="sr-only"> of {versions.length},</span>
+              <span className="flex items-baseline justify-between gap-2 text-[12px] font-medium">
+                <span>
+                  Option {i + 1}
+                  <span className="sr-only"> of {versions.length},</span>
+                </span>
+                <span className="num font-mono text-[10.5px]">{fmtSigned(x.myGain, 1)}/wk</span>
               </span>
-              <span className="font-mono text-[10px]">
-                {shape} · {fmtSigned(x.myGain, 1)}/wk
+              <span className="truncate text-[11px]">
+                {own.length ? `with ${own.map((p) => lastName(nm(p))).join(', ')}` : `${x.give.length}-for-${x.get.length}`}
               </span>
             </button>
           )
@@ -393,13 +398,14 @@ const TradeCard = ({
         </div>
       </header>
 
-      {versions.length > 1 && <OptionTabs versions={versions} v={v} setV={setV} getName={idea.get.length === 1 ? nm(idea.get[0]) : idea.get.map((id) => nm(id).split(' ').slice(-1)[0]).join(' + ')} />}
+      {versions.length > 1 && <OptionTabs versions={versions} v={v} setV={setV} getName={idea.get.length === 1 ? nm(idea.get[0]) : idea.get.map((id) => lastName(nm(id))).join(' + ')} nm={nm} />}
 
       {/* Cards sit in a grid whose rows share the tallest card's height: this section takes up the slack, so the
-          send and get columns (and the rule between them) run to the verdict and the footer stays at the bottom. */}
-      <div className="grid flex-1 grid-cols-1 sm:grid-cols-2">
+          send and get columns (and the rule between them) run to the verdict and the footer stays at the bottom. They sit
+          side by side once the card itself is wide enough (ff-tcard-sides, in fantasy.css), not the viewport. */}
+      <div className="ff-tcard-sides grid flex-1 grid-cols-1">
         {/* Switching options swaps what you send: the column fades in afresh, so the change is seen where it happens. */}
-        <div key={v} className={cx('min-w-0 border-b border-ff-line px-3 pb-1.5 pt-2 sm:border-b-0 sm:border-r', versions.length > 1 && 'ff-fade-in')}>
+        <div key={v} className={cx('min-w-0 border-b border-ff-line px-3 pb-1.5 pt-2', versions.length > 1 && 'ff-fade-in')}>
           <div className="ff-label">You send{versions.length > 1 && <span className="normal-case tracking-normal text-ff-accent">{` · option ${v + 1}`}</span>}</div>
           {idea.give.map((id) => (
             <PlayerLine key={id} id={id} data={data} analysis={analysis} side="give" />
@@ -530,13 +536,13 @@ const TradeCard = ({
 
       <GradeBar idea={idea} base={base} nm={nm} posOf={(id) => players[id]?.pos} />
 
-      {/* One row of actions at every width, all one height (40px on a phone, 32px wider). On a narrow card Open in
-          builder takes the spare width (ff-tcard-fill); share is an icon below md. */}
+      {/* The actions, all one height (40px on a phone, 32px wider). On a narrow card they fill the row, and narrower
+          still Open in builder takes a row of its own (ff-tcard-fill, in fantasy.css); share is an icon below md. */}
       {onBuild && (
-        <footer className="mt-auto flex items-center justify-end gap-2 border-t border-ff-line px-3 py-2">
+        <footer className="mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-ff-line px-3 py-2">
           {asDeal && <ShareTradeButton deal={asDeal} label={`Share this trade with ${team?.name ?? 'them'}`} className="md:!h-8 md:!px-3 md:!text-[12.5px]" />}
-          {asDeal && <CompareToggle deal={asDeal} />}
-          <Button variant="soft" className="ff-tcard-fill" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
+          {asDeal && <CompareToggle deal={asDeal} className="ff-tcard-fill" />}
+          <Button variant="soft" className="ff-tcard-fill ff-tcard-own-row" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
             <BuildIcon size={13} />
             Open in builder
           </Button>

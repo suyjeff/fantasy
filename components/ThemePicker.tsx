@@ -55,15 +55,15 @@ export const ThemePreview = ({ theme, mode, className }: { theme: Theme; mode: M
   )
 }
 
-/** The mode a theme renders in, and a tag for the few that only come in one. */
-const modeTag = (theme: Theme) => (theme.light && theme.dark ? null : theme.light ? 'light only' : 'dark only')
 
 /** One theme as a picker tile: its miniature over its name. `sm` for tight spaces (phones, popovers). */
 export const ThemeTile = ({ theme, mode, checked, name, onPick, size = 'md' }: { theme: Theme; mode: Mode; checked: boolean; name: string; onPick: () => void; size?: 'sm' | 'md' }) => {
-  const tag = modeTag(theme)
+  // The few themes that come in one mode only say so, on the miniature itself in its own colours.
+  const only = theme.light && theme.dark ? null : theme.light ? 'light' : 'dark'
+  const t = tokensFor(theme, mode)
   return (
     <label
-      title={tag ? `${theme.label} (${tag})` : theme.label}
+      title={only ? `${theme.label} (${only} only)` : theme.label}
       className={cx(
         'relative flex min-w-0 cursor-pointer flex-col border bg-ff-panel transition-colors',
         checked ? 'border-ff-accent shadow-[0_0_0_1px_rgb(var(--ff-accent))]' : 'border-ff-line hover:border-ff-line2',
@@ -71,10 +71,16 @@ export const ThemeTile = ({ theme, mode, checked, name, onPick, size = 'md' }: {
       )}
     >
       <input type="radio" name={name} value={theme.id} checked={checked} onChange={onPick} className="sr-only" />
-      <ThemePreview theme={theme} mode={mode} className="border-b border-ff-line" />
+      <span className="relative block border-b border-ff-line">
+        <ThemePreview theme={theme} mode={mode} />
+        {only && (
+          <span className="absolute bottom-1 right-1 border px-1 font-mono text-[9px] leading-[13px]" style={{ background: t.panel, color: t.text2, borderColor: t.line2 }}>
+            {only}
+          </span>
+        )}
+      </span>
       <span className={cx('flex min-w-0 items-center gap-1.5', size === 'sm' ? 'h-7 px-1.5 text-[11px]' : 'h-9 px-2 text-[12.5px]')}>
         <span className={cx('min-w-0 flex-1 truncate', checked ? 'font-medium text-ff-text' : 'text-ff-text2')}>{theme.label}</span>
-        {tag && size === 'md' && <span className="shrink-0 font-mono text-[9.5px] text-ff-muted">{tag.split(' ')[0]}</span>}
         {checked && (
           <span aria-hidden className="shrink-0 font-mono text-[11px] text-ff-accent">
             ✓
@@ -95,7 +101,7 @@ const ThemePicker = ({ value, onChange, scheme, size = 'md', label = 'Theme' }: 
   return (
     <fieldset className="min-w-0">
       <legend className="sr-only">{label}</legend>
-      <div className={cx('grid', size === 'sm' ? 'grid-cols-[repeat(auto-fill,minmax(92px,1fr))] gap-1.5' : 'grid-cols-[repeat(auto-fill,minmax(136px,1fr))] gap-2')}>
+      <div className={cx('grid', size === 'sm' ? 'grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-1.5' : 'grid-cols-[repeat(auto-fill,minmax(136px,1fr))] gap-2')}>
         {THEMES.map((t) => (
           <ThemeTile key={t.id} theme={t} mode={resolveMode(t, scheme, systemDark)} name={name} size={size} checked={t.id === value} onPick={() => onChange(t.id)} />
         ))}

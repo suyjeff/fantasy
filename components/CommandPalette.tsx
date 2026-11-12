@@ -163,6 +163,7 @@ const CommandPalette = ({
       for (const [sub, label] of TABS[s.key] ?? [])
         items.push({ id: `go:${s.key}/${sub}`, group: 'Go to', label: `${s.label} › ${label}`, keywords: label, weight: 2, run: () => go(s.key, sub) })
     }
+    items.push({ id: 'go:settings', group: 'Go to', label: 'Settings', keywords: 'preferences options theme appearance mode dark light density season horizon account', hint: <span className="num">,</span>, weight: 3, run: () => go('settings') })
     for (const t of analysis.teams)
       items.push({
         id: `team:${t.rosterId}`,

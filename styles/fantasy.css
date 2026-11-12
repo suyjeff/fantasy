@@ -677,14 +677,30 @@ html.ff-page body {
 }
 
 /* A suggested-trade card (TradeCard) lays out by its own width, not the viewport's: the sidebar and the two-column
-   grid make a card narrow on a wide screen too. Narrow, Open in builder takes the footer's spare width, so the row
-   reads as one bar of actions rather than a ragged cluster. */
+   grid make a card narrow on a wide screen too. Narrow, Compare and Open in builder share the footer's spare width,
+   so the row reads as one bar of actions; narrower still, Open in builder takes a full-width row of its own under
+   Share and Compare, rather than the row running out of the card. */
 .ff .ff-tcard {
   container-type: inline-size;
 }
 @container (max-width: 419px) {
   .ff .ff-tcard-fill {
     flex: 1 1 auto;
+  }
+}
+@container (max-width: 379px) {
+  .ff .ff-tcard-fill.ff-tcard-own-row {
+    flex-basis: 100%;
+  }
+}
+/* Send and get side by side only where each column still fits a player's name and figure. */
+@container (min-width: 480px) {
+  .ff .ff-tcard-sides {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ff .ff-tcard-sides > :first-child {
+    border-bottom-width: 0;
+    border-right-width: 1px;
   }
 }
 
