@@ -718,7 +718,7 @@ export const Dropdown = ({
                 <span aria-hidden className={cx('w-3 shrink-0 font-mono text-[11px] text-ff-accent', !selected && 'invisible')}>
                   ✓
                 </span>
-                <span className="min-w-0 leading-tight">
+                <span className="min-w-0 flex-1 leading-tight">
                   <span className={cx('block whitespace-nowrap', selected && 'font-medium')}>{o.label}</span>
                   {o.sub && <span className="block whitespace-nowrap font-mono text-[10.5px] text-ff-muted">{o.sub}</span>}
                 </span>

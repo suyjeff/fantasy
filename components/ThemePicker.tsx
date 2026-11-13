@@ -1,6 +1,7 @@
-import React, { useId } from 'react'
-import { THEMES, resolveMode, tokensFor, type Mode, type Scheme, type Theme } from '../lib/themes'
-import { cx, useMedia } from './ui'
+import React from 'react'
+import { THEMES, tokensFor, type Mode, type Scheme, type Theme } from '../lib/themes'
+import { MoonIcon, SunIcon, SystemIcon } from './icons'
+import { Dropdown, Segmented, cx } from './ui'
 
 export type Density = 'compact' | 'comfortable'
 
@@ -17,6 +18,9 @@ export const Swatch = ({ theme }: { theme: Theme }) => {
     </span>
   )
 }
+
+/** The one mode a theme comes in, when it does not come in both. */
+export const onlyMode = (theme: Theme): Mode | null => (theme.light && theme.dark ? null : theme.light ? 'light' : 'dark')
 
 /**
  * The app in miniature, in a theme's own colours: sidebar with the current page lit, a header rule, and a card with
@@ -55,59 +59,77 @@ const ThemePreview = ({ theme, mode }: { theme: Theme; mode: Mode }) => {
   )
 }
 
-
-/** One theme as a picker tile: its miniature over its name. `sm` for tight spaces (phones). */
-const ThemeTile = ({ theme, mode, checked, name, onPick, size = 'md' }: { theme: Theme; mode: Mode; checked: boolean; name: string; onPick: () => void; size?: 'sm' | 'md' }) => {
-  // The few themes that come in one mode only say so, on the miniature itself in its own colours.
-  const only = theme.light && theme.dark ? null : theme.light ? 'light' : 'dark'
-  const t = tokensFor(theme, mode)
+/** A theme's name with its swatch, for the dropdown's rows and its closed face. */
+const ThemeName = ({ theme, tag }: { theme: Theme; tag?: boolean }) => {
+  const only = onlyMode(theme)
   return (
-    <label
-      title={only ? `${theme.label} (${only} only)` : theme.label}
-      className={cx(
-        'relative flex min-w-0 cursor-pointer flex-col border bg-ff-panel transition-colors',
-        checked ? 'border-ff-accent shadow-[0_0_0_1px_rgb(var(--ff-accent))]' : 'border-ff-line hover:border-ff-line2',
-        'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ff-accent',
-      )}
-    >
-      <input type="radio" name={name} value={theme.id} checked={checked} onChange={onPick} className="sr-only" />
-      <span className="relative block border-b border-ff-line">
-        <ThemePreview theme={theme} mode={mode} />
-        {only && (
-          <span className="absolute bottom-1 right-1 border px-1 font-mono text-[9px] leading-[13px]" style={{ background: t.panel, color: t.text2, borderColor: t.line2 }}>
-            {only}
-          </span>
-        )}
-      </span>
-      <span className={cx('flex min-w-0 items-center gap-1.5', size === 'sm' ? 'h-7 px-1.5 text-[11px]' : 'h-9 px-2 text-[12.5px]')}>
-        <span className={cx('min-w-0 flex-1 truncate', checked ? 'font-medium text-ff-text' : 'text-ff-text2')}>{theme.label}</span>
-        {checked && (
-          <span aria-hidden className="shrink-0 font-mono text-[11px] text-ff-accent">
-            ✓
-          </span>
-        )}
-      </span>
-    </label>
+    <span className="flex min-w-0 items-center gap-2">
+      <Swatch theme={theme} />
+      <span className="min-w-0 truncate">{theme.label}</span>
+      {tag && only && <span className="ml-auto pl-2 font-mono text-[10px] text-ff-muted">{only}</span>}
+    </span>
   )
 }
+
+/** Every theme in one compact list, the app's neutrals first and then the editor palettes, each with its colours. */
+export const ThemeSelect = ({ value, onChange, className }: { value: string; onChange: (id: string) => void; className?: string }) => (
+  <Dropdown
+    label="Theme"
+    value={value}
+    onChange={onChange}
+    className={className}
+    menuClassName="!left-auto right-0 max-h-[300px] min-w-[220px]"
+    options={THEMES.map((t) => ({
+      value: t.id,
+      text: t.label,
+      group: t.family === 'Tailwind' ? 'Neutral' : 'Editor',
+      label: <ThemeName theme={t} tag />,
+      face: <ThemeName theme={t} />,
+    }))}
+  />
+)
+
+/** Light, dark or the device's, as three icons. Locked (showing the one it has) for a theme with a single mode. */
+export const ModeControl = ({ value, onChange, only }: { value: Scheme; onChange: (s: Scheme) => void; only: Mode | null }) => (
+  <Segmented<Scheme>
+    label="Mode"
+    disabled={!!only}
+    value={only ?? value}
+    onChange={onChange}
+    options={[
+      { key: 'system', title: 'Match the device', label: <ModeFace icon={<SystemIcon />} name="Auto" /> },
+      { key: 'light', title: 'Light', label: <ModeFace icon={<SunIcon />} name="Light" /> },
+      { key: 'dark', title: 'Dark', label: <ModeFace icon={<MoonIcon />} name="Dark" /> },
+    ]}
+  />
+)
+const ModeFace = ({ icon, name }: { icon: React.ReactNode; name: string }) => (
+  <span className="flex w-5 items-center justify-center max-md:w-7">
+    {icon}
+    <span className="sr-only">{name}</span>
+  </span>
+)
 
 /**
- * Every theme as a grid of tiles, a native radio group (arrows move and pick). A theme with both modes is drawn in the
- * mode the scheme picks, so switching Light or Dark redraws the grid; the rest show the only mode they have.
+ * The chosen theme in both its modes, side by side, the one on screen marked. A theme with one mode shows just that.
+ * Clicking a miniature is not a control; the mode switch above is.
  */
-const ThemePicker = ({ value, onChange, scheme, size = 'md' }: { value: string; onChange: (id: string) => void; scheme: Scheme; size?: 'sm' | 'md' }) => {
-  const name = useId()
-  const systemDark = useMedia('(prefers-color-scheme: dark)')
+export const ThemePreviews = ({ theme, mode, className }: { theme: Theme; mode: Mode; className?: string }) => {
+  const modes: Mode[] = onlyMode(theme) ? [onlyMode(theme)!] : ['light', 'dark']
   return (
-    <fieldset className="min-w-0">
-      <legend className="sr-only">Theme</legend>
-      <div className={cx('grid', size === 'sm' ? 'grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-1.5' : 'grid-cols-[repeat(auto-fill,minmax(136px,1fr))] gap-2')}>
-        {THEMES.map((t) => (
-          <ThemeTile key={t.id} theme={t} mode={resolveMode(t, scheme, systemDark)} name={name} size={size} checked={t.id === value} onPick={() => onChange(t.id)} />
-        ))}
-      </div>
-    </fieldset>
+    <div className={cx('grid grid-cols-2 gap-2', className)}>
+      {modes.map((m) => (
+        <figure key={m} className="min-w-0">
+          <div className={cx('border', m === mode ? 'border-ff-text2' : 'border-ff-line')}>
+            <ThemePreview theme={theme} mode={m} />
+          </div>
+          <figcaption className="mt-1 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-ff-muted">
+            <span aria-hidden className={cx('h-1 w-1', m === mode ? 'bg-ff-accent' : 'bg-ff-line2')} />
+            {m}
+            {m === mode && <span className="normal-case tracking-normal text-ff-text2">· on screen</span>}
+          </figcaption>
+        </figure>
+      ))}
+    </div>
   )
 }
-
-export default ThemePicker
