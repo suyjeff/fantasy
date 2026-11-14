@@ -119,6 +119,7 @@ const CommandPalette = ({
   leagues,
   onLeague,
   onSettings,
+  onRun,
   reveal,
 }: {
   open: boolean
@@ -137,6 +138,8 @@ const CommandPalette = ({
   onLeague: (id: string) => void
   /** Opens the settings dialog, at a category when given. */
   onSettings: (tab?: SettingsTab) => void
+  /** Called with a command's id just before it runs. */
+  onRun?: (id: string) => void
   /** The latest power-rank reveal, to replay; null before one has dropped. */
   reveal: { week: number; open: () => void } | null
 }) => {
@@ -302,6 +305,7 @@ const CommandPalette = ({
       // Recents simply do not persist in a private window.
     }
     onClose()
+    onRun?.(id)
     item.run()
   }
   const onKey = (e: React.KeyboardEvent) => {

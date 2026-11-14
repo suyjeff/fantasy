@@ -143,24 +143,25 @@ const makeCard = (shape: string, names: keyof typeof NAMES, blocks: 'all' | 'one
 const draw = (card: TradeCard, format: CardFormat) => {
   const audit: TextBox[] = []
   const trace: string[] = []
-  drawTradeCard(fakeCanvas(), card, format, DARK, { audit, trace })
-  return { audit, trace, texts: audit.map((t) => t.text) }
+  const said: NonNullable<Parameters<typeof drawTradeCard>[4]>['said'] = { noteCut: false }
+  drawTradeCard(fakeCanvas(), card, format, DARK, { audit, trace, said })
+  return { audit, trace, texts: audit.map((t) => t.text), hidden: said.hidden ?? [] }
 }
 
 /** How many rows a side's last line stands for: "Hurts, Gibbs, Nacua", "Hurts, Gibbs +3 more" or "+5 more". */
 const moreCount = (t: string) => {
   const m = /^(.*?)\s*\+(\d+)( more)?$/.exec(t)
   if (m) return Number(m[2]) + (m[1] ? m[1].split(', ').length : 0)
-  return t.includes(', ') && !t.startsWith('“') ? t.split(', ').length : 0
+  return t.split(', ').length
 }
 const isStrip = (t: string) => t.startsWith('strip') || t.includes('+strip')
 
 /** What the card should say and does not: a side's head, a player (unless counted in a "+N"), a figure, the note. */
-const missing = (card: TradeCard, texts: string[]) => {
+const missing = (card: TradeCard, texts: string[], hidden: string[]) => {
   const out: string[] = []
   const heads = texts.filter((t) => / (GETS|SENDS)$/.test(t) || t === 'GETS').length
   if (heads < card.sides.length) out.push(`heads ${heads}`)
-  const more = texts.reduce((a, t) => a + moreCount(t), 0)
+  const more = hidden.reduce((a, t) => a + moreCount(t), 0)
   const items = card.sides.reduce((a, s) => a + s.players.length + (s.faab ? 1 : 0), 0)
   // Several players share a name here, so they are counted by how many rows name one.
   const rows = texts.filter((t) => PLAYERS.some((p) => playerNameVariants(p).includes(t) || (t.endsWith('…') && p.includes(t.slice(0, 3))))).length
@@ -181,10 +182,10 @@ describe('the card, over the matrix', () => {
           for (const note of [false, true])
             for (const f of formats) {
               const card = makeCard(shape, names, blocks, note)
-              const { audit, texts } = draw(card, f)
+              const { audit, texts, hidden } = draw(card, f)
               const label = `${shape}/${names}/${blocks}${note ? '/note' : ''}/${f}`
               expect(cardIssues(audit, f), label).toEqual([])
-              expect(missing(card, texts), label).toEqual([])
+              expect(missing(card, texts, hidden), label).toEqual([])
             }
       })
 })
@@ -232,8 +233,8 @@ describe('the layout it chooses', () => {
     }
   })
   it('says how many more there are rather than shrinking a big trade past reading', () => {
-    const { texts } = draw(makeCard('max', 'short', 'all', true), 'square')
-    expect(texts.some((t) => moreCount(t) > 0)).toBe(true)
+    const { hidden } = draw(makeCard('max', 'short', 'all', true), 'square')
+    expect(hidden.some((t) => moreCount(t) > 0)).toBe(true)
   })
   it('draws the week strip where it has room, and gives it up before any figure', () => {
     expect(draw(makeCard('one', 'short', 'all', false), 'story').trace.some(isStrip)).toBe(true)

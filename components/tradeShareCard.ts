@@ -268,7 +268,7 @@ type Kind = 'rich' | 'line'
 /** `bare`: a line row without its position column, for the most names in the least width. */
 type SideOpt = { kind: Kind; cols: number; cap: number; zoom: number; ppw: boolean; ledger?: boolean; tight?: boolean; bare?: boolean }
 /** `more`: the rows past what fits, said in one: as many of their surnames as go, then how many others. */
-type Item = { t: 'player'; i: number } | { t: 'faab' } | { t: 'none' } | { t: 'more'; n: number; text: string }
+type Item = { t: 'player'; i: number } | { t: 'faab' } | { t: 'none' } | { t: 'more'; text: string }
 
 const itemsOf = (s: CardSide) => {
   const out: Item[] = s.players.map((_, i) => ({ t: 'player', i }))
@@ -370,7 +370,7 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
       const more = moreText(e, rest, { px: m.meta }, cellW)
       // A name said in the line costs less than one only counted.
       loss += more.named * 5 + (rest.length - more.named) * 8
-      items = [...items.slice(0, keep), { t: 'more', n: rest.length, text: more.text }]
+      items = [...items.slice(0, keep), { t: 'more', text: more.text }]
     }
     const rows = Math.ceil(items.length / o.cols)
     // The head, with its avatar and, on the first side with the room, the unit of the figures at the right.
@@ -475,6 +475,7 @@ const drawRow = (e: Env, s: CardSide, it: Item, r: Rect, o: SideOpt, m: RowCtx) 
     pen.put(glyph, r.x + m.face / 2, cy + (f.px * CAP) / 2, f, rgb(p.muted), { x: r.x, y: fy, w: m.face, h: m.face }, 'center', 'deco')
   }
   if (it.t === 'more') {
+    e.said?.hidden?.push(it.text)
     const f: Font = { px: m.meta }
     pen.put(it.text, r.x, Math.round(cy + (f.px * CAP) / 2), f, rgb(p.text2), r)
     return
@@ -627,9 +628,9 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
 
   // Tiles, `cols` to a row, the last row's tiles sharing its width; one size for every number in the block.
   const gap = S.u * 6
-  const STRIP = { key: 'strip' } as unknown as CardStat
-  const tiles = o.strip ? [...stats, STRIP] : stats
-  const rowsOf: CardStat[][] = []
+  // A tile is a figure, or the week-by-week strip.
+  const tiles: (CardStat | 'strip')[] = o.strip ? [...stats, 'strip'] : stats
+  const rowsOf: (CardStat | 'strip')[][] = []
   for (let i = 0; i < tiles.length; i += o.cols) rowsOf.push(tiles.slice(i, i + o.cols))
   // Balanced rows: four figures go two and two, not three and one.
   if (rowsOf.length > 1 && rowsOf[rowsOf.length - 1].length === 1 && o.cols > 2) return null
@@ -639,12 +640,12 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
   const unitFor = (s: CardStat, px: number) => unitWays(s.unit).find((u) => pen.width(s.value, { px, w: 500, mono: true }) + (u ? S.u * 1.5 + pen.width(u, lf) : 0) <= cw) ?? null
   let px = S.value
   const least = Math.round(S.value * 0.7)
-  const fitsAll = (x: number) => rowsOf.every((row) => row.every((s) => s === STRIP || unitFor(s, x) === unitWays(s.unit)[0]))
+  const fitsAll = (x: number) => rowsOf.every((row) => row.every((s) => s === 'strip' || unitFor(s, x) === unitWays(s.unit)[0]))
   while (px > least && !fitsAll(px)) px -= 2
   let loss = 0
   const cells = rowsOf.map((row) =>
     row.map((s) => {
-      if (s === STRIP) return { s, lab: pen.first(['WEEK BY WEEK', 'WEEKLY'], lf, cw), unit: null, sub: null }
+      if (s === 'strip') return { s, lab: pen.first(['WEEK BY WEEK', 'WEEKLY'], lf, cw), unit: null, sub: null }
       const unit = unitFor(s, px)
       if (unit == null) return null
       if (unit !== unitWays(s.unit)[0]) loss += 0.5
@@ -664,7 +665,7 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
   // A row of tiles is as tall as its tallest: room for a note under the number only where one of them has one, and
   // for the bars to stand readably tall where they are.
   const tileH = cells.map((row) => {
-    const body = Math.max(px * CAP + (row.some((c) => c!.sub) ? S.u * 3 + S.min * CAP : 0), row.some((c) => c!.s === STRIP) ? S.u * 7 : 0)
+    const body = Math.max(px * CAP + (row.some((c) => c!.sub) ? S.u * 3 + S.min * CAP : 0), row.some((c) => c!.s === 'strip') ? S.u * 7 : 0)
     return Math.round(S.min * CAP + S.u * 3 + body + S.u)
   })
   const rowGap = S.u * 4
@@ -690,7 +691,7 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
           }
           let base = ty + S.min * CAP
           pen.put(c.lab, cx, base, lf, rgb(p.muted), box)
-          if (c.s === STRIP) {
+          if (c.s === 'strip') {
             // The bars stand where a number would, down to the foot of the row's notes.
             if (e.said) e.said.weeksLeft = false
             const by = base + S.u * 3
@@ -1013,7 +1014,7 @@ export type DrawOptions = {
   /** Filled with the blocks the layout chose, for tuning. */
   trace?: string[]
   /** Filled with what the card had to shorten that the sender wrote: the note, cut to fit. */
-  said?: { noteCut: boolean; /** The week-by-week strip was asked for and the card had no room for it. */ weeksLeft?: boolean }
+  said?: { noteCut: boolean; /** The week-by-week strip was asked for and the card had no room for it. */ weeksLeft?: boolean; /** The lines that stand for rows left off a side (`moreText`), as drawn. */ hidden?: string[] }
 }
 
 /** Draws the card onto `canvas` (sized to the format). Synchronous: whatever pictures are here are drawn. */
@@ -1034,6 +1035,7 @@ export const drawTradeCard = (canvas: HTMLCanvasElement, card: TradeCard, format
   if (opt.said) {
     opt.said.noteCut = false
     opt.said.weeksLeft = !!card.strip
+    opt.said.hidden = []
   }
   const e: Env = { ctx, p, pen: makePen(ctx, opt.audit), S, card, memo: new Map(), said: opt.said }
   const gap = MIN_GAP(S)

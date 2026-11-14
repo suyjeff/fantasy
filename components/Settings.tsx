@@ -1,8 +1,8 @@
-import React, { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import React, { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import type { Prefs } from '../pages/index'
 import { resolveMode, themeById } from '../lib/themes'
 import type { HorizonMode } from '../lib/useLeagueData'
-import { useModal } from './Sheet'
+import { useLeave, useModal } from './Sheet'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { ModeControl, ThemePreviews, ThemeSelect, onlyMode, type Density } from './ThemePicker'
 import { Button, Dropdown, Segmented, cx, useMedia, usePhone } from './ui'
@@ -48,6 +48,8 @@ export type SettingsProps = {
   playoffWeeks: number[]
   onTour: () => void
   sync: SyncInfo
+  /** Bumped each time something asks for Settings to open; one that arrives while it is leaving cancels the close. */
+  reopen: number
 }
 
 const HORIZON_LONG: Record<HorizonMode, string> = {
@@ -218,10 +220,20 @@ const ForecastPane = ({ prefs, update, horizonWeeks, playoffWeeks }: SettingsPro
   useEffect(() => {
     setWeight(prefs.playoffWeight)
   }, [prefs.playoffWeight])
-  const commitWeight = (e: { currentTarget: HTMLInputElement }) => {
-    const w = Number(e.currentTarget.value)
+  // The native `change` event, which fires once on release (wherever the pointer ends up) and on each keyboard step;
+  // React's onChange is the per-step `input` event. Read through a ref, so the listener sees the latest props.
+  const range = useRef<HTMLInputElement>(null)
+  const commit = useRef((w: number) => {})
+  commit.current = (w) => {
     if (w !== prefs.playoffWeight) update({ playoffWeight: w })
   }
+  useEffect(() => {
+    const el = range.current
+    if (!el) return
+    const onChange = () => commit.current(Number(el.value))
+    el.addEventListener('change', onChange)
+    return () => el.removeEventListener('change', onChange)
+  }, [playoffWeeks.length > 0])
   return (
     <Section title="Pricing">
       <Row label="Horizon" hint={priced ? <>Trades and waivers are valued over {priced}.</> : 'The weeks trades and waivers are valued over.'} stack>
@@ -248,6 +260,7 @@ const ForecastPane = ({ prefs, update, horizonWeeks, playoffWeeks }: SettingsPro
         >
           <span className={cx('flex w-full items-center gap-3', CONTROL, !playoffs && 'opacity-50')}>
             <input
+              ref={range}
               type="range"
               min={0}
               max={3}
@@ -257,9 +270,6 @@ const ForecastPane = ({ prefs, update, horizonWeeks, playoffWeeks }: SettingsPro
               aria-labelledby={weightId}
               aria-valuetext={`${weight} times a regular week`}
               onChange={(e) => setWeight(Number(e.target.value))}
-              onPointerUp={commitWeight}
-              onKeyUp={commitWeight}
-              onBlur={commitWeight}
               className="ff-range min-w-0 flex-1 disabled:cursor-default max-md:h-10"
               style={{ ['--fill' as string]: `${(weight / 3) * 100}%` }}
             />
@@ -370,38 +380,46 @@ const TabList = ({ tab, onTab, vertical, idBase }: { tab: SettingsTab; onTab: (t
  * close it, the page behind holds still, and focus goes back to what opened it.
  */
 const Settings = (props: SettingsProps) => {
-  const { tab, onTab, onClose } = props
+  const { tab, onTab, onClose, reopen } = props
   const phone = usePhone()
   const idBase = useId()
   const panel = useRef<HTMLDivElement>(null)
   const root = useRef<HTMLDivElement>(null)
   const body = useRef<HTMLDivElement>(null)
   const swipe = useRef<SwipeSheetHandle>(null)
-  const leaving = useRef<number | null>(null)
-  const done = useRef(onClose)
-  done.current = onClose
 
   // Wide screens: a transition from the hidden state the first paint commits, so closing mid-entrance reverses from
   // wherever it is. Leaving is a little quicker than arriving.
-  useLayoutEffect(() => {
-    const el = root.current
-    if (phone || !el) return
-    void el.offsetWidth
-    el.setAttribute('data-open', '')
-  }, [phone])
-  useEffect(() => () => window.clearTimeout(leaving.current ?? undefined), [])
-  const close = () => {
-    if (phone) return swipe.current ? swipe.current.dismiss() : onClose()
-    const el = root.current
-    if (leaving.current != null) return
-    if (!el) return onClose()
-    el.removeAttribute('data-open')
-    el.setAttribute('data-closing', '')
-    leaving.current = window.setTimeout(() => done.current(), 150)
-  }
+  const { close, stay } = useLeave(root, onClose, 150, phone, swipe)
+  // Asked to open again while it is leaving (the command palette, say): stay, and show that.
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
+    stay()
+  }, [reopen]) // eslint-disable-line react-hooks/exhaustive-deps
   const closeRef = useRef(close)
   closeRef.current = close
   useModal(panel, () => closeRef.current())
+  // R reloads from here too (Shell's key stands down while a dialog is open), so the Data pane's hint holds.
+  const reloadRef = useRef(props.sync)
+  reloadRef.current = props.sync
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key !== 'r' && e.key !== 'R') || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return
+      const t = e.target as HTMLElement | null
+      if (t?.closest?.('input, textarea, select, [contenteditable="true"]')) return
+      // Not while something above it (the command palette) has focus.
+      if (t && t !== document.body && !panel.current?.contains(t)) return
+      if (reloadRef.current.loading) return
+      e.preventDefault()
+      reloadRef.current.onReload()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   // Then onto the picked category, so the arrows work from the first key press.
   useEffect(() => {
     panel.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true })
@@ -471,7 +489,7 @@ const Settings = (props: SettingsProps) => {
             <TabList tab={tab} onTab={onTab} vertical idBase={idBase} />
             <p className="px-2.5 pb-1 font-mono text-[10.5px] text-ff-muted">
               <kbd className="mr-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center border border-ff-line px-1 text-[10px]">,</kbd>
-              opens settings
+              opens settings from any page
             </p>
           </div>
           {content}

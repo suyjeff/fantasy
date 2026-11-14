@@ -68,6 +68,44 @@ export const useModal = (panel: React.RefObject<HTMLElement | null>, onEscape: (
 }
 
 /**
+ * How a panel leaves, shared by the sheets and the settings dialog. Wide screens: `close` swaps `data-open` for
+ * `data-closing` on `root`, waits `ms` for the exit transition, then reports back; the panel stops taking clicks
+ * as it goes. Phones: the swipe sheet slides away, then reports back. `stay` cancels a close in progress (something
+ * opened while it was leaving: stay, turn around, and show that). On wide screens the entrance is a transition from
+ * the off-screen state the first paint commits, so closing before it has arrived turns it around from where it is.
+ */
+export const useLeave = (root: React.RefObject<HTMLElement | null>, onClose: () => void, ms: number, phone: boolean, swipe: React.RefObject<SwipeSheetHandle | null>) => {
+  const leaving = useRef<number | null>(null)
+  const done = useRef(onClose)
+  done.current = onClose
+  useLayoutEffect(() => {
+    const el = root.current
+    if (phone || !el) return
+    void el.offsetWidth
+    el.setAttribute('data-open', '')
+  }, [phone]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => window.clearTimeout(leaving.current ?? undefined), [])
+  const close = () => {
+    if (phone) return swipe.current ? swipe.current.dismiss() : onClose()
+    const el = root.current
+    if (leaving.current != null) return
+    if (!el) return onClose()
+    el.removeAttribute('data-open')
+    el.setAttribute('data-closing', '')
+    leaving.current = window.setTimeout(() => done.current(), ms)
+  }
+  const stay = () => {
+    const el = root.current
+    if (leaving.current == null || !el) return
+    window.clearTimeout(leaving.current)
+    leaving.current = null
+    el.removeAttribute('data-closing')
+    el.setAttribute('data-open', '')
+  }
+  return { close, stay }
+}
+
+/**
  * A detail sheet over the page: from the right on wide screens, from the bottom (swipe down to close) on phones.
  * Escape closes it, Tab stays inside, the page behind holds still, and focus returns to where it was. Another
  * sheet opened from inside it stacks on top and keeps its own keys.
@@ -90,40 +128,10 @@ const Sheet = ({
   const root = useRef<HTMLDivElement>(null)
   const phone = usePhone()
   const swipe = useRef<SwipeSheetHandle>(null)
-  const leaving = useRef<number | null>(null)
-  const done = useRef(onClose)
-  done.current = onClose
-  // Wide screens: slide out the way it came in, then report back. The panel stops taking clicks as it goes.
-  const leave = () => {
-    const el = root.current
-    if (leaving.current != null) return
-    if (!el) return onClose()
-    el.removeAttribute('data-open')
-    el.setAttribute('data-closing', '')
-    leaving.current = window.setTimeout(() => done.current(), 200)
-  }
-  // Something opened while it was leaving (the command palette, say): stay, turn around, and show that.
-  const stay = () => {
-    const el = root.current
-    if (leaving.current == null || !el) return
-    window.clearTimeout(leaving.current)
-    leaving.current = null
-    el.removeAttribute('data-closing')
-    el.setAttribute('data-open', '')
-  }
-  useEffect(() => () => window.clearTimeout(leaving.current ?? undefined), [])
-  // Phones slide the sheet away first, then report back.
-  const close = useRef(onClose)
-  close.current = phone ? () => (swipe.current ? swipe.current.dismiss() : onClose()) : leave
-
-  // Wide screens: in from the right. A transition from the off-screen state the first paint commits, so closing
-  // it before it has arrived turns it around from where it is.
-  useLayoutEffect(() => {
-    const el = root.current
-    if (phone || !el) return
-    void el.offsetWidth
-    el.setAttribute('data-open', '')
-  }, [phone])
+  // Wide screens slide out the way they came in, then report back; phones slide the sheet away first.
+  const { close: leave, stay } = useLeave(root, onClose, 200, phone, swipe)
+  const close = useRef(leave)
+  close.current = leave
 
   useModal(panel, () => close.current())
 

@@ -159,6 +159,7 @@ const FantasyPage = () => {
       const m = SETTINGS_HASH.exec(window.location.hash)
       if (!m) return
       setSettingsTab(isSettingsTab(m[1]) ? m[1] : 'account')
+      setSettingsAsk((n) => n + 1)
       const r = lastRoute.current
       route.go(r.section, r.sub, { replace: true, page: r.page })
     }
@@ -169,7 +170,11 @@ const FantasyPage = () => {
   // Reopened, it comes back to the category it was left on.
   const lastTab = useRef<SettingsTab>('account')
   if (settingsTab) lastTab.current = settingsTab
-  const openSettings = useCallback((tab?: SettingsTab) => setSettingsTab(tab ?? lastTab.current), [])
+  const [settingsAsk, setSettingsAsk] = useState(0)
+  const openSettings = useCallback((tab?: SettingsTab) => {
+    setSettingsTab(tab ?? lastTab.current)
+    setSettingsAsk((n) => n + 1)
+  }, [])
   const closeSettings = useCallback(() => setSettingsTab(null), [])
 
   useEffect(() => {
@@ -419,7 +424,7 @@ const FantasyPage = () => {
       onLeague={(id) => update({ leagueId: id })}
       leagueMeta={data ? `${data.league.season} · ${data.league.total_rosters} teams${data.state.season_type === 'regular' && data.league.season === data.state.season ? ` · wk ${data.state.week}` : ''}` : undefined}
       // Your team and its record; the playoff odds live on its page.
-      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: mySeason && mySeason.wins + mySeason.losses + mySeason.ties > 0 ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : `@${myTeam.owner}`, onOpen: () => route.go('teams', String(myTeam.rosterId)) } : null}
+      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: mySeason && mySeason.wins + mySeason.losses + mySeason.ties > 0 ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : myTeam.owner && myTeam.owner !== 'Unowned' ? myTeam.owner : '', onOpen: () => route.go('teams', String(myTeam.rosterId)) } : null}
       account={prefs.provider === 'espn' ? `ESPN ${prefs.espnLeagueId}` : `@${prefs.username}`}
       onSettings={openSettings}
       loading={loading}
@@ -469,6 +474,7 @@ const FantasyPage = () => {
           tab={settingsTab}
           onTab={setSettingsTab}
           onClose={closeSettings}
+          reopen={settingsAsk}
           prefs={prefs}
           update={update}
           leagues={leagueList}
@@ -538,6 +544,10 @@ const FantasyPage = () => {
           leagues={leagueList}
           onLeague={(id) => update({ leagueId: id })}
           onSettings={openSettings}
+          // Anything but a Settings command acts on the page, so the dialog gets out of its way first.
+          onRun={(id) => {
+            if (id !== 'go:settings' && !id.startsWith('settings:')) closeSettings()
+          }}
           reveal={paletteReveal}
         />
         </TradeDockProvider>
