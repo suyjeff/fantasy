@@ -161,7 +161,7 @@ export const CompareToggle = ({ deal, tradeId, className }: { deal: Deal; tradeI
   const ready = dealActive(deal) && deal.teams.length > 1
   // An empty trade has nothing to put in a column's place.
   const linked = !item && tradeId && ready ? c.linkOf(tradeId) : null
-  const base = cx('ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border h-10 px-3 text-[12.5px] md:h-8', className)
+  const base = cx('ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border h-10 px-3 text-[12.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40 md:h-8', className)
   if (item)
     return (
       <button

@@ -738,7 +738,7 @@ export const ShareTradeButton = ({ deal, variant = 'compact', className, label =
         aria-label={label}
         title={ready ? label : 'Add players to share the trade'}
         className={cx(
-          'ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-ff-text2 hover:bg-ff-raised hover:text-ff-text disabled:pointer-events-none disabled:opacity-40',
+          'ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-ff-text2 hover:bg-ff-raised hover:text-ff-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40 disabled:pointer-events-none disabled:opacity-40',
           icon ? 'h-10 w-10' : variant === 'cell' ? 'h-10 min-w-0 flex-1 border border-ff-line text-[13px] md:h-8' : 'h-10 w-10 border border-ff-line md:h-8 md:w-auto md:px-3 md:text-[12.5px]',
           open && 'bg-ff-raised text-ff-text',
           className,
