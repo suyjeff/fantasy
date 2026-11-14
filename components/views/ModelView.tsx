@@ -100,7 +100,7 @@ const Param = ({
         </div>
         <div className="flex shrink-0 items-baseline gap-2">
           {changed && (
-            <button onClick={() => onChange(def)} className="font-mono text-[10px] uppercase tracking-wider text-ff-muted hover:text-ff-accent">
+            <button onClick={() => onChange(def)} className="ff-hit font-mono text-[10px] uppercase tracking-wider text-ff-muted hover:text-ff-accent">
               reset
             </button>
           )}

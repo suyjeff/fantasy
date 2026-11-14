@@ -167,12 +167,13 @@ export const CompareToggle = ({ deal, tradeId, className }: { deal: Deal; tradeI
       <button
         type="button"
         aria-pressed
+        aria-label={`Comparing as trade ${cmp.slotLetter(item.slot)}`}
         onClick={() => c.remove(item.id)}
         title={`In compare as trade ${cmp.slotLetter(item.slot)}. Press to take it out.`}
         className={cx(base, 'group border-ff-pos/40 bg-ff-pos/[0.08] text-ff-text hover:border-ff-neg/40 hover:bg-ff-neg/[0.06]')}
       >
         <SlotKey slot={item.slot} />
-        In compare
+        Comparing
         {/* The tick turns to a cross under the pointer, the same size, so nothing shifts. */}
         <span className="text-ff-pos group-hover:hidden">
           <Check />
@@ -218,11 +219,12 @@ export const CompareToggle = ({ deal, tradeId, className }: { deal: Deal; tradeI
       type="button"
       disabled={!ready}
       onClick={() => c.add(deal)}
+      aria-label="Add to compare"
       title={ready ? 'Add to the comparison on the Trades page' : 'Put players in the trade to compare it'}
       className={cx(base, 'border-ff-line2 bg-ff-panel text-ff-text hover:bg-ff-raised disabled:text-ff-muted disabled:hover:bg-ff-panel')}
     >
       <AddIcon size={12} />
-      Add to compare
+      Compare
     </button>
   )
 }

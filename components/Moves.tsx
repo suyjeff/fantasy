@@ -248,7 +248,7 @@ const MovesPanel = ({ rosterId }: { rosterId: number }) => {
       {mine && (
         <div className="flex items-center justify-between gap-3 border-t border-ff-line px-3 py-1.5 text-[11.5px] text-ff-muted">
           <span>Lineup moves use Sleeper&apos;s projections for week {week}; adds use the pricing horizon.</span>
-          <button type="button" onClick={() => go('waivers', 'moves')} className="shrink-0 font-mono text-[11px] text-ff-text2 hover:text-ff-text">
+          <button type="button" onClick={() => go('waivers', 'moves')} className="ff-hit shrink-0 font-mono text-[11px] text-ff-text2 hover:text-ff-text">
             Waivers →
           </button>
         </div>

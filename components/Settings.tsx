@@ -191,9 +191,9 @@ const AppearancePane = ({ prefs, update }: SettingsProps) => {
       <Row label="Mode" hint={only ? `Set by ${theme.label}.` : prefs.scheme === 'system' ? `Following the device: ${systemDark ? 'dark' : 'light'} now.` : `Always ${prefs.scheme}.`}>
         <ModeControl value={prefs.scheme} onChange={(s) => update({ scheme: s })} only={only} />
       </Row>
-      <div className="py-3">
-        <ThemePreviews theme={theme} mode={resolveMode(theme, prefs.scheme, systemDark)} className="max-w-[420px] md:ml-auto" />
-      </div>
+      <Row label="Preview" hint={only ? `The app in ${theme.label}.` : 'The app in both modes; the one on screen is marked.'} stack>
+        <ThemePreviews theme={theme} mode={resolveMode(theme, prefs.scheme, systemDark)} className="w-full md:w-[340px]" />
+      </Row>
       <Row label="Density" hint="Comfortable sets larger type and taller rows.">
         <Segmented<Density>
           label="Density"
@@ -215,7 +215,9 @@ const ForecastPane = ({ prefs, update, horizonWeeks, playoffWeeks }: SettingsPro
   const weightId = useId()
   // Dragging only moves this local value; the pref (which reloads the league) is written on release.
   const [weight, setWeight] = useState(prefs.playoffWeight)
-  useEffect(() => setWeight(prefs.playoffWeight), [prefs.playoffWeight])
+  useEffect(() => {
+    setWeight(prefs.playoffWeight)
+  }, [prefs.playoffWeight])
   const commitWeight = (e: { currentTarget: HTMLInputElement }) => {
     const w = Number(e.currentTarget.value)
     if (w !== prefs.playoffWeight) update({ playoffWeight: w })
@@ -397,7 +399,9 @@ const Settings = (props: SettingsProps) => {
     panel.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true })
   }, [phone])
   // Each category opens at its top.
-  useEffect(() => body.current?.scrollTo({ top: 0 }), [tab])
+  useEffect(() => {
+    body.current?.scrollTo({ top: 0 })
+  }, [tab])
 
   const titleId = `${idBase}-title`
   const dialog = { role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId, tabIndex: -1 } as const

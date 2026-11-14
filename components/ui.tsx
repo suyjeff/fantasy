@@ -104,7 +104,7 @@ export const Panel = ({
 }) => (
   <section id={id} className={cx('min-w-0 border border-ff-line bg-ff-panel', className)}>
     {(title || actions) && (
-      <header className="flex h-8 items-center justify-between gap-3 border-b border-ff-line px-3">
+      <header className="flex h-8 items-center justify-between gap-3 border-b border-ff-line px-3 max-md:h-auto max-md:min-h-8">
         <span className="flex min-w-0 items-baseline gap-2">
           {index != null && <span className="num text-[10px] text-ff-muted">{String(index).padStart(2, '0')}</span>}
           {title ? <Label className="truncate text-ff-text2">{title}</Label> : null}
@@ -1719,7 +1719,7 @@ export function Table<T>({
                 className={cx(
                   // The rule is an inset shadow on the cells, not a border on the row: a collapsed border disappears under pinned cells.
                   'group',
-                  !isOpen && '[&>td]:shadow-[inset_0_-1px_0_rgb(var(--ff-line)/0.6)] last:[&>td]:shadow-none',
+                  !isOpen && '[&>td]:shadow-[inset_0_-1px_0_rgb(var(--ff-line)/0.6)] [&:last-child>td]:shadow-none',
                   onRowClick && 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent',
                   'hover:bg-ff-raised',
                   // An open row keeps the panel's surface and drops its rule, so the band beneath it reads as part of it.

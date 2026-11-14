@@ -303,7 +303,7 @@ const sideMeasures = (S: Spec, o: SideOpt) => {
   const face = Math.round(S.face * z)
   const gapLine = Math.round(S.u * 2 * z)
   const textH = name * CAP + gapLine + meta * CAP
-  const rowH = o.kind === 'rich' ? Math.round(Math.max(face, textH + S.u * 2) + S.u * 3) : Math.round(name * CAP + S.u * (o.tight ? 3 : 4) * Math.min(z, 1.2))
+  const rowH = o.kind === 'rich' ? Math.round(Math.max(face, textH + S.u * 2) + S.u * 3) : Math.round(name * CAP + S.u * (o.tight ? 2.5 : 4) * Math.min(z, 1.2))
   return { name, meta, face, gapLine, textH, rowH }
 }
 
@@ -336,7 +336,7 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
   const showPpw = hasPpw && o.ppw
   const ppwW = showPpw ? pen.width('00.0', ppwF) : 0
   const gap = o.kind === 'rich' ? S.u * 2 : S.u * 4
-  const colGap = S.u * 6
+  const colGap = o.bare ? S.u * 4 : S.u * 6
   const headF = label(S.min)
   const headLH = Math.round(S.min * CAP + S.u * 2)
   // A ledger's head column: as wide as its widest head needs, within a third of the width. A head takes a second line
@@ -354,13 +354,14 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
   // The position column of a line row: as wide as the widest it holds, so every name starts on one edge.
   const posCol = o.kind === 'line' && !o.bare ? pen.width(card.sides.some((s) => s.faab) ? 'FAAB' : 'DEF', metaF) + S.u * 2 : 0
   const nameRoom0 = cellW - faceW - posCol - (ppwW ? ppwW + gap : 0)
-  if (nameRoom0 < S.name * 2.5) return null
+  if (nameRoom0 < S.name * (o.cols > 2 ? 3.5 : 2.5)) return null
   const headH = o.ledger ? 0 : Math.round(S.min * CAP + S.u * 3)
   const unit = showPpw && !o.ledger ? 'PTS/WK' : null
   let loss = (hasPpw && !showPpw ? 3 : 0) + (o.bare ? 2 : 0)
   if (o.cap * o.cols < 2 && card.sides.some((s) => itemsOf(s).length > o.cap * o.cols)) return null
 
   let unitDone = false
+  let squeezed = false
   const sides = card.sides.map((s) => {
     let items = itemsOf(s)
     if (Math.ceil(items.length / o.cols) > o.cap) {
@@ -368,7 +369,7 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
       const rest = items.slice(keep).map((it) => (it.t === 'player' ? nameForms(s.players[it.i].name)[2] : it.t === 'faab' ? `$${s.faab}` : ''))
       const more = moreText(e, rest, { px: m.meta }, cellW)
       // A name said in the line costs less than one only counted.
-      loss += more.named * 3 + (rest.length - more.named) * 8
+      loss += more.named * 5 + (rest.length - more.named) * 8
       items = [...items.slice(0, keep), { t: 'more', n: rest.length, text: more.text }]
     }
     const rows = Math.ceil(items.length / o.cols)
@@ -403,10 +404,13 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
       while (px > least && !fitsAt(2, px)) px -= 2
       cut = !fitsAt(2, px)
       loss += 1
+      // Names side by side are worth it only while an ordinary surname still fits whole: only an outsized one is cut.
+      if (cut && o.cols > 1 && players.some((pl) => graphemes(nameForms(pl.name)[2]).length <= 12 && pen.width(nameForms(pl.name)[2], nameF(px)) > roomOf(pl))) squeezed = true
     }
-    loss += level * 1.5 + (cut ? 6 : 0)
+    loss += level * 1.5 + (cut ? 20 : 0)
     return { s, items, rows, head, hasUnit, src, av, left, level, px, showFrom }
   })
+  if (squeezed) return null
 
   const sideGap = o.ledger ? 0 : S.wide || o.tight ? S.u * 4 : S.u * 5
   // A ledger's head sits on the baseline of its first row, its second line under it.
@@ -488,7 +492,7 @@ const drawRow = (e: Env, s: CardSide, it: Item, r: Rect, o: SideOpt, m: RowCtx) 
       pen.put('FAAB', x0, mb, m.metaF, rgb(p.muted), metaBox)
     } else if (o.bare) {
       const w = pen.put(`$${s.faab}`, x0, nb, nf, rgb(p.text), nameBox)
-      pen.put('FAAB', x0 + w + S.u * 1.5, nb, m.metaF, rgb(p.muted), nameBox)
+      if (w + S.u * 1.5 + pen.width('FAAB', m.metaF) <= nameBox.w) pen.put('FAAB', x0 + w + S.u * 1.5, nb, m.metaF, rgb(p.muted), nameBox)
     } else {
       pen.put('FAAB', r.x, nb, m.metaF, rgb(p.muted), metaBox)
       pen.put(`$${s.faab}`, x0, nb, nf, rgb(p.text), nameBox)
@@ -588,7 +592,7 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
       const vw = pen.width(s.value, vf) + (unit ? S.u * 1.5 + pen.width(unit, lf) : 0)
       const lab = pen.cut(ways[ways.length - 1], lf, w - vw - S.u * 4)
       if (graphemes(lab.replace(/…$/, '')).length < 3) return null
-      loss += 2
+      loss += 6
       return { s, lab, unit, vw }
     })
     if (rows.some((r) => !r)) return null
@@ -756,7 +760,7 @@ const planStrip = (e: Env, w: number, form: StripForm): Plan | null => {
   const better = strip.filter((s) => s.delta > 0.05).length
   const span = n > 1 ? `WK ${strip[0].week}–${strip[n - 1].week}` : `WK ${strip[0].week}`
   const top = form === 'inline' ? S.u * 3 : S.u * 4
-  const plotH = form === 'full' ? S.u * 12 : S.u * 7
+  const plotH = form === 'full' ? S.u * 12 : form === 'slim' ? S.u * 7 : S.u * 6
   // Inline: the words either side of the bars, each in its shortest form that leaves the bars a readable width.
   let lead = ''
   let sum = ''
@@ -845,7 +849,7 @@ const sideOpts = (e: Env): SideOpt[] => {
     for (let cap = Math.min(8, most - 1); cap >= 1; cap--) out.push({ kind: 'line', cols: 1, cap, zoom: 1, ppw, tight: true })
     for (const g of grids) for (let cap = Math.min(8, Math.ceil(most / g.cols) - 1); cap >= 1; cap--) out.push({ kind: 'line', ...g, cap, zoom: 1, ppw, tight: true })
   }
-  for (const g of [{ cols: 1 }, ...grids]) for (let cap = Math.ceil(most / g.cols); cap >= 1; cap--) out.push({ kind: 'line', ...g, cap, zoom: 1, ppw: false, ledger: true })
+  for (const g of [{ cols: 1 }, ...grids]) for (let cap = Math.ceil(most / g.cols); cap >= 1; cap--) for (const tight of [false, true]) out.push({ kind: 'line', ...g, cap, zoom: 1, ppw: false, ledger: true, tight })
   return out
 }
 const statOpts = (e: Env, wide: boolean, strip: boolean): StatOpt[] => {

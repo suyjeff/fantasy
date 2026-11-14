@@ -6,7 +6,8 @@ import { useAvailability } from './useAvailability'
 import { SECTIONS, sectionCode, type SectionKey } from './Shell'
 import { Swatch, type Density } from './ThemePicker'
 import { useOpenTrades, useTradeDock } from './TradeDock'
-import { TradeIcon } from './icons'
+import { GearIcon, TradeIcon } from './icons'
+import { SETTINGS_TABS, type SettingsTab } from './Settings'
 import { Avatar, PlayerAvatar, cx, fmt, ownerLabel, shortcutLabel } from './ui'
 
 // Cmd/Ctrl+K: one box that reaches every section and tab, every player in the
@@ -117,6 +118,8 @@ const CommandPalette = ({
   onTour,
   leagues,
   onLeague,
+  onSettings,
+  reveal,
 }: {
   open: boolean
   onClose: () => void
@@ -132,6 +135,10 @@ const CommandPalette = ({
   onTour: () => void
   leagues: { id: string; name: string }[]
   onLeague: (id: string) => void
+  /** Opens the settings dialog, at a category when given. */
+  onSettings: (tab?: SettingsTab) => void
+  /** The latest power-rank reveal, to replay; null before one has dropped. */
+  reveal: { week: number; open: () => void } | null
 }) => {
   const { data, analysis, go, openPlayer } = useFantasy()
   const { status } = useAvailability(data, analysis)
@@ -163,7 +170,10 @@ const CommandPalette = ({
       for (const [sub, label] of TABS[s.key] ?? [])
         items.push({ id: `go:${s.key}/${sub}`, group: 'Go to', label: `${s.label} › ${label}`, keywords: label, weight: 2, run: () => go(s.key, sub) })
     }
-    items.push({ id: 'go:settings', group: 'Go to', label: 'Settings', keywords: 'preferences options theme appearance mode dark light density season horizon account', hint: <span className="num">,</span>, weight: 3, run: () => go('settings') })
+    items.push({ id: 'go:settings', group: 'Go to', label: 'Settings', keywords: 'preferences options theme appearance mode dark light density season horizon account sync data', icon: <GearIcon size={14} />, hint: <span className="num">,</span>, weight: 3, run: () => onSettings() })
+    const SETTINGS_WORDS: Record<SettingsTab, string> = { account: 'user league season switch tour', appearance: 'theme colour color mode dark light density', forecast: 'horizon playoff weight pricing', data: 'sync reload synced engine sims ecr start over reset' }
+    for (const t of SETTINGS_TABS)
+      items.push({ id: `settings:${t.key}`, group: 'Go to', label: `Settings › ${t.label}`, keywords: SETTINGS_WORDS[t.key], weight: 2, run: () => onSettings(t.key) })
     for (const t of analysis.teams)
       items.push({
         id: `team:${t.rosterId}`,
@@ -212,12 +222,14 @@ const CommandPalette = ({
           run: () => dock.openTrade(t.id),
         }),
       )
+    if (reveal)
+      items.push({ id: 'reveal', group: 'Actions', label: `Replay the week ${reveal.week} power rank`, keywords: 'reveal power rank recap crown weekly', weight: 2, run: reveal.open })
     items.push({ id: 'tour', group: 'Actions', label: 'Replay the tour', keywords: 'help guide onboarding intro walkthrough', run: onTour })
     items.push({ id: 'reload', group: 'Actions', label: `Reload from ${source}`, keywords: 'refresh sync', hint: 'R', run: onReload })
     for (const l of leagues)
       if (l.id !== data.league.league_id) items.push({ id: `league:${l.id}`, group: 'Actions', label: `Switch league: ${l.name}`, keywords: 'league', run: () => onLeague(l.id) })
     return items
-  }, [analysis, go, onTheme, onScheme, current, scheme, density, onDensity, onReload, source, onTour, leagues, onLeague, data.league.league_id, dock, trades])
+  }, [analysis, go, onTheme, onScheme, current, scheme, density, onDensity, onReload, source, onTour, leagues, onLeague, data.league.league_id, dock, trades, onSettings, reveal])
 
   // Players worth finding: anyone rostered here or with a value or a projection ahead.
   const pool = useMemo(

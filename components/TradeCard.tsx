@@ -537,12 +537,12 @@ const TradeCard = ({
       <GradeBar idea={idea} base={base} nm={nm} posOf={(id) => players[id]?.pos} />
 
       {/* The actions, all one height (40px on a phone, 32px wider). On a narrow card they fill the row, and narrower
-          still Open in builder takes a row of its own (ff-tcard-fill, in fantasy.css); share is an icon below md. */}
+          still Open in builder wraps to a row of its own (ff-tcard-foot, in fantasy.css); share is an icon below md. */}
       {onBuild && (
-        <footer className="mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-ff-line px-3 py-2">
+        <footer className="ff-tcard-foot mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-ff-line px-3 py-2">
           {asDeal && <ShareTradeButton deal={asDeal} label={`Share this trade with ${team?.name ?? 'them'}`} />}
           {asDeal && <CompareToggle deal={asDeal} className="ff-tcard-fill" />}
-          <Button variant="soft" className="ff-tcard-fill ff-tcard-own-row" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
+          <Button variant="soft" className="ff-tcard-fill" onClick={() => onBuild(idea)} title="Open this deal in the builder to change it">
             <BuildIcon size={13} />
             Open in builder
           </Button>
