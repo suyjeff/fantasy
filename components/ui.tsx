@@ -789,7 +789,9 @@ export const Button = ({
       size === 'sm' ? 'h-7 px-2 text-[11.5px] max-md:h-10' : 'h-8 px-3 text-[12.5px] max-md:h-10',
       variant === 'primary' && 'bg-ff-text text-ff-panel hover:bg-ff-text/85',
       variant === 'aqua' && 'ff-aqua',
-      variant === 'soft' && 'border border-ff-accent/40 bg-ff-accent/[0.09] font-medium text-ff-accent hover:border-ff-accent/60 hover:bg-ff-accent/[0.15]',
+      // The label is the accent taken a fifth of the way to the text colour: at least 5:1 on its tint, hover included,
+      // in every theme (an editor theme's bright accent alone sits near the 4.5:1 floor there).
+      variant === 'soft' && 'border border-ff-accent/40 bg-ff-accent/[0.09] font-medium text-[color-mix(in_srgb,rgb(var(--ff-accent))_80%,rgb(var(--ff-text)))] hover:border-ff-accent/60 hover:bg-ff-accent/[0.15]',
       variant === 'outline' && 'border border-ff-line bg-ff-panel text-ff-text hover:border-ff-line2 hover:bg-ff-raised',
       variant === 'ghost' && 'text-ff-muted hover:bg-ff-raised hover:text-ff-text',
       className,

@@ -483,7 +483,7 @@ const TradeCard = ({
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-controls={detailId}
-        className="group flex min-h-9 w-full items-center gap-2 border-t border-ff-line px-3 text-left text-[12px] hover:bg-ff-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ff-accent/50 max-md:min-h-11"
+        className="group flex min-h-10 w-full items-center gap-2 border-t border-ff-line px-3 text-left text-[12px] hover:bg-ff-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ff-accent/50 max-md:min-h-11"
       >
         <span className="shrink-0 font-medium text-ff-text">{open ? 'Hide details' : 'Show details'}</span>
         {!open && (

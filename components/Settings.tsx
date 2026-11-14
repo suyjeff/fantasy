@@ -84,7 +84,7 @@ const Row = ({ label, hint, children, stack, labelId }: { label: ReactNode; hint
       </div>
       {hint && <p className="mt-1 text-pretty text-[12px] leading-snug text-ff-muted">{hint}</p>}
     </div>
-    <div className={cx('flex min-w-0 shrink-0 items-center gap-2', stack ? 'max-md:w-full' : 'justify-end')}>{children}</div>
+    <div className={cx('flex min-w-0 shrink-0 items-center gap-2', stack ? 'justify-end max-md:w-full max-md:justify-between' : 'justify-end')}>{children}</div>
   </div>
 )
 
@@ -138,13 +138,13 @@ const AccountPane = ({ prefs, update, leagues, leagueId, seasons, onTour }: Sett
   return (
     <>
       <Section title="League">
-        <Row label={espn ? 'ESPN league' : 'Sleeper user'} hint={espn ? 'The league and team this page reads.' : 'Whose leagues this page reads.'}>
+        <Row label={espn ? 'ESPN league' : 'Sleeper user'} hint={espn ? 'The league and team this page reads.' : 'Whose leagues this page reads.'} stack>
           <span className="min-w-0 truncate font-mono text-[12.5px] text-ff-text2">{espn ? prefs.espnLeagueId : `@${prefs.username}`}</span>
           <Button size="sm" onClick={() => update({ onboarded: false })}>
             {espn ? 'Switch' : 'Switch user'}
           </Button>
         </Row>
-        <Row label="League" hint={leagues.length > 1 ? `${leagues.length} leagues this season.` : 'The only league this season.'} stack={leagues.length > 1}>
+        <Row label="League" hint={leagues.length > 1 ? `${leagues.length} leagues this season.` : leagues.length ? 'The only league this season.' : 'Listed once the league loads.'} stack={leagues.length > 1}>
           {leagues.length > 1 ? (
             <Dropdown
               label="League"
@@ -277,9 +277,17 @@ const DataPane = ({ sync }: SettingsProps) => (
       <Row
         label="Last synced"
         hint={
-          <span aria-live="polite" className="flex min-w-0 items-center gap-1.5">
-            <span aria-hidden className={cx('h-1.5 w-1.5 shrink-0', sync.loading ? 'ff-pulse bg-ff-warn' : sync.loadedAt ? 'bg-ff-pos' : 'bg-ff-line2')} />
-            <span className="min-w-0 truncate">{sync.loading ? sync.progress || 'Loading…' : `From ${sync.source}. R reloads from any page.`}</span>
+          <span aria-live="polite" className="flex min-w-0 items-baseline gap-1.5">
+            <span aria-hidden className={cx('h-1.5 w-1.5 shrink-0 -translate-y-px', sync.loading ? 'ff-pulse bg-ff-warn' : sync.loadedAt ? 'bg-ff-pos' : 'bg-ff-line2')} />
+            <span className="min-w-0">
+              {sync.loading ? (
+                sync.progress || 'Loading…'
+              ) : (
+                <>
+                  From {sync.source}.<span className="max-md:hidden"> R reloads from any page.</span>
+                </>
+              )}
+            </span>
           </span>
         }
       >
