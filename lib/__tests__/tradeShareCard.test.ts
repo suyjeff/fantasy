@@ -143,16 +143,25 @@ const makeCard = (shape: string, names: keyof typeof NAMES, blocks: 'all' | 'one
 const draw = (card: TradeCard, format: CardFormat) => {
   const audit: TextBox[] = []
   const trace: string[] = []
-  drawTradeCard(fakeCanvas(), card, format, DARK, { audit, trace })
-  return { audit, trace, texts: audit.map((t) => t.text) }
+  const said: NonNullable<Parameters<typeof drawTradeCard>[4]>['said'] = { noteCut: false }
+  drawTradeCard(fakeCanvas(), card, format, DARK, { audit, trace, said })
+  return { audit, trace, texts: audit.map((t) => t.text), hidden: said.hidden ?? [] }
 }
 
+/** How many rows a side's last line stands for: "Hurts, Gibbs, Nacua", "Hurts, Gibbs +3 more" or "+5 more". */
+const moreCount = (t: string) => {
+  const m = /^(.*?)\s*\+(\d+)( more)?$/.exec(t)
+  if (m) return Number(m[2]) + (m[1] ? m[1].split(', ').length : 0)
+  return t.split(', ').length
+}
+const isStrip = (t: string) => t.startsWith('strip') || t.includes('+strip')
+
 /** What the card should say and does not: a side's head, a player (unless counted in a "+N"), a figure, the note. */
-const missing = (card: TradeCard, texts: string[]) => {
+const missing = (card: TradeCard, texts: string[], hidden: string[]) => {
   const out: string[] = []
   const heads = texts.filter((t) => / (GETS|SENDS)$/.test(t) || t === 'GETS').length
   if (heads < card.sides.length) out.push(`heads ${heads}`)
-  const more = texts.map((t) => /^\+(\d+)( MORE)?$/.exec(t)).reduce((a, m) => a + (m ? Number(m[1]) : 0), 0)
+  const more = hidden.reduce((a, t) => a + moreCount(t), 0)
   const items = card.sides.reduce((a, s) => a + s.players.length + (s.faab ? 1 : 0), 0)
   // Several players share a name here, so they are counted by how many rows name one.
   const rows = texts.filter((t) => PLAYERS.some((p) => playerNameVariants(p).includes(t) || (t.endsWith('…') && p.includes(t.slice(0, 3))))).length
@@ -173,10 +182,10 @@ describe('the card, over the matrix', () => {
           for (const note of [false, true])
             for (const f of formats) {
               const card = makeCard(shape, names, blocks, note)
-              const { audit, texts } = draw(card, f)
+              const { audit, texts, hidden } = draw(card, f)
               const label = `${shape}/${names}/${blocks}${note ? '/note' : ''}/${f}`
               expect(cardIssues(audit, f), label).toEqual([])
-              expect(missing(card, texts), label).toEqual([])
+              expect(missing(card, texts, hidden), label).toEqual([])
             }
       })
 })
@@ -186,18 +195,19 @@ describe('the layout it chooses', () => {
     for (const f of ['square', 'og', 'story'] as const) {
       const card = makeCard('max', 'short', 'all', true)
       const { audit } = draw(card, f)
-      // Rows of one side share a box height and sit in its column; group names by the side whose head precedes them.
-      const names = audit.filter((t) => PLAYERS.some((p) => playerNameVariants(p).includes(t.text) || (t.text.endsWith('…') && p.includes(t.text.slice(0, 3)))))
-      const forms = new Set(
-        names
-          .filter((t) => !t.text.endsWith('…'))
-          .map((t) => {
-            const p = PLAYERS.find((q) => playerNameVariants(q).includes(t.text))!
-            const v = playerNameVariants(p)
-            return t.text === v[0] && v.length > 1 && t.text !== v[v.length - 1] ? 'whole' : t.text === v[v.length - 1] ? 'surname' : 'initialled'
-          }),
-      )
-      expect(forms.size, f).toBeLessThanOrEqual(1)
+      // Names are grouped by the side whose head precedes them in the drawing.
+      const bySide = new Map<number, Set<string>>()
+      let side = -1
+      for (const t of audit) {
+        if (/ GETS$/.test(t.text)) side++
+        if (t.text.endsWith('…')) continue
+        const p = PLAYERS.find((q) => playerNameVariants(q).includes(t.text))
+        if (!p) continue
+        const v = playerNameVariants(p)
+        const form = t.text === v[0] && v.length > 1 && t.text !== v[v.length - 1] ? 'whole' : t.text === v[v.length - 1] ? 'surname' : 'initialled'
+        bySide.set(side, (bySide.get(side) ?? new Set()).add(form))
+      }
+      for (const forms of bySide.values()) expect(forms.size, f).toBeLessThanOrEqual(1)
     }
   })
 
@@ -223,11 +233,24 @@ describe('the layout it chooses', () => {
     }
   })
   it('says how many more there are rather than shrinking a big trade past reading', () => {
-    const { texts } = draw(makeCard('max', 'short', 'all', true), 'square')
-    expect(texts.some((t) => /^\+\d+( MORE)?$/.test(t))).toBe(true)
+    const { hidden } = draw(makeCard('max', 'short', 'all', true), 'square')
+    expect(hidden.some((t) => moreCount(t) > 0)).toBe(true)
   })
   it('draws the week strip where it has room, and gives it up before any figure', () => {
-    expect(draw(makeCard('one', 'short', 'all', false), 'story').trace.some((t) => t.startsWith('strip'))).toBe(true)
+    expect(draw(makeCard('one', 'short', 'all', false), 'story').trace.some(isStrip)).toBe(true)
+    // A crowded square (four players for one, or five for five, three figures, eleven weeks) keeps it in a compact form.
+    const weeks = Array.from({ length: 11 }, (_, i) => ({ week: 7 + i, delta: i % 4 === 2 ? -0.6 : 1 + (i % 3) }))
+    for (const counts of [[4, 1], [5, 5]]) {
+      const base = makeCard('fiveFour', 'long', 'all', false)
+      const crowded: TradeCard = { ...base, stats: ALL.slice(0, 3), strip: weeks, sides: base.sides.map((s, i) => ({ ...s, players: [...s.players, ...s.players].slice(0, counts[i]) })) }
+      const said = { noteCut: false, weeksLeft: true }
+      const audit: TextBox[] = []
+      const trace: string[] = []
+      drawTradeCard(fakeCanvas(), crowded, 'square', DARK, { audit, trace, said })
+      expect(trace.some(isStrip), `${counts.join('-for-')} ${trace.join(' / ')}`).toBe(true)
+      expect(said.weeksLeft).toBe(false)
+      expect(cardIssues(audit, 'square')).toEqual([])
+    }
     const { trace } = draw(makeCard('max', 'short', 'all', true), 'square')
     expect(trace.some((t) => t.startsWith('stats'))).toBe(true)
   })

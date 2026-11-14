@@ -113,7 +113,7 @@ export const OverviewTab = ({ open }: { open: (s: string) => void }) => {
               <span>
                 A team-week strays <N>±{fmt(f.sigma)}</N> pts from its projection, so single games stay close to coin flips
               </span>
-              <button onClick={() => open('forecast')} className="shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
+              <button onClick={() => open('forecast')} className="ff-hit shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
                 forecast →
               </button>
             </li>
@@ -127,7 +127,7 @@ export const OverviewTab = ({ open }: { open: (s: string) => void }) => {
                 </>
               ) : null}
             </span>
-            <button onClick={() => open('data')} className="shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
+            <button onClick={() => open('data')} className="ff-hit shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
               data →
             </button>
           </li>

@@ -104,7 +104,7 @@ export const Panel = ({
 }) => (
   <section id={id} className={cx('min-w-0 border border-ff-line bg-ff-panel', className)}>
     {(title || actions) && (
-      <header className="flex h-8 items-center justify-between gap-3 border-b border-ff-line px-3">
+      <header className="flex h-8 items-center justify-between gap-3 border-b border-ff-line px-3 max-md:h-auto max-md:min-h-8">
         <span className="flex min-w-0 items-baseline gap-2">
           {index != null && <span className="num text-[10px] text-ff-muted">{String(index).padStart(2, '0')}</span>}
           {title ? <Label className="truncate text-ff-text2">{title}</Label> : null}
@@ -718,7 +718,7 @@ export const Dropdown = ({
                 <span aria-hidden className={cx('w-3 shrink-0 font-mono text-[11px] text-ff-accent', !selected && 'invisible')}>
                   ✓
                 </span>
-                <span className="min-w-0 leading-tight">
+                <span className="min-w-0 flex-1 leading-tight">
                   <span className={cx('block whitespace-nowrap', selected && 'font-medium')}>{o.label}</span>
                   {o.sub && <span className="block whitespace-nowrap font-mono text-[10.5px] text-ff-muted">{o.sub}</span>}
                 </span>
@@ -789,7 +789,9 @@ export const Button = ({
       size === 'sm' ? 'h-7 px-2 text-[11.5px] max-md:h-10' : 'h-8 px-3 text-[12.5px] max-md:h-10',
       variant === 'primary' && 'bg-ff-text text-ff-panel hover:bg-ff-text/85',
       variant === 'aqua' && 'ff-aqua',
-      variant === 'soft' && 'border border-ff-accent/40 bg-ff-accent/[0.09] font-medium text-ff-accent hover:border-ff-accent/60 hover:bg-ff-accent/[0.15]',
+      // The label is the accent taken a fifth of the way to the text colour: at least 5:1 on its tint, hover included,
+      // in every theme (an editor theme's bright accent alone sits near the 4.5:1 floor there).
+      variant === 'soft' && 'border border-ff-accent/40 bg-ff-accent/[0.09] font-medium text-[color-mix(in_srgb,rgb(var(--ff-accent))_80%,rgb(var(--ff-text)))] hover:border-ff-accent/60 hover:bg-ff-accent/[0.15]',
       variant === 'outline' && 'border border-ff-line bg-ff-panel text-ff-text hover:border-ff-line2 hover:bg-ff-raised',
       variant === 'ghost' && 'text-ff-muted hover:bg-ff-raised hover:text-ff-text',
       className,
@@ -1719,7 +1721,7 @@ export function Table<T>({
                 className={cx(
                   // The rule is an inset shadow on the cells, not a border on the row: a collapsed border disappears under pinned cells.
                   'group',
-                  !isOpen && '[&>td]:shadow-[inset_0_-1px_0_rgb(var(--ff-line)/0.6)] last:[&>td]:shadow-none',
+                  !isOpen && '[&>td]:shadow-[inset_0_-1px_0_rgb(var(--ff-line)/0.6)] [&:last-child>td]:shadow-none',
                   onRowClick && 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent',
                   'hover:bg-ff-raised',
                   // An open row keeps the panel's surface and drops its rule, so the band beneath it reads as part of it.

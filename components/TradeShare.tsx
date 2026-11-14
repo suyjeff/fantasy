@@ -98,7 +98,7 @@ const Switch = ({ label, detail, checked, disabled, onChange, value }: { label: 
   const id = useId()
   const on = checked && !disabled
   return (
-    <label htmlFor={id} className={cx('flex min-h-11 items-start gap-3 py-1.5 md:min-h-9', disabled ? 'cursor-default' : 'cursor-pointer')}>
+    <label htmlFor={id} className={cx('flex min-h-11 items-start gap-3 py-1.5 md:min-h-10', disabled ? 'cursor-default' : 'cursor-pointer')}>
       <input
         id={id}
         type="checkbox"
@@ -268,7 +268,7 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
   const [drawn, setDrawn] = useState(false)
   // Whether this size had to cut the note short to fit: said by the note field, so it never goes quietly.
   const [noteCut, setNoteCut] = useState(false)
-  // Likewise the week-by-week strip, when it is switched on and this size has no room for it.
+  // Likewise the week-by-week strip, when it is switched on and this size has no room for it: said under its switch.
   const [weeksLeft, setWeeksLeft] = useState(false)
   // The picture is fitted to its frame by measurement: CSS alone either stretches a canvas or overflows the frame.
   const [box, setBox] = useState<{ w: number; h: number } | null>(null)
@@ -509,15 +509,22 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
               disabled={!b.available}
               onChange={(on) => flip(b.key, on)}
               value={b.available && audience.kind === 'pitch' ? val : null}
-              detail={b.available ? (b.key === 'lineup' && audience.kind === 'pitch' ? v?.sub ?? undefined : b.key === 'odds' ? v?.sub ?? undefined : b.key === 'need' ? v?.label : b.key === 'momentum' ? v?.sub ?? undefined : undefined) : `Hidden: ${b.reason}`}
+              detail={
+                b.available
+                  ? b.key === 'lineup' && audience.kind === 'pitch'
+                    ? v?.sub ?? undefined
+                    : b.key === 'odds' || b.key === 'momentum'
+                      ? v?.sub ?? undefined
+                      : b.key === 'need'
+                        ? v?.label
+                        : b.key === 'weeks' && weeksLeft && blockOn(b, include)
+                          ? `Doesn’t fit the ${fmtLabel.label} card with everything else.${format !== 'story' ? ' Try Tall.' : ''}`
+                          : undefined
+                  : `Hidden: ${b.reason}`
+              }
             />
           )
         })}
-        {weeksLeft && (
-          <p className="mt-1.5 font-mono text-[10.5px] leading-snug text-ff-muted">
-            Week by week doesn’t fit the {fmtLabel.label} card.{format !== 'story' ? ' Try Tall.' : ''}
-          </p>
-        )}
         {audience.kind === 'pitch' && <p className="mt-1.5 text-[11.5px] leading-snug text-ff-muted">Your own gain, your ask and the odds they say yes never go on the card.</p>}
       </Section>
       <Section title="Details">
@@ -619,7 +626,7 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
         ))}
       </div>
       <p role="status" aria-live="polite" className={cx('mt-2 min-h-[1.2em] font-mono text-[11px] leading-snug', status?.tone === 'bad' ? 'text-ff-neg' : 'text-ff-muted')}>
-        {status?.text ?? (worker ? (curLink?.state === 'ready' ? 'The link shows the wide card in a message and opens the trade in the app.' : curLink?.state === 'blocked' ? curLink.reason : '') : 'Sharing by link isn’t set up here. Copy or download the image instead.')}
+        {status?.text ?? (worker ? (curLink?.state === 'ready' ? 'The link shows the wide card in a message and opens the trade in the app.' : curLink?.state === 'blocked' ? curLink.reason : curLink?.state === 'failed' ? 'The link couldn’t be made. Retry, or copy the image instead.' : '') : 'Sharing by link isn’t set up here. Copy or download the image instead.')}
       </p>
     </div>
   )
@@ -731,7 +738,7 @@ export const ShareTradeButton = ({ deal, variant = 'compact', className, label =
         aria-label={label}
         title={ready ? label : 'Add players to share the trade'}
         className={cx(
-          'ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-ff-text2 hover:bg-ff-raised hover:text-ff-text disabled:pointer-events-none disabled:opacity-40',
+          'ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-ff-text2 hover:bg-ff-raised hover:text-ff-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40 disabled:pointer-events-none disabled:opacity-40',
           icon ? 'h-10 w-10' : variant === 'cell' ? 'h-10 min-w-0 flex-1 border border-ff-line text-[13px] md:h-8' : 'h-10 w-10 border border-ff-line md:h-8 md:w-auto md:px-3 md:text-[12.5px]',
           open && 'bg-ff-raised text-ff-text',
           className,

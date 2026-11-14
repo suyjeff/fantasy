@@ -1,8 +1,8 @@
-import React, { type CSSProperties } from 'react'
+import React, { useRef, useState, type CSSProperties } from 'react'
 import type { Analysis } from '../lib/analysis'
 import { countdown, dropsLabel, type Recap } from '../lib/recap'
 import { cx } from './ui'
-import { ChevronIcon } from './icons'
+import { ChevronIcon, CloseIcon } from './icons'
 import { useNow } from './useReveal'
 
 // The way back into the weekly power-rank reveal: a themed banner on the Power page and a smaller one at the
@@ -97,7 +97,7 @@ const Move = ({ move, className }: { move: number; className?: string }) => {
 }
 
 /** Hairline drafting shapes for the banner's right side; they move on hover (see fantasy.css). */
-const Drafting = ({ compact }: { compact?: boolean }) => (
+const Drafting = ({ rulerOnly }: { /** Just the ruler: for the sidebar card, whose words run the full width. */ rulerOnly?: boolean }) => (
   <svg aria-hidden className="pointer-events-none absolute inset-y-0 right-0 h-full w-[240px] max-w-[60%] overflow-visible" viewBox="0 0 240 76" preserveAspectRatio="xMaxYMid slice">
     {/* A ruler along the bottom, its ticks sliding on hover. */}
     <g className="ff-rv-ruler" style={{ '--tx': '-12px' } as CSSProperties}>
@@ -107,29 +107,25 @@ const Drafting = ({ compact }: { compact?: boolean }) => (
     </g>
     {/* Kept left of the trailing control, so nothing is drawn under its label; phones, with no room beside the
         words, keep only the ruler. */}
-    <g className={compact ? undefined : 'max-sm:hidden'}>
-    <rect className="ff-rv-ink ff-rv-sq" x={compact ? 150.5 : 40.5} y={14.5} width={28} height={28} />
-    <rect className="ff-rv-ink ff-rv-sq ff-rv-ccw" x={compact ? 158.5 : 48.5} y={22.5} width={12} height={12} />
-    <path className="ff-rv-ink" d={compact ? 'M110 28.5H150M164.5 42V60' : 'M0 28.5H40M54.5 42V60'} strokeDasharray="2 3" />
-    <rect className="ff-rv-ink-fill" x={compact ? 162.5 : 52.5} y={26.5} width={4} height={4} />
-    {!compact && (
-      <>
-        {/* A small rank trace: up, up, down, up to the top. */}
-        <path className="ff-rv-ink" d="M84 54L94 46L104 50L114 30L124 22" />
-        {[
-          [84, 54],
-          [94, 46],
-          [104, 50],
-          [114, 30],
-          [124, 22],
-        ].map(([x, y]) => (
-          <rect key={x} className="ff-rv-ink-fill" x={x - 1.5} y={y - 1.5} width={3} height={3} />
-        ))}
-        <text x={84} y={12} className="font-mono" fontSize={8} letterSpacing="0.08em" style={{ fill: 'rgb(var(--ff-text2))' }}>
-          RK·Δ
-        </text>
-      </>
-    )}
+    <g className={rulerOnly ? 'hidden' : 'max-sm:hidden'}>
+    <rect className="ff-rv-ink ff-rv-sq" x={40.5} y={14.5} width={28} height={28} />
+    <rect className="ff-rv-ink ff-rv-sq ff-rv-ccw" x={48.5} y={22.5} width={12} height={12} />
+    <path className="ff-rv-ink" d="M0 28.5H40M54.5 42V60" strokeDasharray="2 3" />
+    <rect className="ff-rv-ink-fill" x={52.5} y={26.5} width={4} height={4} />
+    {/* A small rank trace: up, up, down, up to the top. */}
+    <path className="ff-rv-ink" d="M84 54L94 46L104 50L114 30L124 22" />
+    {[
+      [84, 54],
+      [94, 46],
+      [104, 50],
+      [114, 30],
+      [124, 22],
+    ].map(([x, y]) => (
+      <rect key={x} className="ff-rv-ink-fill" x={x - 1.5} y={y - 1.5} width={3} height={3} />
+    ))}
+    <text x={84} y={12} className="font-mono" fontSize={8} letterSpacing="0.08em" style={{ fill: 'rgb(var(--ff-text2))' }}>
+      RK·Δ
+    </text>
     </g>
   </svg>
 )
@@ -220,61 +216,94 @@ export const PowerBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap
   )
 }
 
-/** The sidebar's banner, above the settings: the latest reveal to replay, or when the next one drops. */
-export const NavBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap | null; pending: RevealPending | null; analysis: Analysis; onOpen: () => void }) => {
-  // Only a pending banner keeps time, for its countdown.
+/**
+ * The sidebar's card, above your team: the latest reveal to replay, or when the next one drops. It can be put away
+ * (`onDismiss`): it folds shut, and focus moves on to the row below so a keyboard user is not dropped on the page.
+ */
+export const NavBanner = ({
+  recap,
+  pending,
+  analysis,
+  onOpen,
+  onDismiss,
+}: {
+  recap: Recap | null
+  pending: RevealPending | null
+  analysis: Analysis
+  onOpen: () => void
+  onDismiss?: () => void
+}) => {
+  // Only a pending card keeps time, for its countdown.
   const now = useNow(30000, !!pending)
+  const [folded, setFolded] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  const dismiss = () => {
+    // The next control down (your team) takes focus before this one goes.
+    box.current?.closest('[data-sidebar-body]')?.querySelector<HTMLElement>('[data-sidebar-foot] button')?.focus({ preventScroll: true })
+    setFolded(true)
+    window.setTimeout(() => onDismiss?.(), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 140 : 200)
+  }
+  const close = onDismiss && (
+    <button
+      type="button"
+      onClick={dismiss}
+      aria-label={pending ? `Hide until week ${pending.week}'s power rank drops` : `Hide until the next power rank drops`}
+      title="Hide until the next one drops"
+      className="absolute right-0 top-0 z-10 flex h-8 w-8 items-center justify-center text-ff-muted transition-colors hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent max-md:h-11 max-md:w-11"
+    >
+      <CloseIcon size={12} />
+    </button>
+  )
+
+  let card: React.ReactNode = null
   if (pending) {
     const { when, left } = dropText(pending, now)
-    return (
-      <div className="shrink-0 border-t border-ff-line px-2 py-2">
-        <div className="ff-rv-banner is-pending flex h-14 w-full items-center gap-2.5 px-2.5 md:h-12" title="Unlocks for everyone in the league at once">
-          <Drafting compact />
-          <span className="relative">
-            <Crown size={22} outline />
+    card = (
+      <div className="ff-rv-banner is-pending flex min-h-[92px] w-full flex-col justify-between gap-2 p-3" title="Unlocks for everyone in the league at once">
+        <Drafting rulerOnly />
+        <span className="relative flex items-center gap-1.5 pr-6 font-mono text-[9.5px] uppercase tracking-[0.1em] text-ff-text2">
+          <span aria-hidden className="ff-rv-blink inline-block h-1 w-1 bg-ff-accent" />
+          Wk {pending.week} power rank
+        </span>
+        <span className="relative flex min-w-0 items-center gap-2.5">
+          <Crown size={24} outline />
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className="block truncate text-[14px] font-medium">Drops {when}</span>
+            {left && <span className="num mt-0.5 block font-mono text-[10.5px] text-ff-text2">{left}</span>}
           </span>
-          <span className="relative min-w-0 flex-1 leading-tight">
-            <span className="flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.1em] text-ff-text2">
-              <span aria-hidden className="ff-rv-blink inline-block h-1 w-1 bg-ff-accent" />
-              Wk {pending.week} power rank
-            </span>
-            <span className="mt-0.5 block truncate text-[13px] font-medium md:text-[12.5px]">Drops {when}</span>
-          </span>
-          {left && <span className="num relative shrink-0 font-mono text-[10.5px] text-ff-text2">{left.replace(/^in /, '')}</span>}
-        </div>
-        {/* The last unlocked week stays a tap away; the teaser above is not a control. */}
+        </span>
+        {/* The last unlocked week stays a tap away; the teaser itself is not a control. */}
         {recap && (
           <button
             type="button"
             onClick={onOpen}
-            className="mt-1 flex h-9 w-full items-center justify-center gap-1.5 border border-ff-line bg-ff-panel font-mono text-[10.5px] uppercase tracking-[0.08em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text md:h-7"
+            className="ff-rv-replay relative flex h-7 items-center justify-between gap-1.5 border border-ff-line2 bg-ff-panel/70 px-2 font-mono text-[10.5px] uppercase tracking-[0.08em] text-ff-text2 hover:text-ff-text max-md:h-10"
             aria-label={`Replay the week ${recap.week} power rank reveal`}
           >
-            <span aria-hidden>↺</span> Replay wk {recap.week}
+            Replay wk {recap.week}
+            <ChevronIcon dir="right" size={10} className="ff-rv-nudge" />
           </button>
         )}
       </div>
     )
-  }
-  if (!recap) return null
-  const { topName, mine } = headline(recap, analysis)
-  return (
-    <div className="shrink-0 border-t border-ff-line px-2 py-2">
+  } else if (recap) {
+    const { top, topName, mine } = headline(recap, analysis)
+    card = (
       <button
         type="button"
         onClick={onOpen}
-        className="ff-rv-banner flex h-14 w-full items-center gap-2.5 px-2.5 text-left md:h-12"
-        // The name starts with the words on the button, so asking for it by what it says (voice control) finds it.
+        className="ff-rv-banner flex min-h-[92px] w-full flex-col justify-between gap-2 p-3 text-left"
+        // The name starts with the words on the card, so asking for it by what it says (voice control) finds it.
         aria-label={`Wk ${recap.week} power rank: ${mine ? `You're No. ${mine.rankAfter}, ${mine.move === 0 ? 'unchanged' : mine.move > 0 ? `up ${mine.move}` : `down ${-mine.move}`}` : `${topName} is No. 1`}. Replay the reveal.`}
       >
         <span className="ff-rv-sweep" aria-hidden />
-        <Drafting compact />
-        <span className="ff-rv-lift relative">
-          <Crown size={22} />
-        </span>
-        <span className="relative min-w-0 flex-1 leading-tight">
-          <span className="block font-mono text-[9.5px] uppercase tracking-[0.1em] text-ff-text2">Wk {recap.week} power rank</span>
-          <span className="mt-0.5 block truncate text-[13px] font-medium md:text-[12.5px]">
+        <Drafting rulerOnly />
+        <span className="relative block pr-6 font-mono text-[9.5px] uppercase tracking-[0.1em] text-ff-text2">Wk {recap.week} power rank</span>
+        <span className="relative flex min-w-0 items-center gap-2.5">
+          <span className="ff-rv-lift">
+            <Crown size={24} />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[14px] font-medium leading-tight">
             {mine ? (
               <>
                 You&apos;re No. {mine.rankAfter} <Move move={mine.move} className="ml-0.5 text-[11px]" />
@@ -284,8 +313,27 @@ export const NavBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap |
             )}
           </span>
         </span>
-        <ChevronIcon dir="right" className="ff-rv-nudge relative text-ff-text2" />
+        <span className="relative flex min-w-0 items-center justify-between gap-2 text-[11.5px] text-ff-text2">
+          <span className="min-w-0 truncate">{mine && top && top.rosterId !== mine.rosterId && topName ? `${topName} is No. 1` : 'See how the week moved'}</span>
+          <span className="flex shrink-0 items-center gap-1 font-mono text-[10px] uppercase tracking-[0.08em]">
+            Replay
+            <ChevronIcon dir="right" size={10} className="ff-rv-nudge" />
+          </span>
+        </span>
       </button>
+    )
+  }
+  if (!card) return null
+  return (
+    <div ref={box} className={cx('ff-fold shrink-0', folded && 'is-folded')}>
+      <div>
+        <div className="border-t border-ff-line p-2">
+          <div className="relative">
+            {card}
+            {close}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

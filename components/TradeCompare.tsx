@@ -499,7 +499,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
         <p className="text-[14px] font-medium text-ff-text">Compare trades side by side</p>
         <p className="mx-auto mt-1 max-w-[440px] text-[13px] leading-relaxed text-ff-muted">
           Put up to four trades next to each other and see which one to make: what each does for your lineup and your playoff odds, its value, and how likely it is to be accepted. Add a trade with{' '}
-          <span className="text-ff-text2">Add to compare</span> in the builder, or <span className="text-ff-text2">Compare</span> on a suggested trade.
+          <span className="text-ff-text2">Compare</span> in the builder or on a suggested trade.
         </p>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           {dock && (

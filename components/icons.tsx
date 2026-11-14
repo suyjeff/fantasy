@@ -89,7 +89,47 @@ export const InfoIcon = ({ className, size }: { className?: string; size?: numbe
   </Svg>
 )
 
-const CHEVRON_TURN = { down: undefined, up: 'rotate(180 7 7)', left: 'rotate(90 7 7)', right: 'rotate(-90 7 7)' } as const
+// The round ones below (gear, sun, moon) are drawn at geometric precision: crisp edges would stair-step their curves.
+
+/** Settings: an eight-tooth gear with flat tips around an open hub. */
+export const GearIcon = ({ className, size = 14 }: { className?: string; size?: number }) => (
+  <svg aria-hidden width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1" strokeLinejoin="miter" className={cx('shrink-0', className)}>
+    <path d="M5.64 2.61L5.81 1.12L8.19 1.12L8.36 2.61L9.15 2.93L10.32 2L12 3.68L11.07 4.85L11.39 5.64L12.88 5.81L12.88 8.19L11.39 8.36L11.07 9.15L12 10.32L10.32 12L9.15 11.07L8.36 11.39L8.19 12.88L5.81 12.88L5.64 11.39L4.85 11.07L3.68 12L2 10.32L2.93 9.15L2.61 8.36L1.12 8.19L1.12 5.81L2.61 5.64L2.93 4.85L2 3.68L3.68 2L4.85 2.93Z" />
+    <circle cx="7" cy="7" r="1.75" />
+  </svg>
+)
+
+/** Follow the device: a monitor on its stand. */
+export const SystemIcon = ({ className, size }: { className?: string; size?: number }) => (
+  <Svg className={className} size={size}>
+    <rect x="1.5" y="2.5" width="11" height="7.5" />
+    <path d="M5 12.5h4M7 10v2.5" />
+  </Svg>
+)
+
+/** Light mode: a sun, a ring with eight rays. */
+export const SunIcon = ({ className, size = 14 }: { className?: string; size?: number }) => (
+  <svg aria-hidden width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="square" className={cx('shrink-0', className)}>
+    <circle cx="7" cy="7" r="2.5" />
+    <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.75 2.75l1.06 1.06M10.19 10.19l1.06 1.06M2.75 11.25l1.06-1.06M10.19 3.81l1.06-1.06" />
+  </svg>
+)
+
+/** Dark mode: a crescent. */
+export const MoonIcon = ({ className, size = 14 }: { className?: string; size?: number }) => (
+  <svg aria-hidden width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1" className={cx('shrink-0', className)}>
+    <path d="M11.5 8.6A5 5 0 1 1 5.4 2.5a4 4 0 0 0 6.1 6.1Z" />
+  </svg>
+)
+
+/** Dismiss: two hairlines crossed. */
+export const CloseIcon = ({ className, size = 14 }: { className?: string; size?: number }) => (
+  <svg aria-hidden width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="square" className={cx('shrink-0', className)}>
+    <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />
+  </svg>
+)
+
+const CHEVRON_TURN ={ down: undefined, up: 'rotate(180 7 7)', left: 'rotate(90 7 7)', right: 'rotate(-90 7 7)' } as const
 
 /** The app's one chevron: an open line V for every expander, dropdown, pager and "go" hint. Takes the text colour;
  *  rotate it with a class (e.g. `rotate-180` when open) or point it with `dir`. */

@@ -254,7 +254,8 @@ const picture = (e: Env, src: string | null, letter: string, x: number, y: numbe
 // ---- Blocks ----
 
 /** A block planned for a width: the height it needs, its score, and how to draw it at a top edge. */
-type Plan = { h: number; score: number; what: string; draw: (x: number, y: number) => void }
+/** `strip`: the plan draws the week-by-week bars itself, so the column needs no strip of its own. */
+type Plan = { h: number; score: number; what: string; draw: (x: number, y: number) => void; strip?: boolean }
 
 // The sides. A side is a head ("MIND GOBLINS GETS") over its rows. A row is a player, the FAAB the side takes in, or,
 // past what fits, "+3 MORE". Rows come in two kinds: `rich` (a face, the name, and under it a line of position, team
@@ -264,8 +265,10 @@ type Plan = { h: number; score: number; what: string; draw: (x: number, y: numbe
 
 type Kind = 'rich' | 'line'
 /** `ledger`: each side a band, its head in a column at the left and its rows beside it, for many teams in little height. */
-type SideOpt = { kind: Kind; cols: number; cap: number; zoom: number; ppw: boolean; ledger?: boolean; tight?: boolean }
-type Item = { t: 'player'; i: number } | { t: 'faab' } | { t: 'none' } | { t: 'more'; n: number }
+/** `bare`: a line row without its position column, for the most names in the least width. */
+type SideOpt = { kind: Kind; cols: number; cap: number; zoom: number; ppw: boolean; ledger?: boolean; tight?: boolean; bare?: boolean }
+/** `more`: the rows past what fits, said in one: as many of their surnames as go, then how many others. */
+type Item = { t: 'player'; i: number } | { t: 'faab' } | { t: 'none' } | { t: 'more'; text: string }
 
 const itemsOf = (s: CardSide) => {
   const out: Item[] = s.players.map((_, i) => ({ t: 'player', i }))
@@ -283,6 +286,15 @@ const nameForms = (name: string) => {
 /** Who sends a player, in a deal of three or more: a phrase, so in the words' face. */
 const fromText = (team: string) => `from ${nameVariants(team)[0]}`
 
+/** The rows that did not fit, in one line: "Hurts, Gibbs, Nacua", else "Hurts, Gibbs +3 more", else "+5 more". */
+const moreText = (e: Env, rest: string[], f: Font, room: number) => {
+  for (let k = rest.length; k >= 1; k--) {
+    const text = rest.slice(0, k).join(', ') + (k < rest.length ? ` +${rest.length - k} more` : '')
+    if (e.pen.width(text, f) <= room) return { text, named: k }
+  }
+  return { text: e.pen.first([`+${rest.length} more`, `+${rest.length}`], f, room), named: 0 }
+}
+
 /** The measures of one way of setting the sides. */
 const sideMeasures = (S: Spec, o: SideOpt) => {
   const z = o.zoom
@@ -291,7 +303,7 @@ const sideMeasures = (S: Spec, o: SideOpt) => {
   const face = Math.round(S.face * z)
   const gapLine = Math.round(S.u * 2 * z)
   const textH = name * CAP + gapLine + meta * CAP
-  const rowH = o.kind === 'rich' ? Math.round(Math.max(face, textH + S.u * 2) + S.u * 3) : Math.round(name * CAP + S.u * (o.tight ? 3 : 4) * Math.min(z, 1.2))
+  const rowH = o.kind === 'rich' ? Math.round(Math.max(face, textH + S.u * 2) + S.u * 3) : Math.round(name * CAP + S.u * (o.tight ? 2.5 : 4) * Math.min(z, 1.2))
   return { name, meta, face, gapLine, textH, rowH }
 }
 
@@ -324,7 +336,7 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
   const showPpw = hasPpw && o.ppw
   const ppwW = showPpw ? pen.width('00.0', ppwF) : 0
   const gap = o.kind === 'rich' ? S.u * 2 : S.u * 4
-  const colGap = S.u * 6
+  const colGap = o.bare ? S.u * 4 : S.u * 6
   const headF = label(S.min)
   const headLH = Math.round(S.min * CAP + S.u * 2)
   // A ledger's head column: as wide as its widest head needs, within a third of the width. A head takes a second line
@@ -340,21 +352,25 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
   const cellW = (rowsW - (o.cols - 1) * colGap) / o.cols
   const faceW = o.kind === 'rich' ? m.face + S.u * 3 : 0
   // The position column of a line row: as wide as the widest it holds, so every name starts on one edge.
-  const posCol = o.kind === 'line' ? pen.width(card.sides.some((s) => s.faab) ? 'FAAB' : 'DEF', metaF) + S.u * 2 : 0
+  const posCol = o.kind === 'line' && !o.bare ? pen.width(card.sides.some((s) => s.faab) ? 'FAAB' : 'DEF', metaF) + S.u * 2 : 0
   const nameRoom0 = cellW - faceW - posCol - (ppwW ? ppwW + gap : 0)
-  if (nameRoom0 < S.name * 2.5) return null
+  if (nameRoom0 < S.name * (o.cols > 2 ? 3.5 : 2.5)) return null
   const headH = o.ledger ? 0 : Math.round(S.min * CAP + S.u * 3)
   const unit = showPpw && !o.ledger ? 'PTS/WK' : null
-  let loss = hasPpw && !showPpw ? 3 : 0
+  let loss = (hasPpw && !showPpw ? 3 : 0) + (o.bare ? 2 : 0)
   if (o.cap * o.cols < 2 && card.sides.some((s) => itemsOf(s).length > o.cap * o.cols)) return null
 
   let unitDone = false
+  let squeezed = false
   const sides = card.sides.map((s) => {
     let items = itemsOf(s)
     if (Math.ceil(items.length / o.cols) > o.cap) {
       const keep = o.cap * o.cols - 1
-      loss += (items.length - keep) * 8
-      items = [...items.slice(0, keep), { t: 'more', n: items.length - keep }]
+      const rest = items.slice(keep).map((it) => (it.t === 'player' ? nameForms(s.players[it.i].name)[2] : it.t === 'faab' ? `$${s.faab}` : ''))
+      const more = moreText(e, rest, { px: m.meta }, cellW)
+      // A name said in the line costs less than one only counted.
+      loss += more.named * 5 + (rest.length - more.named) * 8
+      items = [...items.slice(0, keep), { t: 'more', text: more.text }]
     }
     const rows = Math.ceil(items.length / o.cols)
     // The head, with its avatar and, on the first side with the room, the unit of the figures at the right.
@@ -388,10 +404,13 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
       while (px > least && !fitsAt(2, px)) px -= 2
       cut = !fitsAt(2, px)
       loss += 1
+      // Names side by side are worth it only while an ordinary surname still fits whole: only an outsized one is cut.
+      if (cut && o.cols > 1 && players.some((pl) => graphemes(nameForms(pl.name)[2]).length <= 12 && pen.width(nameForms(pl.name)[2], nameF(px)) > roomOf(pl))) squeezed = true
     }
-    loss += level * 1.5 + (cut ? 6 : 0)
+    loss += level * 1.5 + (cut ? 20 : 0)
     return { s, items, rows, head, hasUnit, src, av, left, level, px, showFrom }
   })
+  if (squeezed) return null
 
   const sideGap = o.ledger ? 0 : S.wide || o.tight ? S.u * 4 : S.u * 5
   // A ledger's head sits on the baseline of its first row, its second line under it.
@@ -402,7 +421,7 @@ const planSides0 = (e: Env, w: number, o: SideOpt): Plan | null => {
   return {
     h,
     score: kindScore + (o.zoom - 1) * 20 - loss * 2.5,
-    what: `sides ${o.ledger ? 'ledger' : 'stack'} ${o.kind}${o.tight ? ' tight' : ''}${o.kind === 'rich' ? '+face' : ''} x${o.cols}${o.cap < Infinity ? ` cap${o.cap}` : ''}${showPpw || !hasPpw ? '' : ' noppw'}${o.zoom !== 1 ? ` zoom${o.zoom}` : ''} loss${loss}`,
+    what: `sides ${o.ledger ? 'ledger' : 'stack'} ${o.kind}${o.tight ? ' tight' : ''}${o.bare ? ' bare' : ''}${o.kind === 'rich' ? '+face' : ''} x${o.cols}${o.cap < Infinity ? ` cap${o.cap}` : ''}${showPpw || !hasPpw ? '' : ' noppw'}${o.zoom !== 1 ? ` zoom${o.zoom}` : ''} loss${loss}`,
     draw: (x0, y0) => {
       let y = y0
       sides.forEach((x) => {
@@ -455,11 +474,15 @@ const drawRow = (e: Env, s: CardSide, it: Item, r: Rect, o: SideOpt, m: RowCtx) 
     const f: Font = { px: Math.round(m.face * 0.4), mono: true }
     pen.put(glyph, r.x + m.face / 2, cy + (f.px * CAP) / 2, f, rgb(p.muted), { x: r.x, y: fy, w: m.face, h: m.face }, 'center', 'deco')
   }
-  if (it.t === 'none' || it.t === 'more') {
-    const f: Font = it.t === 'none' ? m.nameF(m.px) : label(S.min)
-    const ways = it.t === 'none' ? ['Nothing back', 'Nothing'] : [`+${it.n} MORE`, `+${it.n}`]
-    const box = { x: r.x, y: r.y, w: r.w, h: r.h }
-    pen.put(pen.first(ways, f, r.w), r.x + (rich ? m.faceW : 0), Math.round(cy + (f.px * CAP) / 2), f, rgb(p.muted), box)
+  if (it.t === 'more') {
+    e.said?.hidden?.push(it.text)
+    const f: Font = { px: m.meta }
+    pen.put(it.text, r.x, Math.round(cy + (f.px * CAP) / 2), f, rgb(p.text2), r)
+    return
+  }
+  if (it.t === 'none') {
+    const f = m.nameF(m.px)
+    pen.put(pen.first(['Nothing back', 'Nothing'], f, r.w), r.x + (rich ? m.faceW : 0), Math.round(cy + (f.px * CAP) / 2), f, rgb(p.muted), r)
     return
   }
   if (it.t === 'faab') {
@@ -468,6 +491,9 @@ const drawRow = (e: Env, s: CardSide, it: Item, r: Rect, o: SideOpt, m: RowCtx) 
     if (rich) {
       pen.put(`$${s.faab}`, x0, nb, nf, rgb(p.text), nameBox)
       pen.put('FAAB', x0, mb, m.metaF, rgb(p.muted), metaBox)
+    } else if (o.bare) {
+      const w = pen.put(`$${s.faab}`, x0, nb, nf, rgb(p.text), nameBox)
+      if (w + S.u * 1.5 + pen.width('FAAB', m.metaF) <= nameBox.w) pen.put('FAAB', x0 + w + S.u * 1.5, nb, m.metaF, rgb(p.muted), nameBox)
     } else {
       pen.put('FAAB', r.x, nb, m.metaF, rgb(p.muted), metaBox)
       pen.put(`$${s.faab}`, x0, nb, nf, rgb(p.text), nameBox)
@@ -500,7 +526,7 @@ const drawRow = (e: Env, s: CardSide, it: Item, r: Rect, o: SideOpt, m: RowCtx) 
     const lw = pen.put(line, x0, mb, lineF, rgb(p.muted), metaBox)
     if (withTag && tag) chip(e, tag, x0 + lw + S.u * 2, mb, m.metaF, metaBox)
   } else {
-    pen.put(pl.pos, r.x, nb, m.metaF, rgb(p.muted), metaBox)
+    if (!o.bare) pen.put(pl.pos, r.x, nb, m.metaF, rgb(p.muted), metaBox)
     pen.put(name, x0, nb, nf, rgb(p.text), nameBox)
     if (m.showFrom && pl.from) pen.put(fromText(pl.from), right, nb, { px: m.meta }, rgb(p.muted), nameBox, 'right')
   }
@@ -519,7 +545,8 @@ const chip = (e: Env, text: string, x: number, base: number, f: Font, room: Rect
 // The figures: in tiles, a row of label over a large number, divided by hairlines; or, when short of room, a list of
 // label and number, one line each; past what fits, a line saying how many more there are.
 
-type StatOpt = { mode: 'tiles' | 'list'; cols: number; sub: boolean; cap: number }
+/** `strip`: the week-by-week bars take a tile of their own after the figures, in a row's spare place. */
+type StatOpt = { mode: 'tiles' | 'list'; cols: number; sub: boolean; cap: number; strip?: boolean }
 
 /** A figure's label, longest first: "PLAYOFF ODDS", "PLAYOFFS"; a team's name, in the league's view, as names shorten. */
 const statLabels = (card: TradeCard, s: CardStat) => {
@@ -566,7 +593,7 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
       const vw = pen.width(s.value, vf) + (unit ? S.u * 1.5 + pen.width(unit, lf) : 0)
       const lab = pen.cut(ways[ways.length - 1], lf, w - vw - S.u * 4)
       if (graphemes(lab.replace(/…$/, '')).length < 3) return null
-      loss += 2
+      loss += 6
       return { s, lab, unit, vw }
     })
     if (rows.some((r) => !r)) return null
@@ -601,20 +628,24 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
 
   // Tiles, `cols` to a row, the last row's tiles sharing its width; one size for every number in the block.
   const gap = S.u * 6
-  const rowsOf: CardStat[][] = []
-  for (let i = 0; i < stats.length; i += o.cols) rowsOf.push(stats.slice(i, i + o.cols))
+  // A tile is a figure, or the week-by-week strip.
+  const tiles: (CardStat | 'strip')[] = o.strip ? [...stats, 'strip'] : stats
+  const rowsOf: (CardStat | 'strip')[][] = []
+  for (let i = 0; i < tiles.length; i += o.cols) rowsOf.push(tiles.slice(i, i + o.cols))
   // Balanced rows: four figures go two and two, not three and one.
   if (rowsOf.length > 1 && rowsOf[rowsOf.length - 1].length === 1 && o.cols > 2) return null
   // One grid for every row, so a short last row lines up under the first.
   const cw = (w - gap * (o.cols - 1)) / o.cols
+  if (o.strip && cw < minBars(e)) return null
   const unitFor = (s: CardStat, px: number) => unitWays(s.unit).find((u) => pen.width(s.value, { px, w: 500, mono: true }) + (u ? S.u * 1.5 + pen.width(u, lf) : 0) <= cw) ?? null
   let px = S.value
   const least = Math.round(S.value * 0.7)
-  const fitsAll = (x: number) => rowsOf.every((row) => row.every((s) => unitFor(s, x) === unitWays(s.unit)[0]))
+  const fitsAll = (x: number) => rowsOf.every((row) => row.every((s) => s === 'strip' || unitFor(s, x) === unitWays(s.unit)[0]))
   while (px > least && !fitsAll(px)) px -= 2
   let loss = 0
   const cells = rowsOf.map((row) =>
     row.map((s) => {
+      if (s === 'strip') return { s, lab: pen.first(['WEEK BY WEEK', 'WEEKLY'], lf, cw), unit: null, sub: null }
       const unit = unitFor(s, px)
       if (unit == null) return null
       if (unit !== unitWays(s.unit)[0]) loss += 0.5
@@ -631,15 +662,21 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
     }),
   )
   if (cells.some((r) => r.some((c) => !c))) return null
-  // A row of tiles is as tall as its tallest: room for a note under the number only where one of them has one.
-  const tileH = cells.map((row) => Math.round(S.min * CAP + S.u * 3 + px * CAP + (row.some((c) => c!.sub) ? S.u * 3 + S.min * CAP : 0) + S.u))
+  // A row of tiles is as tall as its tallest: room for a note under the number only where one of them has one, and
+  // for the bars to stand readably tall where they are.
+  const tileH = cells.map((row) => {
+    const body = Math.max(px * CAP + (row.some((c) => c!.sub) ? S.u * 3 + S.min * CAP : 0), row.some((c) => c!.s === 'strip') ? S.u * 7 : 0)
+    return Math.round(S.min * CAP + S.u * 3 + body + S.u)
+  })
   const rowGap = S.u * 4
   const h = top + tileH.reduce((a, x) => a + x, 0) + (cells.length - 1) * rowGap
   const subs = card.stats.filter((s) => s.sub).length
   return {
     h,
-    score: 20 - (o.sub ? 0 : subs * 1.5) - loss - (px < S.value ? (S.value - px) / 8 : 0),
-    what: `stats tiles x${o.cols}${o.sub ? ' sub' : ''}`,
+    // The strip in a tile is worth what the slim strip is: the summary is left to the Lineup figure's note.
+    score: 20 - (o.sub ? 0 : subs * 1.5) - loss - (px < S.value ? (S.value - px) / 8 : 0) + (o.strip ? 17 : 0),
+    what: `stats tiles x${o.cols}${o.sub ? ' sub' : ''}${o.strip ? ' +strip' : ''}`,
+    strip: o.strip,
     draw: (x, y) => {
       rule(e, x, y, w)
       let ty = y + top
@@ -654,6 +691,13 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
           }
           let base = ty + S.min * CAP
           pen.put(c.lab, cx, base, lf, rgb(p.muted), box)
+          if (c.s === 'strip') {
+            // The bars stand where a number would, down to the foot of the row's notes.
+            if (e.said) e.said.weeksLeft = false
+            const by = base + S.u * 3
+            bars(e, { x: cx, y: by, w: cw, h: ty + tileH[ri] - S.u - by })
+            return
+          }
           base += S.u * 3 + px * CAP
           const vw = pen.put(c.s.value, cx, base, { px, w: 500, mono: true }, rgb(toneOf(c.s)), box)
           if (c.unit) pen.put(c.unit, cx + vw + S.u * 1.5, base, lf, rgb(p.muted), box)
@@ -669,56 +713,93 @@ const planStats0 = (e: Env, w: number, o: StatOpt): Plan | null => {
  * The recipient's lineup change week by week: bars either side of a zero line, gains in the positive colour and the
  * odd losing week in the negative. Colour is never the only cue: a bar's side of the line says which way the week
  * went, and a dashed line at the lineup change a week (the Lineup figure) shows the run as a whole.
+ *
+ * Three forms, fullest first: `full`, a head over a tall plot over the first and last week; `slim`, the weeks said in
+ * the head and a short plot; `inline`, one row of what it is, the bars, and how many weeks are better, for a crowded
+ * card that would otherwise leave it off.
  */
-const planStrip = (e: Env, w: number): Plan => {
+type StripForm = 'full' | 'slim' | 'inline'
+
+/** The bars and their zero line in a rect, the dashed line at the run's lineup change a week across them. */
+const bars = (e: Env, r: Rect) => {
+  const { S, p, card, ctx } = e
+  const strip = card.strip!
+  const n = strip.length
+  const net = card.net ?? null
+  const anyNeg = strip.some((s) => s.delta < -0.05)
+  const max = Math.max(0.5, ...strip.map((s) => Math.max(0, s.delta)), net ?? 0)
+  const negMax = anyNeg ? Math.max(...strip.map((s) => -s.delta)) : 0
+  const zero = r.y + r.h * (max / (max + negMax))
+  const scale = r.h / (max + negMax)
+  const slot = r.w / n
+  const bw = Math.max(4, Math.min(S.u * 5, slot * 0.5))
+  strip.forEach((s, i) => {
+    const len = Math.max(2, Math.abs(s.delta) * scale)
+    ctx.fillStyle = rgb(Math.abs(s.delta) < 0.05 ? p.line2 : s.delta > 0 ? p.pos : p.neg, 0.85)
+    ctx.fillRect(r.x + slot * i + slot / 2 - bw / 2, s.delta >= 0 ? zero - len : zero, bw, len)
+  })
+  ctx.fillStyle = rgb(p.line2)
+  ctx.fillRect(r.x, Math.round(zero) - 1, r.w, 2)
+  if (net == null) return
+  const ay = Math.round(zero - net * scale)
+  ctx.strokeStyle = rgb(p.text2)
+  ctx.lineWidth = 2
+  ctx.setLineDash([S.u, S.u])
+  ctx.beginPath()
+  ctx.moveTo(r.x, ay)
+  ctx.lineTo(r.x + r.w, ay)
+  ctx.stroke()
+  ctx.setLineDash([])
+}
+/** The narrowest the bars may be drawn and still read as weeks. */
+const minBars = (e: Env) => Math.max(e.S.u * 24, e.card.strip!.length * e.S.u * 3)
+const planStrip = (e: Env, w: number, form: StripForm): Plan | null => {
   const { S, pen, p, card } = e
   const strip = card.strip!
   const lf = label(S.min)
+  const n = strip.length
   const better = strip.filter((s) => s.delta > 0.05).length
-  const plotH = S.u * 12
-  const top = S.u * 4
-  const h = top + S.min * CAP + S.u * 3 + plotH + S.u * 2 + S.min * CAP
+  const span = n > 1 ? `WK ${strip[0].week}–${strip[n - 1].week}` : `WK ${strip[0].week}`
+  const top = form === 'inline' ? S.u * 3 : S.u * 4
+  const plotH = form === 'full' ? S.u * 12 : form === 'slim' ? S.u * 7 : S.u * 6
+  // Inline: the words either side of the bars, each in its shortest form that leaves the bars a readable width.
+  let lead = ''
+  let sum = ''
+  if (form === 'inline') {
+    const minPlot = minBars(e)
+    const leads = ['WEEK BY WEEK', 'WEEKLY']
+    const sums = [`${better} OF ${n} BETTER`, `${better}/${n} BETTER`, `${better}/${n}`]
+    const pair = leads.flatMap((l) => sums.map((s) => [l, s])).find(([l, s]) => pen.width(l, lf) + pen.width(s, lf) + S.u * 6 + minPlot <= w)
+    if (!pair) return null
+    ;[lead, sum] = pair
+  }
+  const h = form === 'inline' ? top + plotH : top + S.min * CAP + S.u * 3 + plotH + (form === 'full' ? S.u * 2 + S.min * CAP : 0)
   return {
     h,
-    score: 8,
-    what: 'strip',
+    score: form === 'full' ? 18 : form === 'slim' ? 17 : 16,
+    what: `strip ${form}`,
     draw: (x, y) => {
       if (e.said) e.said.weeksLeft = false
       rule(e, x, y, w)
-      const hb = { x, y, w, h: top + S.min }
-      const base = y + top + S.min * CAP
-      const sum = pen.first([`BETTER ${better} OF ${strip.length} WEEKS`, `BETTER ${better} OF ${strip.length}`, `${better}/${strip.length}`], lf, w / 2)
-      const sw = pen.put(sum, x + w, base, lf, rgb(p.text2), hb, 'right')
-      pen.put(pen.first(['WEEK BY WEEK', 'WEEKS', ''], lf, w - sw - S.u * 4), x, base, lf, rgb(p.muted), hb)
-      const r = { x, y: base + S.u * 3, w, h: plotH }
-      const n = strip.length
-      const net = card.net ?? null
-      const anyNeg = strip.some((s) => s.delta < -0.05)
-      const max = Math.max(0.5, ...strip.map((s) => Math.max(0, s.delta)), net ?? 0)
-      const negMax = anyNeg ? Math.max(...strip.map((s) => -s.delta)) : 0
-      const zero = r.y + r.h * (max / (max + negMax))
-      const scale = r.h / (max + negMax)
-      const slot = r.w / n
-      const bw = Math.max(4, Math.min(S.u * 5, slot * 0.5))
-      const at = (i: number) => r.x + slot * i + slot / 2
-      strip.forEach((s, i) => {
-        const len = Math.max(2, Math.abs(s.delta) * scale)
-        e.ctx.fillStyle = rgb(Math.abs(s.delta) < 0.05 ? p.line2 : s.delta > 0 ? p.pos : p.neg, 0.85)
-        e.ctx.fillRect(at(i) - bw / 2, s.delta >= 0 ? zero - len : zero, bw, len)
-      })
-      e.ctx.fillStyle = rgb(p.line2)
-      e.ctx.fillRect(r.x, Math.round(zero) - 1, r.w, 2)
-      if (net != null) {
-        const ay = Math.round(zero - net * scale)
-        e.ctx.strokeStyle = rgb(p.text2)
-        e.ctx.lineWidth = 2
-        e.ctx.setLineDash([S.u, S.u])
-        e.ctx.beginPath()
-        e.ctx.moveTo(r.x, ay)
-        e.ctx.lineTo(r.x + r.w, ay)
-        e.ctx.stroke()
-        e.ctx.setLineDash([])
+      let r: Rect
+      if (form === 'inline') {
+        const row = { x, y: y + top, w, h: plotH }
+        const base = Math.round(row.y + plotH / 2 + (S.min * CAP) / 2)
+        const lw = pen.put(lead, x, base, lf, rgb(p.muted), row)
+        const sw = pen.put(sum, x + w, base, lf, rgb(p.text2), row, 'right')
+        r = { x: x + lw + S.u * 3, y: row.y, w: w - lw - sw - S.u * 6, h: plotH }
+      } else {
+        const hb = { x, y, w, h: top + S.min }
+        const base = y + top + S.min * CAP
+        const sums = [`BETTER ${better} OF ${n} WEEKS`, `BETTER ${better} OF ${n}`, `${better}/${n}`]
+        const s = pen.first(sums, lf, w / 2)
+        const sw = pen.put(s, x + w, base, lf, rgb(p.text2), hb, 'right')
+        const heads = form === 'full' ? ['WEEK BY WEEK', 'WEEKS', ''] : [`WEEK BY WEEK · ${span}`, `WEEKS ${span.slice(3)}`, span, '']
+        pen.put(pen.first(heads, lf, w - sw - S.u * 4), x, base, lf, rgb(p.muted), hb)
+        r = { x, y: base + S.u * 3, w, h: plotH }
       }
+      bars(e, r)
+      if (form !== 'full') return
       const ly = r.y + r.h + S.u * 2 + S.min * CAP
       const lb = { x, y: r.y + r.h, w, h: S.u * 2 + S.min }
       pen.put(`WK ${strip[0].week}`, x, ly, lf, rgb(p.muted), lb)
@@ -760,24 +841,27 @@ const sideOpts = (e: Env): SideOpt[] => {
   if (total <= 5) for (const zoom of [1.2, 1.1]) out.push({ kind: 'rich', cols: 1, cap: Infinity, zoom, ppw: true })
   out.push({ kind: 'rich', cols: 1, cap: Infinity, zoom: 1, ppw: true })
   if (total <= 4) out.push({ kind: 'line', cols: 1, cap: Infinity, zoom: 1.15, ppw: true })
+  // Then more to a row: two columns, tighter, then (with no position column) three; then only so many rows a side.
+  const grids: Pick<SideOpt, 'cols' | 'bare'>[] = [{ cols: 2 }, { cols: 2, bare: true }, { cols: 3, bare: true }].filter((g) => g.cols <= most)
   for (const ppw of [true, false]) {
     out.push({ kind: 'line', cols: 1, cap: Infinity, zoom: 1, ppw })
     out.push({ kind: 'line', cols: 1, cap: Infinity, zoom: 1, ppw, tight: true })
-    if (most > 1) out.push({ kind: 'line', cols: 2, cap: Infinity, zoom: 1, ppw })
-    for (let cap = Math.min(8, most - 1); cap >= 1; cap--) out.push({ kind: 'line', cols: 1, cap, zoom: 1, ppw })
-    for (let cap = Math.min(8, Math.ceil(most / 2) - 1); cap >= 1; cap--) out.push({ kind: 'line', cols: 2, cap, zoom: 1, ppw })
+    for (const g of grids) for (const tight of [false, true]) out.push({ kind: 'line', ...g, cap: Infinity, zoom: 1, ppw, tight })
+    for (let cap = Math.min(8, most - 1); cap >= 1; cap--) out.push({ kind: 'line', cols: 1, cap, zoom: 1, ppw, tight: true })
+    for (const g of grids) for (let cap = Math.min(8, Math.ceil(most / g.cols) - 1); cap >= 1; cap--) out.push({ kind: 'line', ...g, cap, zoom: 1, ppw, tight: true })
   }
-  for (const cols of [1, 2]) {
-    if (cols > most) break
-    for (let cap = Math.ceil(most / cols); cap >= 1; cap--) out.push({ kind: 'line', cols, cap, zoom: 1, ppw: false, ledger: true })
-  }
+  for (const g of [{ cols: 1 }, ...grids]) for (let cap = Math.ceil(most / g.cols); cap >= 1; cap--) for (const tight of [false, true]) out.push({ kind: 'line', ...g, cap, zoom: 1, ppw: false, ledger: true, tight })
   return out
 }
-const statOpts = (e: Env, wide: boolean): StatOpt[] => {
+const statOpts = (e: Env, wide: boolean, strip: boolean): StatOpt[] => {
   const n = e.card.stats.length
   if (!n) return []
   const out: StatOpt[] = []
   for (const sub of [true, false]) for (const cols of wide ? [Math.min(n, 4), 3, 2, 1] : [Math.min(n, 3), 2, 1]) if (cols <= n && !out.some((o) => o.cols === cols && o.sub === sub)) out.push({ mode: 'tiles', cols, sub, cap: Infinity })
+  // The strip as one more tile, where the last row of figures has a place to spare (or the figures are one short row).
+  if (strip)
+    for (const sub of [true, false])
+      for (const cols of wide ? [4, 3, 2] : [3, 2]) if (n % cols !== 0) out.push({ mode: 'tiles', cols, sub, cap: Infinity, strip: true })
   for (let cap = n; cap >= 1; cap--) out.push({ mode: 'list', cols: 1, sub: false, cap })
   return out
 }
@@ -797,13 +881,14 @@ const chooseColumn = (e: Env, w: number, h: number, parts: { sides: boolean; sta
     const gap = MIN_GAP(S)
     const notes = parts.note && card.note ? Array.from({ length: S.noteLines }, (_, i) => planNote(e, w, S.noteLines - i)) : [null]
     const sides = parts.sides ? sideOpts(e).map((o) => planSides(e, w, o)).filter((x): x is Plan => !!x) : [null]
-    const stats = parts.stats && card.stats.length ? statOpts(e, w > S.W * 0.7 && S.wide).map((o) => planStats(e, w, o)).filter((x): x is Plan => !!x) : [null]
-    const strips = parts.strip && card.strip ? [planStrip(e, w), null] : [null]
+    const stats = parts.stats && card.stats.length ? statOpts(e, w > S.W * 0.7 && S.wide, parts.strip && !!card.strip).map((o) => planStats(e, w, o)).filter((x): x is Plan => !!x) : [null]
+    const strips = parts.strip && card.strip ? [...(['full', 'slim', 'inline'] as const).map((f) => planStrip(e, w, f)).filter((x): x is Plan => !!x), null] : [null]
     let best: Column | null = null
     for (const n of notes)
       for (const s of sides)
         for (const st of stats)
           for (const sp of strips) {
+            if (sp && st?.strip) continue
             const plans = [n, s, st, sp].filter((x): x is Plan => !!x)
             const need = heightOf(plans, gap)
             if (!plans.length || need > h) continue
@@ -929,7 +1014,7 @@ export type DrawOptions = {
   /** Filled with the blocks the layout chose, for tuning. */
   trace?: string[]
   /** Filled with what the card had to shorten that the sender wrote: the note, cut to fit. */
-  said?: { noteCut: boolean; /** The week-by-week strip was asked for and the card had no room for it. */ weeksLeft?: boolean }
+  said?: { noteCut: boolean; /** The week-by-week strip was asked for and the card had no room for it. */ weeksLeft?: boolean; /** The lines that stand for rows left off a side (`moreText`), as drawn. */ hidden?: string[] }
 }
 
 /** Draws the card onto `canvas` (sized to the format). Synchronous: whatever pictures are here are drawn. */
@@ -950,6 +1035,7 @@ export const drawTradeCard = (canvas: HTMLCanvasElement, card: TradeCard, format
   if (opt.said) {
     opt.said.noteCut = false
     opt.said.weeksLeft = !!card.strip
+    opt.said.hidden = []
   }
   const e: Env = { ctx, p, pen: makePen(ctx, opt.audit), S, card, memo: new Map(), said: opt.said }
   const gap = MIN_GAP(S)
@@ -981,7 +1067,7 @@ export const drawTradeCard = (canvas: HTMLCanvasElement, card: TradeCard, format
     for (const lines of card.note ? [S.noteLines, 1] : [0]) {
       const note = lines ? planNote(e, area.w, lines) : null
       const below = { ...area, y: area.y + (note ? note.h + gap : 0), h: area.h - (note ? note.h + gap : 0) }
-      for (const share of [0.34, 0.4]) {
+      for (const share of [0.28, 0.34, 0.4]) {
         const rw = Math.round(below.w * share)
         const lw = below.w - rw - gap * 2
         const left = chooseColumn(e, lw, below.h, { sides: true, stats: false, strip: false, note: false })

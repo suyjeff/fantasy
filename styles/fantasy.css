@@ -200,6 +200,14 @@ html.ff-page body {
   letter-spacing: -0.02em;
 }
 
+/* Short prose avoids a one-word last line; headings share their lines out evenly. */
+.ff p {
+  text-wrap: pretty;
+}
+.ff :is(h1, h2, h3, h4) {
+  text-wrap: balance;
+}
+
 /* Instrument labels: mono, small caps-height, wide tracking. */
 .ff .ff-label {
   font-size: 10px;
@@ -415,9 +423,14 @@ html.ff-page body {
   }
 }
 
-/* A picker in a 32px panel header: 22px tall, so it keeps 4px of air above and below. */
+/* A picker in a 32px panel header: 22px tall, so it keeps 4px of air above and below. Phones keep the picker's
+   own 40px options (the header grows to hold them). */
+@media (min-width: 768px) {
+  .ff .ff-panel-actions [role='radiogroup'] > button {
+    height: 22px;
+  }
+}
 .ff .ff-panel-actions [role='radiogroup'] > button {
-  height: 22px;
   padding: 0 7px;
   font-size: 10.5px;
 }
@@ -678,8 +691,8 @@ html.ff-page body {
 
 /* A suggested-trade card (TradeCard) lays out by its own width, not the viewport's: the sidebar and the two-column
    grid make a card narrow on a wide screen too. Narrow, Compare and Open in builder share the footer's spare width,
-   so the row reads as one bar of actions; narrower still, Open in builder takes a full-width row of its own under
-   Share and Compare, rather than the row running out of the card. */
+   so the row reads as one bar of actions, and the three close up a little to stay on one row (to a card about 325px
+   wide, or narrower where Share is an icon); narrower still, Open in builder wraps to a full-width row of its own. */
 .ff .ff-tcard {
   container-type: inline-size;
 }
@@ -689,8 +702,11 @@ html.ff-page body {
   }
 }
 @container (max-width: 379px) {
-  .ff .ff-tcard-fill.ff-tcard-own-row {
-    flex-basis: 100%;
+  .ff .ff-tcard-foot {
+    column-gap: 6px;
+  }
+  .ff .ff-tcard-foot > button {
+    padding-inline: 9px;
   }
 }
 /* Send and get side by side, and the details' four figures in one row, only where each still fits its label. */
@@ -738,6 +754,55 @@ html.ff-page body {
   }
   .ff .ff-sheet-root[data-open] .ff-sheet {
     opacity: 1;
+  }
+}
+
+/* The centred dialog (Settings): fades in and settles from 0.97, leaves quicker than it came. Transitions, so closing
+   it mid-entrance turns it around. Reduced motion keeps the fade only. */
+.ff .ff-dialog-root .ff-scrim {
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.ff .ff-dialog-root .ff-dialog {
+  opacity: 0;
+  transform: scale(0.97);
+  transition: opacity 180ms var(--ff-ease-out), transform 180ms var(--ff-ease-out);
+}
+.ff .ff-dialog-root[data-open] .ff-scrim,
+.ff .ff-dialog-root[data-open] .ff-dialog {
+  opacity: 1;
+  transform: none;
+}
+.ff .ff-dialog-root[data-closing] :is(.ff-scrim, .ff-dialog) {
+  transition-duration: 140ms;
+}
+.ff .ff-dialog-root[data-closing] .ff-dialog {
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-dialog-root .ff-dialog {
+    transform: none;
+    transition: opacity 140ms ease;
+  }
+}
+
+/* The sidebar's power-rank card folding away when dismissed: its height closes as it fades. */
+.ff .ff-fold {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 200ms var(--ff-ease-out), opacity 140ms ease;
+}
+.ff .ff-fold > * {
+  min-height: 0;
+  overflow: hidden;
+}
+.ff .ff-fold.is-folded {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-fold {
+    transition: opacity 140ms ease;
   }
 }
 
