@@ -38,8 +38,32 @@
   --ff-k2: 190 68 3;
   --ff-k3: 9 169 116;
   --ff-k4: 171 107 232;
-  /* Motion. One strong ease-out for anything entering, leaving or answering a press; the iOS sheet curve for
-     panels that travel across the screen; ease-in-out only for things moving from one place to another. */
+  /* ---------- Motion ----------
+   * Every transition and animation in the app takes one of these, by role (Tailwind: duration-ff-*, ease-ff-*,
+   * and a bare `transition-colors` gets quick + ease). A dense instrument should be crisp, so everything that is
+   * UI finishes inside 240ms; exits take one step less than their enter.
+   *   press   100ms  a control taking a press (Aqua's give).
+   *   quick   120ms  colour and hover changes (with plain `ease`); content fading in where it was swapped; small
+   *                  things leaving (a card folding away, a toast fading out).
+   *   reveal  160ms  small reveals: chevrons turning, dropdowns and popovers, disclosures and detail rows opening;
+   *                  a dialog leaving.
+   *   panel   200ms  a dialog arriving (from the centre); a sheet or drawer leaving.
+   *   travel  240ms  a sheet or drawer arriving from its edge; things moving between places on screen.
+   * Curves:
+   *   out     enter, exit, press and reveal: starts at once, settles softly.
+   *   drawer  panels travelling in from an edge (side sheet, sidebar): the iOS sheet curve.
+   *   in-out  on-screen movement only (a row sliding to its new rank).
+   *   ease    colour and hover changes; linear only for constant motion (a signal flowing along a wire).
+   * Never ease-in. Keyboard shortcuts and the command palette do not animate at all; panels opened or closed from
+   * the keyboard appear and go at once ([data-instant]). Under reduced motion, movement goes and fades stay.
+   * Two kinds keep their own lengths, as keyframes: ambient loops (see ff-pulse; hard steps for a blink, plain
+   * ease-in-out for a breathe) and the one-off staged sequences (the weekly reveal's acts, the tour's diagrams),
+   * which run on these curves. */
+  --ff-dur-press: 100ms;
+  --ff-dur-quick: 120ms;
+  --ff-dur-reveal: 160ms;
+  --ff-dur-panel: 200ms;
+  --ff-dur-travel: 240ms;
   --ff-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ff-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ff-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
@@ -128,10 +152,14 @@ html.ff-page body {
   overflow-x: clip;
 }
 
-/* Every control answers the moment it is pressed, not when the finger lifts: a faint ink wash layered over
-   whatever background it already has, so selected and coloured states keep their colour. */
+/* Press feedback. Every square control answers the moment it is pressed, not when the finger lifts: a faint ink wash
+   layered over whatever background it already has, so selected and coloured states keep their colour. It is on and
+   off with the press, no transition: a dense hairline control does not scale (its 1px rules would blur and the row
+   would shimmer), and a press needs no easing to read. Only the Aqua capsule gives (see .ff-aqua). */
 .ff :is(button, a[href], summary, [role='option'], [role='menuitem']):not(:disabled):not([aria-disabled='true']):not(.ff-aqua):active {
   background-image: linear-gradient(rgb(var(--ff-text) / 0.07), rgb(var(--ff-text) / 0.07));
+  /* In the control's own ink, so a light label on a dark fill (primary, a picked segment) lightens it instead. */
+  background-image: linear-gradient(color-mix(in srgb, currentColor 10%, transparent), color-mix(in srgb, currentColor 10%, transparent));
 }
 
 /* On touch screens a long press on a control selects its label or pops the link callout; controls are not
@@ -202,10 +230,10 @@ html.ff-page body {
 
 /* Short prose avoids a one-word last line; headings share their lines out evenly. */
 .ff p {
-  text-wrap: pretty;
+  text-wrap-style: pretty;
 }
 .ff :is(h1, h2, h3, h4) {
-  text-wrap: balance;
+  text-wrap-style: balance;
 }
 
 /* Instrument labels: mono, small caps-height, wide tracking. */
@@ -325,24 +353,45 @@ html.ff-page body {
   box-shadow: 0 0 0 3px rgb(var(--ff-accent) / 0.45);
 }
 
+/* Ambient loops, the only motion that never ends, so each is as plain as it can be and all of them stop under reduced
+   motion (the static state reads on its own). Three kinds, used the same way everywhere:
+     ff-pulse    a status that is working (syncing, simulating): a hard on/off step, like a terminal's busy light.
+     ff-blink    a text cursor: on, off, once a second.
+     ff-breathe  something waiting to fill (a loading block, a live score's dot): a slow dim and back. */
 @keyframes ff-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-.ff .ff-pulse {
-  animation: ff-pulse 1.4s steps(2, jump-none) infinite;
+  50% {
+    opacity: 0.3;
+  }
 }
 @keyframes ff-blink {
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: 0; }
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes ff-breathe {
+  to {
+    opacity: 0.4;
+  }
+}
+.ff .ff-pulse {
+  animation: ff-pulse 1.4s steps(1) infinite;
+}
+.ff .ff-blink,
+.ff .ff-caret::after {
+  animation: ff-blink 1s steps(1) infinite;
 }
 .ff .ff-caret::after {
   content: '_';
   margin-left: 1px;
-  animation: ff-blink 1.1s steps(1) infinite;
+}
+.ff .ff-breathe {
+  animation: ff-breathe 1.2s ease-in-out infinite alternate;
 }
 @media (prefers-reduced-motion: reduce) {
-  .ff .ff-pulse, .ff .ff-caret::after { animation: none; }
+  .ff :is(.ff-pulse, .ff-blink, .ff-breathe),
+  .ff .ff-caret::after {
+    animation: none;
+  }
 }
 
 /* Your rows in shared tables. A background image layers over each cell's own
@@ -355,71 +404,131 @@ html.ff-page body {
 .ff .ff-drop-before { box-shadow: inset 3px 0 0 rgb(var(--ff-accent)); }
 .ff .ff-dragging { opacity: 0.45; }
 
-/* Popovers grow out of their trigger: a short fade with a 4px drop and a 0.97 scale from the edge they hang
-   from (the top of a menu below its button, the bottom of one above). Opening is a click, so it is quick; closing
-   is instant. Reduced motion keeps just the fade. Modals (the tour) appear in place from the centre. */
-@keyframes ff-pop {
-  from {
+/* Popovers grow out of their trigger: a fade with a 4px drop and a 0.97 scale from the edge they hang from (the top
+   of a menu below its button, the bottom of one above; ff-pop-end for one aligned to its trigger's right edge).
+   Transitions from @starting-style, so the browser treats it as a state change, not a timeline; a browser without
+   @starting-style shows the menu at once. Closing is instant: the menu goes with the click that picked from it.
+   Opened from the keyboard ([data-instant]) it appears at once. Reduced motion keeps just the fade. */
+.ff .ff-pop {
+  transform-origin: top left;
+  transition:
+    opacity var(--ff-dur-reveal) var(--ff-ease-out),
+    transform var(--ff-dur-reveal) var(--ff-ease-out);
+}
+.ff .ff-pop.ff-pop-end {
+  transform-origin: top right;
+}
+.ff .ff-pop.ff-pop-up {
+  transform-origin: bottom left;
+}
+.ff .ff-pop.ff-pop-up.ff-pop-end {
+  transform-origin: bottom right;
+}
+@starting-style {
+  .ff .ff-pop {
     opacity: 0;
-    transform: translateY(var(--ff-pop-y, -4px)) scale(0.97);
+    transform: translateY(-4px) scale(0.97);
+  }
+  .ff .ff-pop.ff-pop-up {
+    transform: translateY(4px) scale(0.97);
   }
 }
-@keyframes ff-pop-fade {
-  from {
-    opacity: 0;
-  }
+/* A modal that only arrives (the tour): in place from the centre, as the settings dialog does. */
+.ff .ff-modal-in {
+  transition:
+    opacity var(--ff-dur-panel) var(--ff-ease-out),
+    transform var(--ff-dur-panel) var(--ff-ease-out);
 }
-@keyframes ff-modal {
-  from {
+@starting-style {
+  .ff .ff-modal-in {
     opacity: 0;
     transform: scale(0.97);
   }
 }
-.ff .ff-pop {
-  transform-origin: top;
-  animation: ff-pop 150ms var(--ff-ease-out);
-}
-.ff .ff-pop.ff-pop-up {
-  --ff-pop-y: 4px;
-  transform-origin: bottom;
-}
-.ff .ff-modal-in {
-  animation: ff-modal 200ms var(--ff-ease-out);
-}
 @media (prefers-reduced-motion: reduce) {
-  .ff .ff-pop,
-  .ff .ff-modal-in {
-    animation-name: ff-pop-fade;
+  .ff :is(.ff-pop, .ff-modal-in) {
+    transition-property: opacity;
+  }
+}
+.ff .ff-pop[data-instant] {
+  transition: none;
+}
+
+/* An expander's chevron turning as what it controls opens (ChevronIcon `open`): the reveal timing, so the turn and the
+   opening land together. No turn under reduced motion: it flips. */
+@media (prefers-reduced-motion: no-preference) {
+  .ff .ff-turn {
+    transition: rotate var(--ff-dur-reveal) var(--ff-ease-out);
   }
 }
 
-/* A control that appears beside another slides its width open instead of shoving its neighbours. */
-.ff .ff-reveal-x {
+/* Size reveals: a box that opens its width (ff-reveal-x) or height (ff-reveal-y) as it appears, so what is beside
+   or below it moves over instead of jumping. These animate layout, which only transform cannot do without the
+   neighbours snapping; each is one small box, and the content inside is only clipped, never re-laid out per frame.
+   Same reveal timing as a chevron turning, so a toggle and what it opens move together; it closes as fast as it
+   opened, and the content fades a beat behind the box on the way in. Reduced motion: the size snaps, the fade stays. */
+.ff :is(.ff-reveal-x, .ff-reveal-y) {
   display: grid;
-  grid-template-columns: 0fr;
   opacity: 0;
   visibility: hidden;
   transition:
-    grid-template-columns 160ms var(--ff-ease-out),
-    opacity 120ms ease,
-    visibility 0s 160ms;
+    grid-template-columns var(--ff-dur-reveal) var(--ff-ease-out),
+    grid-template-rows var(--ff-dur-reveal) var(--ff-ease-out),
+    opacity var(--ff-dur-quick) var(--ff-ease-out),
+    visibility 0s var(--ff-dur-reveal);
+}
+.ff .ff-reveal-x {
+  grid-template-columns: 0fr;
+}
+.ff .ff-reveal-y {
+  grid-template-rows: 0fr;
 }
 .ff .ff-reveal-x > * {
   min-width: 0;
   overflow: hidden;
 }
-.ff .ff-reveal-x.is-open {
-  grid-template-columns: 1fr;
+.ff .ff-reveal-y > * {
+  min-height: 0;
+  overflow: hidden;
+}
+.ff :is(.ff-reveal-x, .ff-reveal-y).is-open {
   opacity: 1;
   visibility: visible;
   transition:
-    grid-template-columns 160ms var(--ff-ease-out),
-    opacity 120ms ease 40ms,
+    grid-template-columns var(--ff-dur-reveal) var(--ff-ease-out),
+    grid-template-rows var(--ff-dur-reveal) var(--ff-ease-out),
+    opacity var(--ff-dur-reveal) var(--ff-ease-out) 40ms,
     visibility 0s;
 }
+.ff .ff-reveal-x.is-open {
+  grid-template-columns: 1fr;
+}
+.ff .ff-reveal-y.is-open {
+  grid-template-rows: 1fr;
+}
+/* A native <details> (Disclosure) opens the same way, by its content box's height, where the browser can animate to
+   auto (elsewhere it snaps open, as details always has). */
+.ff details.ff-details {
+  interpolate-size: allow-keywords;
+}
+.ff details.ff-details::details-content {
+  block-size: 0;
+  overflow: hidden;
+}
+.ff details.ff-details[open]::details-content {
+  block-size: auto;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ff details.ff-details::details-content {
+    transition:
+      block-size var(--ff-dur-reveal) var(--ff-ease-out),
+      content-visibility var(--ff-dur-reveal) allow-discrete;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .ff .ff-reveal-x {
-    transition: opacity 120ms;
+  .ff :is(.ff-reveal-x, .ff-reveal-y),
+  .ff :is(.ff-reveal-x, .ff-reveal-y).is-open {
+    transition-property: opacity, visibility;
   }
 }
 
@@ -504,7 +613,7 @@ html.ff-page body {
     opacity: 1;
     pointer-events: auto;
   }
-  @media (hover: hover) {
+  @media (hover: hover) and (pointer: fine) {
     .ff .ff-widget:hover > .ff-handle-se {
       opacity: 1;
       pointer-events: auto;
@@ -526,7 +635,7 @@ html.ff-page body {
   outline: none;
   z-index: 5;
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   /* The selection frame replaces the dashed edit outline, never doubles it. */
   .ff .ff-editing:hover {
     outline-color: transparent;
@@ -590,8 +699,8 @@ html.ff-page body {
     0 1px 2px rgb(0 0 0 / 0.25),
     0 2px 5px rgb(var(--ff-accent-deep) / 0.25);
   transition:
-    filter 120ms ease,
-    scale 200ms var(--ff-ease-out);
+    filter var(--ff-dur-quick) ease,
+    scale var(--ff-dur-reveal) var(--ff-ease-out);
 }
 /* The throb: a wash of light that breathes. Opacity only, so it stays on the compositor. */
 .ff .ff-aqua::after {
@@ -603,7 +712,6 @@ html.ff-page body {
   background: radial-gradient(ellipse at 50% 100%, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0) 70%);
   opacity: 0;
   pointer-events: none;
-  will-change: opacity;
   animation: ff-aqua-throb 1.6s ease-in-out infinite alternate;
 }
 /* The gloss: a capsule of light over the top half, inset from the rim. */
@@ -619,13 +727,21 @@ html.ff-page body {
   background: linear-gradient(180deg, rgb(255 255 255 / 0.42), rgb(255 255 255 / 0.06));
   pointer-events: none;
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .ff .ff-aqua:hover {
     filter: brightness(1.06);
   }
 }
-.ff .ff-aqua:active {
+/* The Aqua capsule is the one control that gives under a press (every square control takes the ink wash instead):
+   in at once, let go over a reveal. */
+.ff .ff-aqua:not(:disabled):active {
   filter: brightness(0.94);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ff .ff-aqua:not(:disabled):active {
+    scale: 0.97;
+    transition-duration: var(--ff-dur-press);
+  }
 }
 .ff .ff-aqua:active::after {
   animation: none;
@@ -701,6 +817,24 @@ html.ff-page body {
     flex: 1 1 auto;
   }
 }
+/* A figure's note in its short form where a third of the card will not hold the long one. The long form stays in the
+   accessibility tree either way; the short one is only its visible stand-in. */
+.ff .ff-tcard-short {
+  display: none;
+}
+@container (max-width: 459px) {
+  .ff .ff-tcard-long {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .ff .ff-tcard-short {
+    display: inline;
+  }
+}
 @container (max-width: 379px) {
   .ff .ff-tcard-foot {
     column-gap: 6px;
@@ -723,16 +857,25 @@ html.ff-page body {
   }
 }
 
-/* The wide-screen side sheet (phones use SwipeSheet, which enters by scrolling). It slides in from the right on
-   the iOS sheet curve and leaves the way it came, a little faster. Transitions, not keyframes: closing it while it
-   is still arriving turns it around from wherever it is. The scrim follows. Reduced motion cross-fades instead. */
+/* Panels. Each is a transition from the hidden state its first paint commits to [data-open] (components/Sheet.tsx,
+   useLeave), so closing one while it is still arriving turns it around from wherever it is, and one asked to stay
+   while leaving comes back the same way. The scrim fades on its panel's own duration and curve, so the two land
+   together. Leaving is one step quicker than arriving, and the panel stops taking clicks as it goes. Opened or closed
+   from the keyboard ([data-instant]) a panel appears and goes at once. Reduced motion: fades only.
+   The side sheet (wide screens; phones use SwipeSheet, which moves by native scrolling) travels in from the right on
+   the drawer curve. The centred dialog (Settings) settles from 0.97 at the centre. */
+.ff .ff-sheet-root .ff-scrim,
+.ff .ff-sheet-root .ff-sheet {
+  transition-duration: var(--ff-dur-travel);
+  transition-timing-function: var(--ff-ease-drawer);
+}
 .ff .ff-sheet-root .ff-scrim {
   opacity: 0;
-  transition: opacity 280ms ease;
+  transition-property: opacity;
 }
 .ff .ff-sheet-root .ff-sheet {
   transform: translateX(100%);
-  transition: transform 280ms var(--ff-ease-drawer);
+  transition-property: transform;
 }
 .ff .ff-sheet-root[data-open] .ff-scrim {
   opacity: 1;
@@ -741,110 +884,110 @@ html.ff-page body {
   transform: none;
 }
 .ff .ff-sheet-root[data-closing] :is(.ff-scrim, .ff-sheet) {
-  transition-duration: 200ms;
+  transition-duration: var(--ff-dur-panel);
 }
-.ff .ff-sheet-root[data-closing] .ff-sheet {
+.ff .ff-dialog-root .ff-scrim,
+.ff .ff-dialog-root .ff-dialog {
+  opacity: 0;
+  transition-property: opacity, transform;
+  transition-duration: var(--ff-dur-panel);
+  transition-timing-function: var(--ff-ease-out);
+}
+.ff .ff-dialog-root .ff-dialog {
+  transform: scale(0.97);
+}
+.ff .ff-dialog-root[data-open] :is(.ff-scrim, .ff-dialog) {
+  opacity: 1;
+  transform: none;
+}
+.ff .ff-dialog-root[data-closing] :is(.ff-scrim, .ff-dialog) {
+  transition-duration: var(--ff-dur-reveal);
+}
+.ff :is(.ff-sheet-root, .ff-dialog-root)[data-closing] :is(.ff-sheet, .ff-dialog) {
   pointer-events: none;
+}
+.ff :is(.ff-sheet-root, .ff-dialog-root)[data-instant] :is(.ff-scrim, .ff-sheet, .ff-dialog) {
+  transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .ff .ff-sheet-root .ff-sheet {
     transform: none;
     opacity: 0;
-    transition: opacity 160ms ease;
+    transition-property: opacity;
   }
   .ff .ff-sheet-root[data-open] .ff-sheet {
     opacity: 1;
   }
+  .ff .ff-dialog-root .ff-dialog,
+  .ff .ff-dialog-root[data-open] .ff-dialog {
+    transform: none;
+  }
 }
 
-/* The centred dialog (Settings): fades in and settles from 0.97, leaves quicker than it came. Transitions, so closing
-   it mid-entrance turns it around. Reduced motion keeps the fade only. */
-.ff .ff-dialog-root .ff-scrim {
+/* The desktop sidebar folding (Shell): the sidebar slides on the drawer curve, the page slides after it (WAAPI, same
+   tokens), and the page header's left padding opens room for the fixed toggle on the same timing. That padding is the
+   one layout property animated here: one row, and the alternative (moving the title by transform) would leave its
+   sticky header's hit area behind. From the keyboard the fold is instant. */
+.ff[data-instant] .ff-fold-x {
+  transition: none;
+}
+
+/* Small things leaving (the sidebar's power-rank card dismissed): a fade and a 4px drop, quick, then it unmounts.
+   What was under it in the sidebar only gains room, so nothing on screen has to move. */
+.ff .ff-leave {
+  transition:
+    opacity var(--ff-dur-quick) var(--ff-ease-out),
+    transform var(--ff-dur-quick) var(--ff-ease-out);
+}
+.ff .ff-leave.is-gone {
   opacity: 0;
-  transition: opacity 180ms ease;
-}
-.ff .ff-dialog-root .ff-dialog {
-  opacity: 0;
-  transform: scale(0.97);
-  transition: opacity 180ms var(--ff-ease-out), transform 180ms var(--ff-ease-out);
-}
-.ff .ff-dialog-root[data-open] .ff-scrim,
-.ff .ff-dialog-root[data-open] .ff-dialog {
-  opacity: 1;
-  transform: none;
-}
-.ff .ff-dialog-root[data-closing] :is(.ff-scrim, .ff-dialog) {
-  transition-duration: 140ms;
-}
-.ff .ff-dialog-root[data-closing] .ff-dialog {
+  transform: translateY(4px);
   pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .ff .ff-dialog-root .ff-dialog {
+  .ff .ff-leave.is-gone {
     transform: none;
-    transition: opacity 140ms ease;
   }
 }
 
-/* The sidebar's power-rank card folding away when dismissed: its height closes as it fades. */
-.ff .ff-fold {
-  display: grid;
-  grid-template-rows: 1fr;
-  transition: grid-template-rows 200ms var(--ff-ease-out), opacity 140ms ease;
-}
-.ff .ff-fold > * {
-  min-height: 0;
-  overflow: hidden;
-}
-.ff .ff-fold.is-folded {
-  grid-template-rows: 0fr;
-  opacity: 0;
-}
-@media (prefers-reduced-motion: reduce) {
-  .ff .ff-fold {
-    transition: opacity 140ms ease;
+/* Content swapped in place fades up over a quick beat (no travel), so a change never flashes: a phone tab's page, a
+   sheet's first content, a recap panel, a toast. What a sheet shows on a step moves the way the step went: in from
+   the right going deeper (a player from a team), from the left coming back, like a navigation stack. Keyframes, as
+   each runs once on a node that is new; nothing reverses them. Reduced motion keeps the fade and drops the travel. */
+@keyframes ff-fade-in {
+  from {
+    opacity: 0;
   }
 }
-
-/* What a sheet shows, swapped in place, moves the way the step went: in from the right going deeper (a player
-   from a team), in from the left coming back, like a navigation stack. A first open just fades, under the sheet's
-   own slide. */
 @keyframes ff-push {
   from {
     opacity: 0;
     transform: translateX(16px);
   }
 }
-@keyframes ff-pop-back {
+@keyframes ff-push-back {
   from {
     opacity: 0;
     transform: translateX(-16px);
   }
 }
-@keyframes ff-fade-in {
-  from {
-    opacity: 0;
-  }
-}
 .ff .ff-fade-in {
-  animation: ff-fade-in 120ms var(--ff-ease-out);
+  animation: ff-fade-in var(--ff-dur-quick) var(--ff-ease-out);
 }
-/* A phone page arriving: the old one is gone at once, so the new one only fades up (no travel). */
-@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+@media (max-width: 767px) {
   .ff .ff-page-in {
-    animation: ff-fade-in 120ms var(--ff-ease-out);
+    animation: ff-fade-in var(--ff-dur-quick) var(--ff-ease-out);
   }
 }
 .ff .ff-step-push {
-  animation: ff-push 220ms var(--ff-ease-out);
+  animation: ff-push var(--ff-dur-panel) var(--ff-ease-out);
 }
 .ff .ff-step-back {
-  animation: ff-pop-back 220ms var(--ff-ease-out);
+  animation: ff-push-back var(--ff-dur-panel) var(--ff-ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
-  .ff .ff-step-push,
-  .ff .ff-step-back {
-    animation: ff-fade-in 160ms ease-out;
+  .ff :is(.ff-step-push, .ff-step-back) {
+    animation-name: ff-fade-in;
   }
 }
 
@@ -913,16 +1056,16 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 .ff .ff-pn-name {
   text-decoration-color: rgb(var(--ff-accent) / 0.4);
   text-decoration-thickness: 1px;
-  transition: color 120ms ease-out;
+  transition: color var(--ff-dur-quick) ease;
 }
 .ff .ff-pn-av {
   display: flex;
   line-height: 0;
 }
 .ff .ff-pn-av > * {
-  transition: box-shadow 120ms ease-out;
+  transition: box-shadow var(--ff-dur-quick) ease;
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .ff .ff-pn:has(.ff-pn-hit:hover) .ff-pn-name {
     color: rgb(var(--ff-accent));
     text-decoration-line: underline;
@@ -1013,7 +1156,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
   .ff .ff-dg .in {
     opacity: 0;
-    animation: ff-dg-in 360ms ease-out var(--d, 0ms) forwards;
+    animation: ff-dg-in 360ms var(--ff-ease-out) var(--d, 0ms) forwards;
   }
   .ff .ff-dg .grow {
     transform-box: fill-box;
@@ -1029,14 +1172,14 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
   .ff .ff-dg .flow {
     animation:
-      ff-dg-in 300ms ease-out var(--d, 600ms) forwards,
+      ff-dg-in 300ms var(--ff-ease-out) var(--d, 600ms) forwards,
       ff-dg-flow 1.6s linear var(--d, 600ms) infinite;
   }
   .ff .ff-dg .blink {
-    animation: ff-dg-blink 1s steps(1) infinite;
+    animation: ff-blink 1s steps(1) infinite;
   }
   .ff .ff-dg .slide {
-    animation: ff-dg-slide 3.2s cubic-bezier(0.65, 0, 0.35, 1) var(--d, 600ms) infinite alternate;
+    animation: ff-dg-slide 3.2s var(--ff-ease-in-out) var(--d, 600ms) infinite alternate;
   }
 }
 @keyframes ff-dg-draw {
@@ -1064,11 +1207,6 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     stroke-dashoffset: -24;
   }
 }
-@keyframes ff-dg-blink {
-  50% {
-    opacity: 0;
-  }
-}
 @keyframes ff-dg-slide {
   to {
     transform: translateX(var(--dx, 0px)) translateY(var(--dy, 0px));
@@ -1094,15 +1232,14 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   vertical-align: 0.12em;
   background: rgb(var(--ff-pos));
 }
-/* A slow breathe rather than a blink: the dot dims and comes back, and stays lit under reduced motion. */
-@media (prefers-reduced-motion: no-preference) {
-  .ff .ff-live-dot {
-    animation: ff-live 2.4s ease-in-out infinite alternate;
-  }
+/* A breathe rather than a blink (ff-breathe, with the other ambient loops): the dot dims and comes back, and stays
+   lit under reduced motion. */
+.ff .ff-live-dot {
+  animation: ff-breathe 1.2s ease-in-out infinite alternate;
 }
-@keyframes ff-live {
-  to {
-    opacity: 0.35;
+@media (prefers-reduced-motion: reduce) {
+  .ff .ff-live-dot {
+    animation: none;
   }
 }
 .ff .ff-proj-bar {
@@ -1110,39 +1247,20 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   box-shadow: inset 0 0 0 1px rgb(var(--ff-accent) / 0.45);
 }
 
-/* Staggered reveal for the playoff simulator's bracket and story feed; each item sets its own delay, 50ms apart. */
+/* Staggered reveal for the playoff simulator's bracket and story feed, once per run; each item sets its own delay,
+   50ms apart. Opacity and an 8px rise only: a blur on every cell of a bracket costs frames on a phone. */
 @keyframes ff-rise {
   from {
     opacity: 0;
-    filter: blur(4px);
-    transform: translateY(12px);
-  }
-}
-@keyframes ff-rise-fade {
-  from {
-    opacity: 0;
+    transform: translateY(8px);
   }
 }
 .ff .ff-rise {
-  animation: ff-rise 300ms var(--ff-ease-out) both;
+  animation: ff-rise var(--ff-dur-travel) var(--ff-ease-out) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .ff .ff-rise {
-    animation-name: ff-rise-fade;
-  }
-}
-
-/* Press feedback for tappable cards and buttons: a small give, taken in 100ms the instant the press lands and
-   let go over 200ms. Never on a disabled control; none under reduced motion, where the ink wash above still shows. */
-.ff .ff-press {
-  transition-property: scale, background-color, border-color, color, opacity;
-  transition-duration: 200ms, 150ms, 150ms, 150ms, 150ms;
-  transition-timing-function: var(--ff-ease-out), ease, ease, ease, ease;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .ff :is(.ff-press, .ff-aqua):not(:disabled):active {
-    scale: 0.97;
-    transition-duration: 100ms;
+    animation-name: ff-fade-in;
   }
 }
 
@@ -1156,6 +1274,31 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     content: '';
     position: absolute;
     inset: -12px 0;
+  }
+}
+
+/* Small controls in a 32px header strip (a dashboard widget's channel, size and remove) are drawn 44px wide on phones,
+   the label centred, and reach up and down with useHitSpread (below) as far as their neighbours allow. */
+@media (max-width: 767px) {
+  .ff .ff-hit-wide {
+    min-width: 44px;
+    justify-content: center;
+  }
+}
+
+/* Controls set inside text or a tight strip reach out toward 44px on phones, as far as their neighbours allow
+   (useHitSpread in components/ui.tsx measures the room and sets --hit-*). */
+@media (max-width: 767px) {
+  .ff .ff-hit-spread {
+    position: relative;
+  }
+  .ff .ff-hit-spread::before {
+    content: '';
+    position: absolute;
+    top: calc(-1 * var(--hit-t, 0px));
+    bottom: calc(-1 * var(--hit-b, 0px));
+    left: calc(-1 * var(--hit-l, 0px));
+    right: calc(-1 * var(--hit-r, 0px));
   }
 }
 
@@ -1195,18 +1338,30 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   background-position: -8px -8px;
 }
 
-/* The overlay on wide screens: the page shaded and blurred, the frame rising into place. */
-.ff .ff-rv-shade {
-  animation: ff-rv-fade 320ms ease-out both;
+/* The overlay on wide screens: the page shaded, the frame rising into place, as a panel does (transitions to
+   [data-open], so a close mid-entrance turns it around; at once from the keyboard). */
+.ff .ff-rv-root :is(.ff-rv-shade, .ff-rv-frame) {
+  opacity: 0;
+  transition:
+    opacity var(--ff-dur-travel) var(--ff-ease-out),
+    transform var(--ff-dur-travel) var(--ff-ease-out);
 }
-.ff .ff-rv-frame {
-  animation: ff-rv-frame 420ms var(--ff-ease-out) both;
+.ff .ff-rv-root .ff-rv-frame {
+  transform: translateY(12px) scale(0.97);
 }
-.ff .ff-rv-root[data-closing] .ff-rv-shade {
-  animation: ff-rv-fade-out 180ms var(--ff-ease-out) both;
+.ff .ff-rv-root[data-open] :is(.ff-rv-shade, .ff-rv-frame) {
+  opacity: 1;
+  transform: none;
+}
+.ff .ff-rv-root[data-closing] :is(.ff-rv-shade, .ff-rv-frame) {
+  transition-duration: var(--ff-dur-panel);
 }
 .ff .ff-rv-root[data-closing] .ff-rv-frame {
-  animation: ff-rv-frame-out 180ms var(--ff-ease-out) both;
+  transform: scale(0.98);
+  pointer-events: none;
+}
+.ff .ff-rv-root[data-instant] :is(.ff-rv-shade, .ff-rv-frame) {
+  transition: none;
 }
 @keyframes ff-rv-fade {
   from {
@@ -1218,32 +1373,16 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     opacity: 0;
   }
 }
-@keyframes ff-rv-frame {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.97);
-  }
-}
-@keyframes ff-rv-frame-out {
-  to {
-    opacity: 0;
-    transform: scale(0.98);
-  }
-}
 
 /* Choreography. Each piece waits for its own --d. */
 .ff .ff-rv-in {
-  animation: ff-rv-fade 280ms ease-out var(--d, 0ms) both;
+  animation: ff-rv-fade 280ms var(--ff-ease-out) var(--d, 0ms) both;
 }
 .ff .ff-rv-rise {
   animation: ff-rv-rise 340ms var(--ff-ease-out) var(--d, 0ms) both;
 }
 .ff .ff-rv-wipe {
   animation: ff-rv-wipe 420ms var(--ff-ease-out) var(--d, 0ms) both;
-}
-/* A cursor block: blinks in hard steps, like a terminal. */
-.ff .ff-rv-blink {
-  animation: ff-rv-blink 1s steps(1) infinite;
 }
 @keyframes ff-rv-rise {
   from {
@@ -1259,19 +1398,13 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     clip-path: inset(0 0 0 0);
   }
 }
-@keyframes ff-rv-blink {
-  50% {
-    opacity: 0;
-  }
-}
 
 /* The ranking while it sorts: rows sit at their slot by transform and travel between slots on the on-screen
    ease-in-out, just inside a pass so each lands before the next begins. */
 .ff .ff-rv-slot {
   transition:
-    transform 240ms var(--ff-ease-in-out),
-    opacity 300ms ease;
-  will-change: transform;
+    transform var(--ff-dur-travel) var(--ff-ease-in-out),
+    opacity var(--ff-dur-travel) var(--ff-ease-out);
 }
 /* A row that just swapped flashes the way it went. */
 .ff .ff-rv-slot[data-dir='up'] .ff-rv-row {
@@ -1284,8 +1417,8 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 .ff .ff-rv-row {
   transition:
-    background-color 150ms ease,
-    box-shadow 150ms ease;
+    background-color var(--ff-dur-quick) ease,
+    box-shadow var(--ff-dur-quick) ease;
 }
 /* The comparator: a bracket joining the two rows a pass is swapping. */
 .ff .ff-rv-cmp {
@@ -1304,7 +1437,8 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
 }
 
-/* The crown. Its outline draws, then fills gold; the small one drops onto the No. 1 avatar like a hat. */
+/* The crown. Its outline draws, then fills gold; the small one drops onto the No. 1 avatar like a hat (on the house
+   ease-out: it settles, it does not bounce). */
 .ff .ff-rv-crown path.ff-rv-crown-line {
   fill: none;
   stroke: rgb(var(--ff-gold));
@@ -1327,7 +1461,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   animation: ff-rv-draw 560ms var(--ff-ease-out) var(--d, 0ms) forwards;
 }
 .ff .ff-rv-crown.is-drawing :is(.ff-rv-crown-body, .ff-rv-crown-band) {
-  animation: ff-rv-fill 320ms ease-out calc(var(--d, 0ms) + 400ms) both;
+  animation: ff-rv-fill 320ms var(--ff-ease-out) calc(var(--d, 0ms) + 400ms) both;
 }
 .ff .ff-rv-crown.is-drawing .ff-rv-crown-node {
   transform-box: fill-box;
@@ -1358,7 +1492,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
 }
 .ff .ff-rv-hat {
-  animation: ff-rv-hat 520ms cubic-bezier(0.34, 1.4, 0.64, 1) var(--d, 0ms) both;
+  animation: ff-rv-hat 420ms var(--ff-ease-out) var(--d, 0ms) both;
 }
 @keyframes ff-rv-hat {
   from {
@@ -1425,20 +1559,24 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     radial-gradient(rgb(var(--ff-text) / 0.07) 1px, transparent 1.3px) -6px -6px / 12px 12px,
     rgb(var(--ff-raised));
   box-shadow: inset 0 0 0 1px var(--ff-rv-edge);
-  transition: scale 200ms var(--ff-ease-out), box-shadow 160ms var(--ff-ease-out);
+  transition: scale var(--ff-dur-reveal) var(--ff-ease-out), box-shadow var(--ff-dur-quick) ease;
 }
-.ff button.ff-rv-banner:hover {
-  --ff-rv-edge: rgb(var(--ff-line2));
+@media (hover: hover) and (pointer: fine) {
+  .ff button.ff-rv-banner:hover {
+    --ff-rv-edge: rgb(var(--ff-line2));
+  }
 }
 .ff .ff-rv-banner:focus-visible,
 .ff .ff-rv-replay:focus-visible {
   outline: 2px solid rgb(var(--ff-text));
   outline-offset: 2px;
 }
+/* The banner is a card that opens the week's reveal, not a square control: it gives a little under a press, like the
+   Aqua capsule, by a smaller amount for its larger size. Its Replay button takes the ink wash like any control. */
 @media (prefers-reduced-motion: no-preference) {
-  .ff button.ff-rv-banner:active, .ff .ff-rv-replay:active {
+  .ff button.ff-rv-banner:active {
     scale: 0.985;
-    transition-duration: 100ms;
+    transition-duration: var(--ff-dur-press);
   }
 }
 .ff .ff-rv-banner .ff-rv-ink {
@@ -1456,7 +1594,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 .ff .ff-rv-banner .ff-rv-nudge {
   transform-box: fill-box;
   transform-origin: center;
-  transition: transform 520ms var(--ff-ease-out);
+  transition: transform var(--ff-dur-travel) var(--ff-ease-out);
 }
 .ff .ff-rv-banner .ff-rv-sweep {
   position: absolute;
@@ -1491,15 +1629,15 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     transform: translateX(3px);
   }
   .ff button.ff-rv-banner:hover .ff-rv-crown-node {
-    animation: ff-rv-twinkle 700ms ease-in-out both;
+    animation: ff-rv-twinkle 700ms var(--ff-ease-in-out) both;
   }
 }
-/* A week on its way: the banner holds still (nothing to open), its crown dashed and unfilled, a slow status blink. */
+/* A week on its way: the banner holds still (nothing to open), its crown dashed and unfilled, a cursor blink. */
 .ff .ff-rv-banner.is-pending {
   cursor: default;
 }
 .ff .ff-rv-replay {
-  transition: background-color 160ms ease-out, scale 160ms var(--ff-ease-out);
+  transition: background-color var(--ff-dur-quick) ease, color var(--ff-dur-quick) ease;
 }
 .ff .ff-rv-crown.is-outline .ff-rv-crown-body {
   fill: none;
@@ -1515,19 +1653,6 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   stroke: rgb(var(--ff-gold));
   stroke-width: 1;
 }
-.ff .ff-rv-pulse {
-  animation: ff-rv-pulse 1.6s steps(1, end) infinite;
-}
-@keyframes ff-rv-pulse {
-  50% {
-    opacity: 0.25;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ff .ff-rv-pulse {
-    animation: none;
-  }
-}
 @keyframes ff-rv-sweep {
   to {
     transform: translateX(300%);
@@ -1541,8 +1666,6 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 @media (prefers-reduced-motion: reduce) {
   .ff
     :is(
-      .ff-rv-shade,
-      .ff-rv-frame,
       .ff-rv-in,
       .ff-rv-rise,
       .ff-rv-wipe,
@@ -1552,10 +1675,14 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
       .ff-rv-corner,
       .ff-rv-undim
     ) {
-    animation: ff-rv-fade 200ms ease-out both;
+    animation: ff-rv-fade var(--ff-dur-panel) var(--ff-ease-out) both;
+  }
+  .ff .ff-rv-root .ff-rv-frame,
+  .ff .ff-rv-root[data-closing] .ff-rv-frame {
+    transform: none;
   }
   .ff .ff-rv-root[data-closing] :is(.ff-rv-shade, .ff-rv-frame) {
-    animation: ff-rv-fade-out 160ms ease-out both;
+    transition-duration: var(--ff-dur-reveal);
   }
   .ff .ff-rv-ping {
     display: none;
@@ -1571,7 +1698,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 /* The rest of the ranking coming back up from the dimmed reveal. */
 .ff .ff-rv-undim {
-  animation: ff-rv-undim 420ms ease-out 120ms both;
+  animation: ff-rv-undim 420ms var(--ff-ease-out) 120ms both;
 }
 @keyframes ff-rv-undim {
   from {
@@ -1584,13 +1711,13 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
  * transform only, since these layers fill the stage and blurring them costs every frame on a weak phone. The
  * presenter's small block, swapped at each step of the ranking, can afford the blur that bridges the swap. */
 .ff .ff-rv-act-in {
-  animation: ff-rv-act-in 260ms var(--ff-ease-out) both;
+  animation: ff-rv-act-in var(--ff-dur-travel) var(--ff-ease-out) both;
 }
 .ff .ff-rv-act-out {
-  animation: ff-rv-act-out 150ms var(--ff-ease-out) both;
+  animation: ff-rv-act-out var(--ff-dur-reveal) var(--ff-ease-out) both;
 }
 .ff .ff-rv-swap-in {
-  animation: ff-rv-swap-in 240ms var(--ff-ease-out) both;
+  animation: ff-rv-swap-in var(--ff-dur-travel) var(--ff-ease-out) both;
 }
 @keyframes ff-rv-act-in {
   from {
@@ -1658,7 +1785,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 /* The model's matrix: the scan steps a row at a time. */
 .ff .ff-rv-scanrow {
-  transition: transform 90ms var(--ff-ease-out);
+  transition: transform var(--ff-dur-press) var(--ff-ease-out);
 }
 
 /* Rank: last place sinks in, tinted; the top three slide in from the right; the stink lines drift. */
@@ -1707,10 +1834,10 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 
 @media (prefers-reduced-motion: reduce) {
   .ff :is(.ff-rv-act-in, .ff-rv-swap-in, .ff-rv-sink, .ff-rv-present) {
-    animation: ff-rv-fade 200ms ease-out both;
+    animation: ff-rv-fade var(--ff-dur-panel) var(--ff-ease-out) both;
   }
   .ff .ff-rv-act-out {
-    animation: ff-rv-fade-out 160ms ease-out both;
+    animation: ff-rv-fade-out var(--ff-dur-reveal) var(--ff-ease-out) both;
   }
   .ff :is(.ff-rv-waft, .ff-rv-scan-box) {
     animation: none;
@@ -1721,11 +1848,11 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 }
 
 /* ---------- Trade builder (components/TradeBuilder.tsx, components/TradeDock.tsx) ----------
- * Everything here is short (under 200ms) and on the house curves. Switching rosters slides the list the way the tabs
- * went; what joins the deal fades or pops in; the wide-screen dialog rises in and, minimized, shrinks toward the
+ * On the house tokens. Switching rosters by tap or swipe slides the list 16px the way the tabs went (movement only:
+ * the new roster is painted whole from its first frame, so nothing waits on it; from the keyboard it swaps at once).
+ * What joins the deal fades in (ff-fade-in), the pick count pops from 0.9, a minimized trade rises into the dock. The wide-screen dialog is a transition like
+ * the other panels (data-open, set by DesktopDialog): it settles in at the centre and, minimized, shrinks toward the
  * corner card it becomes. Reduced motion keeps only the fades. */
-/* Movement only: the new roster is painted whole from its first frame. Fading it in from nothing blanked the list
-   (two columns of it on a wide screen) for a frame on every switch, which read as a flicker. */
 @keyframes tb-slide-next {
   from {
     transform: translateX(16px);
@@ -1736,16 +1863,16 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     transform: translateX(-16px);
   }
 }
+.ff .tb-slide-next {
+  animation: tb-slide-next var(--ff-dur-reveal) var(--ff-ease-out);
+}
+.ff .tb-slide-prev {
+  animation: tb-slide-prev var(--ff-dur-reveal) var(--ff-ease-out);
+}
 @keyframes tb-pop {
   from {
     opacity: 0;
-    transform: scale(0.6);
-  }
-}
-@keyframes tb-rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.985);
+    transform: scale(0.9);
   }
 }
 @keyframes tb-mini-in {
@@ -1754,46 +1881,40 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
     transform: translateY(12px);
   }
 }
-.ff .tb-slide-next {
-  animation: tb-slide-next 180ms var(--ff-ease-out);
-}
-.ff .tb-slide-prev {
-  animation: tb-slide-prev 180ms var(--ff-ease-out);
-}
-.ff :is(.tb-fade, .tb-step-in) {
-  animation: ff-fade-in 140ms var(--ff-ease-out);
-}
 .ff .tb-pop {
-  animation: tb-pop 160ms var(--ff-ease-out);
+  animation: tb-pop var(--ff-dur-reveal) var(--ff-ease-out);
 }
 .ff .tb-mini {
-  animation: tb-mini-in 180ms var(--ff-ease-out);
+  animation: tb-mini-in var(--ff-dur-reveal) var(--ff-ease-out);
 }
-.ff .tb-dialog {
-  transform-origin: 100% 100%;
-  animation: tb-rise 200ms var(--ff-ease-out);
+.ff .tb-dialog-root :is(.tb-scrim, .tb-dialog) {
+  opacity: 0;
   transition:
-    opacity 180ms var(--ff-ease-out),
-    transform 180ms var(--ff-ease-out);
+    opacity var(--ff-dur-panel) var(--ff-ease-out),
+    transform var(--ff-dur-panel) var(--ff-ease-out);
 }
-.ff .tb-scrim {
-  animation: ff-fade-in 200ms ease-out;
-  transition: opacity 160ms ease;
+.ff .tb-dialog-root .tb-dialog {
+  transform: scale(0.97);
+}
+.ff .tb-dialog-root[data-open] :is(.tb-scrim, .tb-dialog) {
+  opacity: 1;
+  transform: none;
 }
 .ff .tb-dialog-root[data-leaving] {
   pointer-events: none;
 }
-.ff .tb-dialog-root[data-leaving] .tb-scrim {
-  opacity: 0;
+.ff .tb-dialog-root[data-leaving] :is(.tb-scrim, .tb-dialog) {
+  transition-duration: var(--ff-dur-reveal);
 }
 .ff .tb-dialog-root[data-leaving='min'] .tb-dialog {
-  opacity: 0;
+  transform-origin: 100% 100%;
   transform: translate(18%, 22%) scale(0.45);
 }
 .ff .tb-dialog-root[data-leaving='close'] .tb-dialog {
-  opacity: 0;
   transform: scale(0.98);
-  transition-duration: 140ms;
+}
+.ff .tb-dialog-root[data-instant] :is(.tb-scrim, .tb-dialog) {
+  transition: none;
 }
 /* The minimized trades: an ink strip, darker than anything on the page in either mode, so they read as the dock's
    and not the page's. Light themes take the theme's own text colour, deepened, as the surface (an inverse); dark
@@ -1813,7 +1934,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   border-color: var(--ink-line);
 }
 /* Hover only where a pointer hovers: a tap would otherwise leave the bar under the finger lit. */
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .ff .tb-ink-btn:hover {
     background: var(--ink-hover);
   }
@@ -1826,9 +1947,10 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   .ff :is(.tb-slide-next, .tb-slide-prev) {
     animation: none;
   }
-  .ff :is(.tb-pop, .tb-mini, .tb-dialog) {
-    animation: ff-fade-in 120ms ease-out;
+  .ff :is(.tb-pop, .tb-mini) {
+    animation-name: ff-fade-in;
   }
+  .ff .tb-dialog-root .tb-dialog,
   .ff .tb-dialog-root[data-leaving] .tb-dialog {
     transform: none;
   }

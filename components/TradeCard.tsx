@@ -289,7 +289,7 @@ const OptionTabs = ({ versions, v, setV, getName, nm }: { versions: TradeIdea[];
               aria-pressed={on}
               onClick={() => setV(i)}
               className={cx(
-                'ff-press flex min-h-10 min-w-0 flex-col justify-center gap-0.5 border px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/50 max-md:min-h-11',
+                'transition-colors flex min-h-10 min-w-0 flex-col justify-center gap-0.5 border px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/50 max-md:min-h-11',
                 on ? 'border-ff-accent bg-ff-panel text-ff-text shadow-[inset_0_-2px_0_rgb(var(--ff-accent))]' : 'border-ff-line bg-ff-panel/60 text-ff-text2 hover:border-ff-line2 hover:bg-ff-panel hover:text-ff-text',
               )}
             >
@@ -439,7 +439,15 @@ const TradeCard = ({
             value={fmtSigned(idea.myGain, 1)}
             unit="/wk"
             tone={idea.myGain > 0 ? 'pos' : 'neg'}
-            sub={<span className={idea.weeksBetter <= 1 && idea.weeks > 2 ? 'text-ff-warn' : undefined}>better {idea.weeksBetter} of {idea.weeks} wks</span>}
+            sub={
+              // A narrow card says it shorter rather than cutting it off (ff-tcard-long / -short, in fantasy.css).
+              <span className={idea.weeksBetter <= 1 && idea.weeks > 2 ? 'text-ff-warn' : undefined}>
+                <span className="ff-tcard-long">better {idea.weeksBetter} of {idea.weeks} wks</span>
+                <span className="ff-tcard-short" aria-hidden>
+                  up {idea.weeksBetter}/{idea.weeks} wks
+                </span>
+              </span>
+            }
             title="Points per week added to your best lineup, averaged over the horizon"
           />
         </div>
@@ -494,13 +502,13 @@ const TradeCard = ({
           </span>
         )}
         <span aria-hidden className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center border border-ff-line text-ff-text2 group-hover:border-ff-line2 group-hover:text-ff-text">
-          <ChevronIcon className={cx('motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-ff-out', open && 'rotate-180')} />
+          <ChevronIcon open={open} />
         </span>
       </button>
 
       {/* Always mounted so it can slide open: the row grows from 0 to its height, and closed it leaves the tab order. */}
-      <div id={detailId} className={cx('grid transition-[grid-template-rows] duration-[220ms] ease-ff-drawer motion-reduce:transition-none', open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
-        <div className="min-h-0 overflow-hidden" inert={!open}>
+      <div id={detailId} className={cx('ff-reveal-y', open && 'is-open')}>
+        <div inert={!open}>
           <div className="space-y-2.5 border-t border-ff-line bg-ff-sunken/40 px-3 py-2.5 text-[11.5px] text-ff-muted">
             <div className="ff-tcard-figs grid grid-cols-2 gap-3">
               <Figure label="They gain" value={fmtSigned(idea.theirGain, 2)} unit="/wk" title="Points per week added to their best lineup" />

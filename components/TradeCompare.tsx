@@ -166,7 +166,7 @@ const IconBtn = ({ label, onClick, children, disabled, danger }: { label: string
     aria-label={label}
     title={label}
     className={cx(
-      'ff-press flex h-10 min-w-0 flex-1 items-center justify-center border border-ff-line text-[13px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text disabled:pointer-events-none disabled:opacity-35 md:h-8',
+      'transition-colors flex h-10 min-w-0 flex-1 items-center justify-center border border-ff-line text-[13px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text disabled:pointer-events-none disabled:opacity-35 md:h-8',
       danger && 'hover:!text-ff-neg',
     )}
   >
@@ -898,7 +898,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
       <div className="[--col:136px] [--lab:92px] md:[--col:200px] md:[--lab:156px]">
         <div aria-hidden className="sticky z-[6] h-0" style={{ top: stickAt }}>
           {stuck && (
-            <div className="tb-fade overflow-hidden border border-ff-line bg-ff-line shadow-[0_8px_18px_-10px_rgba(0,0,0,0.45)]">
+            <div className="ff-fade-in overflow-hidden border border-ff-line bg-ff-line shadow-[0_8px_18px_-10px_rgba(0,0,0,0.45)]">
               <div ref={cloneRow} className="grid gap-px" style={{ gridTemplateColumns: template }}>
                 <div ref={cloneLabel} className="relative z-[1] flex items-center bg-ff-sunken px-2.5 md:px-3">
                   <span className="font-mono text-[10px] text-ff-muted">{n} of 4</span>

@@ -3,7 +3,7 @@ import { FantasyProvider } from '../components/FantasyContext'
 import SheetHost, { sheetKey, type SheetRef } from '../components/SheetHost'
 import { TradeDockProvider } from '../components/TradeDock'
 import Shell, { SECTION_KEYS, sectionLabel, type SectionKey } from '../components/Shell'
-import { cx } from '../components/ui'
+import { byKeyboard, cx, motionMs, motionToken, reducedMotion } from '../components/ui'
 import DashboardView from '../components/views/DashboardView'
 import Onboarding, { type OnboardResult } from '../components/Onboarding'
 import MeView from '../components/views/MeView'
@@ -89,6 +89,9 @@ const readCardWeek = (league: string | null) => {
     return -1
   }
 }
+/** Palette commands that leave an open Settings dialog where it is: appearance, reload, and Settings itself. */
+const KEEPS_SETTINGS = /^(?:(?:theme|scheme|density|settings):.+|reload|go:settings)$/
+
 /** `#settings` or `#settings/appearance`: a link that opens the settings dialog. */
 const SETTINGS_HASH = /^#\/?settings(?:\/([a-z]+))?$/
 
@@ -176,6 +179,9 @@ const FantasyPage = () => {
     setSettingsAsk((n) => n + 1)
   }, [])
   const closeSettings = useCallback(() => setSettingsTab(null), [])
+  // Asks an open Settings to go the way it always does (its leave), for something that needs the page behind it.
+  const [settingsLeave, setSettingsLeave] = useState(0)
+  const leaveSettings = useCallback(() => setSettingsLeave((n) => n + 1), [])
 
   useEffect(() => {
     purgeStaleCache()
@@ -354,13 +360,15 @@ const FantasyPage = () => {
   }, [])
   useEffect(() => setSheets([]), [leagueKey])
 
-  // A new section fades its content in (the header stays put), so switching never flashes. Tabs within a page
-  // switch instantly: they are flipped back and forth far too often to wait on.
+  // A new section fades its content in (the header stays put), so switching by pointer never flashes. From the
+  // keyboard (the number keys, the palette) it swaps at once, and tabs within a page always do: both are used far
+  // too often to wait on.
   const view = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const root = view.current
-    if (!root || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    for (const el of root.children) if (!el.classList.contains('ff-pagehead')) el.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: 'ease-out' })
+    if (!root || reducedMotion() || byKeyboard()) return
+    const fade = { duration: motionMs('quick'), easing: motionToken('ease-out') }
+    for (const el of root.children) if (!el.classList.contains('ff-pagehead')) el.animate?.([{ opacity: 0 }, { opacity: 1 }], fade)
   }, [route.section])
 
   // When the league last arrived, for Settings › Data.
@@ -475,6 +483,7 @@ const FantasyPage = () => {
           onTab={setSettingsTab}
           onClose={closeSettings}
           reopen={settingsAsk}
+          leave={settingsLeave}
           prefs={prefs}
           update={update}
           leagues={leagueList}
@@ -483,7 +492,7 @@ const FantasyPage = () => {
           horizonWeeks={horizonWeeks}
           playoffWeeks={data?.playoffWeeks ?? []}
           onTour={() => {
-            closeSettings()
+            leaveSettings()
             setTour(true)
           }}
           sync={{ loading, progress, loadedAt, source: providerName(data?.provider ?? prefs.provider), onReload: reload, readouts }}
@@ -544,9 +553,11 @@ const FantasyPage = () => {
           leagues={leagueList}
           onLeague={(id) => update({ leagueId: id })}
           onSettings={openSettings}
-          // Anything but a Settings command acts on the page, so the dialog gets out of its way first.
+          // A command that changes what is behind Settings, or needs the page (a section, a player, a team, a trade,
+          // the tour, another league, the weekly reveal), sends the dialog off first. Appearance and reload leave it
+          // open, so the change shows in place, the same as setting it from inside.
           onRun={(id) => {
-            if (id !== 'go:settings' && !id.startsWith('settings:')) closeSettings()
+            if (!KEEPS_SETTINGS.test(id)) leaveSettings()
           }}
           reveal={paletteReveal}
         />
@@ -562,7 +573,7 @@ const FantasyPage = () => {
             </div>
             <div className="mt-4 grid gap-px border border-ff-line bg-ff-line lg:grid-cols-2">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-56 animate-pulse bg-ff-panel" />
+                <div key={i} className="ff-breathe h-56 bg-ff-panel" />
               ))}
             </div>
           </div>

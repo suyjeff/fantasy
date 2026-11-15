@@ -64,7 +64,7 @@ export const PanelIcon = ({ className, size = 16, open }: { className?: string; 
       d="M1.5 2.5H6v11H1.5Z"
       fill="currentColor"
       stroke="none"
-      className="motion-safe:transition-opacity motion-safe:duration-150"
+      className="motion-safe:transition-opacity motion-safe:duration-ff-reveal motion-safe:ease-ff-out"
       style={{ opacity: open ? 0.22 : 0 }}
     />
     <rect x="1.5" y="2.5" width="13" height="11" />
@@ -131,10 +131,26 @@ export const CloseIcon = ({ className, size = 14 }: { className?: string; size?:
 
 const CHEVRON_TURN ={ down: undefined, up: 'rotate(180 7 7)', left: 'rotate(90 7 7)', right: 'rotate(-90 7 7)' } as const
 
+/** How far an expander's chevron turns as it opens: a down one flips up, a right one turns to point down. */
+const OPEN_TURN = { down: '180deg', up: '180deg', left: '-90deg', right: '90deg' } as const
+
 /** The app's one chevron: an open line V for every expander, dropdown, pager and "go" hint. Takes the text colour;
- *  rotate it with a class (e.g. `rotate-180` when open) or point it with `dir`. */
-export const ChevronIcon = ({ dir = 'down', className, size = 12 }: { dir?: keyof typeof CHEVRON_TURN; className?: string; size?: number }) => (
-  <svg aria-hidden width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" className={cx('inline-block shrink-0', className)}>
+ *  point it with `dir`. Give an expander's or a dropdown's chevron `open`, and it turns as the thing it controls
+ *  opens and closes, on the shared reveal timing (`ff-turn`), the same everywhere. A native <details> turns it with
+ *  `className="ff-turn group-open:[rotate:180deg]"`. */
+export const ChevronIcon = ({ dir = 'down', open, className, size = 12 }: { dir?: keyof typeof CHEVRON_TURN; open?: boolean; className?: string; size?: number }) => (
+  <svg
+    aria-hidden
+    width={size}
+    height={size}
+    viewBox="0 0 14 14"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="square"
+    className={cx('inline-block shrink-0', open != null && 'ff-turn', className)}
+    style={open ? { rotate: OPEN_TURN[dir] } : undefined}
+  >
     <path d="M3 5.25l4 4 4-4" transform={CHEVRON_TURN[dir]} />
   </svg>
 )

@@ -5,7 +5,7 @@ import Tour, { TOUR } from './Tour'
 import { ChevronIcon, GearIcon, PanelIcon } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { lockScroll } from './scrollLock'
-import { Avatar, Dropdown, PhoneBarContext, cx, shortcutLabel, usePhone, type PhoneBarSlot } from './ui'
+import { Avatar, Dropdown, PhoneBarContext, byKeyboard, cx, motionMs, motionToken, reducedMotion, shortcutLabel, usePhone, type PhoneBarSlot } from './ui'
 
 export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'matchups', 'power', 'playoffs', 'teams', 'players', 'monke', 'model'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
@@ -157,7 +157,7 @@ const SidebarBody = ({
     </div>
 
     {/* On phones the league, search and sections scroll together, so taller rows never push sections out of reach; on desktop this wrapper adds no box. */}
-    <div className="ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain md:contents">
+    <div className="ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain md:contents">
     <div className="shrink-0 border-b border-ff-line">
       <Dropdown
         label="League"
@@ -173,7 +173,7 @@ const SidebarBody = ({
               <span className="mt-0.5 block truncate text-[13px] font-medium text-ff-text">{cur?.label ?? '—'}</span>
               {leagueMeta && <span className="block truncate font-mono text-[10.5px] text-ff-muted">{leagueMeta}</span>}
             </span>
-            <ChevronIcon dir={open ? 'up' : 'down'} size={10} className="text-ff-muted" />
+            <ChevronIcon open={open} size={10} className="text-ff-muted" />
           </span>
         )}
       />
@@ -374,7 +374,9 @@ const Shell = (props: ShellProps) => {
     window.scrollTo({ top: 0 })
   }
   // Folding the sidebar moves the page at once (padding, so it lays out once, not every frame), then slides the
-  // page from where it was to where it now is, on the sidebar's own curve and timing, so the two travel together.
+  // page from where it was to where it now is, on the sidebar's own curve and timing (a panel on the drawer curve),
+  // so the two travel together. From the keyboard ([) all of it happens at once.
+  const shell = useRef<HTMLDivElement>(null)
   const page = useRef<HTMLDivElement>(null)
   const wasOpen = useRef(sidebarOpen)
   useLayoutEffect(() => {
@@ -382,25 +384,32 @@ const Shell = (props: ShellProps) => {
     wasOpen.current = sidebarOpen
     const el = page.current
     const main = el?.parentElement
-    if (phone || !el || !main || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (phone || !el || !main || reducedMotion()) return
+    if (byKeyboard()) {
+      const root = shell.current
+      root?.setAttribute('data-instant', '')
+      void root?.offsetWidth
+      root?.removeAttribute('data-instant')
+      return
+    }
     const max = parseFloat(getComputedStyle(el).maxWidth) || Infinity
     // A page narrower than the window sits centred, so it moves half the sidebar's width, not all of it.
     const left = (pad: number) => pad + Math.max(0, (main.clientWidth - pad - max) / 2)
     const dx = left(sidebarOpen ? 0 : 220) - left(sidebarOpen ? 220 : 0)
-    el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 170, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' })
+    el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: motionMs('panel'), easing: motionToken('ease-drawer') })
   }, [sidebarOpen, phone])
   const leagueName = leagues.find((l) => l.id === leagueId)?.name
 
   return (
     // Page headers read data-sidebar to leave room for the show-sidebar button when the sidebar is folded.
-    <div className="ff group/shell min-h-dvh bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
+    <div ref={shell} className="ff group/shell min-h-dvh bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
       <FantasyHead title={title} />
 
       {/* Desktop sidebar. Folded, it slides off to the left and leaves the tab order. */}
       <aside
         inert={!sidebarOpen}
         className={cx(
-          'fixed inset-y-0 left-0 z-30 hidden w-[calc(220px+env(safe-area-inset-left))] border-r border-ff-line bg-ff-panel pl-[env(safe-area-inset-left)] motion-safe:transition-transform motion-safe:duration-[170ms] motion-safe:ease-ff-drawer md:block',
+          'fixed inset-y-0 left-0 z-30 hidden w-[calc(220px+env(safe-area-inset-left))] border-r border-ff-line bg-ff-panel pl-[env(safe-area-inset-left)] ff-fold-x motion-safe:transition-transform motion-safe:duration-ff-panel motion-safe:ease-ff-drawer md:block',
           !sidebarOpen && '-translate-x-full',
         )}
       >

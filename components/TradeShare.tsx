@@ -113,11 +113,11 @@ const Switch = ({ label, detail, checked, disabled, onChange, value }: { label: 
       <span
         aria-hidden
         className={cx(
-          'relative mt-0.5 flex h-[18px] w-8 shrink-0 items-center border transition-colors duration-150 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ff-accent',
+          'relative mt-0.5 flex h-[18px] w-8 shrink-0 items-center border transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ff-accent',
           on ? 'border-ff-accent bg-ff-accent/15' : disabled ? 'border-dashed border-ff-line2 bg-transparent' : 'border-ff-line2 bg-ff-sunken',
         )}
       >
-        <span className={cx('absolute top-[2px] h-3 w-3 transition-[left] duration-150 motion-reduce:transition-none', on ? 'left-[16px] bg-ff-accent' : disabled ? 'left-[2px] bg-ff-line2' : 'left-[2px] bg-ff-muted')} />
+        <span className={cx('absolute left-[2px] top-[2px] h-3 w-3 transition-[transform,background-color] duration-ff-reveal ease-ff-out motion-reduce:transition-colors', on ? 'translate-x-[14px] bg-ff-accent' : disabled ? 'bg-ff-line2' : 'bg-ff-muted')} />
       </span>
       <span className="min-w-0 flex-1 leading-tight">
         <span className="flex items-baseline justify-between gap-2">
@@ -168,6 +168,7 @@ const remember = <T,>(m: Map<string, Promise<T>>, key: string, make: () => Promi
 /** The worker takes a card of at most this many bytes (workers/grades/src/share.ts `MAX_PNG`). */
 const OG_MAX = 400 * 1024
 const TOO_LARGE = 'This trade’s card is too large to link. Copy or download the image instead.'
+const LINK_FAILED = 'The link couldn’t be made. Retry, or copy the image instead.'
 
 /** A link that cannot be made for this card, however often it is asked for: the reason is said as it is. */
 class NoLink extends Error {}
@@ -387,7 +388,8 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
       (e) => {
         const reason = e instanceof NoLink ? e.message : null
         setLink((l) => (l?.key === linkKey ? { key: linkKey, url: null, state: reason ? 'blocked' : 'failed', reason: reason ?? undefined } : l))
-        say({ tone: 'bad', text: reason ?? 'Could not make the link. Try again in a moment.' })
+        // The same words as the line that stays once this one goes, so the message does not change under the reader.
+        say({ tone: 'bad', text: reason ?? LINK_FAILED })
       },
     )
   }
@@ -460,7 +462,7 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
               <label
                 key={o.t ?? 'league'}
                 className={cx(
-                  'flex min-h-11 cursor-pointer items-center gap-2.5 border px-2.5 py-2 transition-colors duration-150 md:min-h-10',
+                  'flex min-h-11 cursor-pointer items-center gap-2.5 border px-2.5 py-2 transition-colors md:min-h-10',
                   on ? 'border-ff-accent bg-ff-accent/10' : 'border-ff-line hover:border-ff-line2 hover:bg-ff-raised',
                   'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-ff-accent',
                 )}
@@ -605,11 +607,11 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
   const actions = (
     <div className="border-t border-ff-line bg-ff-panel px-4 py-3">
       {shown_ && (
-        <div className="mb-2 flex h-9 items-center border border-ff-line bg-ff-sunken pl-2.5 font-mono text-[11.5px] text-ff-text2">
+        <div className="mb-2 flex h-10 items-center border border-ff-line bg-ff-sunken pl-2.5 font-mono text-[11.5px] text-ff-text2 md:h-9">
           <span className="min-w-0 flex-1 truncate" title={curLink!.url!}>
             {shown_}
           </span>
-          <button type="button" onClick={() => copyText(curLink!.url!).then((ok) => say(ok ? { tone: 'ok', text: 'Link copied' } : { tone: 'bad', text: 'Could not copy. Select the link and copy it.' }))} className="h-full shrink-0 border-l border-ff-line px-2.5 uppercase tracking-[0.08em] text-ff-accent hover:bg-ff-raised">
+          <button type="button" onClick={() => copyText(curLink!.url!).then((ok) => say(ok ? { tone: 'ok', text: 'Link copied' } : { tone: 'bad', text: 'Could not copy. Select the link and copy it.' }))} className="h-full shrink-0 border-l border-ff-line px-3 uppercase tracking-[0.08em] text-ff-accent transition-colors hover:bg-ff-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ff-accent/50">
             Copy
           </button>
         </div>
@@ -625,8 +627,8 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
           </Button>
         ))}
       </div>
-      <p role="status" aria-live="polite" className={cx('mt-2 min-h-[1.2em] font-mono text-[11px] leading-snug', status?.tone === 'bad' ? 'text-ff-neg' : 'text-ff-muted')}>
-        {status?.text ?? (worker ? (curLink?.state === 'ready' ? 'The link shows the wide card in a message and opens the trade in the app.' : curLink?.state === 'blocked' ? curLink.reason : curLink?.state === 'failed' ? 'The link couldn’t be made. Retry, or copy the image instead.' : '') : 'Sharing by link isn’t set up here. Copy or download the image instead.')}
+      <p role="status" aria-live="polite" className={cx('mt-2 min-h-[2.75em] font-mono text-[11px] leading-snug', status?.tone === 'bad' ? 'text-ff-neg' : 'text-ff-muted')}>
+        {status?.text ?? (worker ? (curLink?.state === 'ready' ? 'The link shows the wide card in a message and opens the trade in the app.' : curLink?.state === 'blocked' ? curLink.reason : curLink?.state === 'failed' ? LINK_FAILED : '') : 'Sharing by link isn’t set up here. Copy or download the image instead.')}
       </p>
     </div>
   )
@@ -640,9 +642,10 @@ const SharePanel = ({ deal, onClose, titleId, phone }: { deal: Deal; onClose: ()
         <h2 id={titleId} className="truncate text-[15px] font-medium text-ff-text">
           Share trade
         </h2>
-        <p className="truncate font-mono text-[10.5px] text-ff-muted">{summary}</p>
+        {/* A span, not a p: `.ff p` sets text-wrap, which would undo the truncation. */}
+        <span className="block truncate font-mono text-[10.5px] text-ff-muted">{summary}</span>
       </div>
-      <button type="button" onClick={onClose} aria-label="Close (Esc)" title="Close (Esc)" className="ff-press flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-text">
+      <button type="button" onClick={onClose} aria-label="Close (Esc)" title="Close (Esc)" className="transition-colors flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/50 max-md:h-11 max-md:w-11">
         <Glyph d={CLOSE} />
       </button>
     </header>
@@ -738,7 +741,7 @@ export const ShareTradeButton = ({ deal, variant = 'compact', className, label =
         aria-label={label}
         title={ready ? label : 'Add players to share the trade'}
         className={cx(
-          'ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-ff-text2 hover:bg-ff-raised hover:text-ff-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40 disabled:pointer-events-none disabled:opacity-40',
+          'transition-colors inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-ff-text2 hover:bg-ff-raised hover:text-ff-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40 disabled:pointer-events-none disabled:opacity-40',
           icon ? 'h-10 w-10' : variant === 'cell' ? 'h-10 min-w-0 flex-1 border border-ff-line text-[13px] md:h-8' : 'h-10 w-10 border border-ff-line md:h-8 md:w-auto md:px-3 md:text-[12.5px]',
           open && 'bg-ff-raised text-ff-text',
           className,

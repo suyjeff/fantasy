@@ -323,7 +323,7 @@ export const RankAct = ({ recap, box, side, phone, rowH, listRef, onPhase }: { r
     <div ref={listRef} className="relative border-y border-ff-line bg-ff-panel" style={{ height: n * rowH }}>
       {/* The empty slots, waiting: a hairline and the number they will hold. */}
       {Array.from({ length: n }, (_, s) => (
-        <div key={s} className={cx('absolute inset-x-0 flex items-center border-b border-dashed border-ff-line2/70 px-3 transition-opacity duration-300', filled.has(s) && 'opacity-0')} style={{ top: s * rowH, height: rowH }}>
+        <div key={s} className={cx('absolute inset-x-0 flex items-center border-b border-dashed border-ff-line2/70 px-3 transition-opacity duration-ff-travel ease-ff-out', filled.has(s) && 'opacity-0')} style={{ top: s * rowH, height: rowH }}>
           <span className="ml-[34px] h-px w-16 bg-ff-line2/70" />
         </div>
       ))}
@@ -403,7 +403,7 @@ const Presenter = ({ recap, phase, sch, pass, stacked }: { recap: Recap; phase: 
     return (
       <div className="ff-rv-swap-in font-mono text-[11px] uppercase tracking-[0.12em] text-ff-muted">
         Ranking {n} teams
-        <span className="ff-rv-blink ml-1 inline-block h-2.5 w-1.5 translate-y-px bg-ff-accent" />
+        <span className="ff-blink ml-1 inline-block h-2.5 w-1.5 translate-y-px bg-ff-accent" />
       </div>
     )
   if (phase === 'mid') {
