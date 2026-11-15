@@ -162,6 +162,14 @@ html.ff-page body {
   background-image: linear-gradient(color-mix(in srgb, currentColor 10%, transparent), color-mix(in srgb, currentColor 10%, transparent));
 }
 
+/* Focus, the same everywhere a control has not drawn its own: a 2px accent ring just inside the control's edge, so
+   it never collides with a neighbour's hairline or is clipped by a scroller. Zero specificity: a control's own
+   focus-visible style (a ring, an outline) always wins. */
+:where(.ff) :where(button, a[href], summary, [role='tab'], [role='option'], [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: 2px solid rgb(var(--ff-accent));
+  outline-offset: -2px;
+}
+
 /* On touch screens a long press on a control selects its label or pops the link callout; controls are not
    text to copy. Content stays selectable, and a mouse can still drag-select across a table. */
 @media (pointer: coarse) {

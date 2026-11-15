@@ -502,7 +502,7 @@ const FantasyPage = () => {
         <FantasyProvider value={{ data, analysis, models, adjust, grades, go: (s, sub) => route.go(s, sub ?? undefined), ...sheetApi }}>
         {/* The trade builder's one deal, kept here so it outlives the page that opened it. */}
         <TradeDockProvider>
-        <div key={data.league.league_id} ref={view} className={cx(loading && 'opacity-60 transition-opacity')}>
+        <div key={data.league.league_id} ref={view} className={cx('transition-opacity', loading && 'opacity-60')}>
           {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'waivers' && <WaiversView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
