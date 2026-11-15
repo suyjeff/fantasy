@@ -17,7 +17,7 @@ import { MoveList, useMoves } from '../Moves'
 import { ruledOutBy } from '../../lib/grades'
 import PlayerName from '../PlayerName'
 import { useAvailability } from '../useAvailability'
-import { Avatar, Badge, CenterMeter, RowCover, WinBar, Empty, Num, PlayerAvatar, PosTag, Pts, ScoreState, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, odds, ownerLabel, simOdds, pct } from '../ui'
+import { Avatar, Badge, CenterMeter, RowCover, WinBar, Empty, Num, PlayerAvatar, PosTag, Pts, ScoreState, Segmented, Sparkline, ago, compact, cx, fmt, fmtSigned, odds, ownerLabel, simOdds, pct, usePhone } from '../ui'
 
 /** A widget reads and writes the selection on its channel: a team, a player, or both. */
 export type Selection = { team?: number; player?: string }
@@ -764,6 +764,7 @@ const Consensus = ({ sel, select }: WidgetProps) => {
 const Activity = ({ select }: WidgetProps) => {
   const { data, analysis } = useFantasy()
   const rows = useMemo(() => [...data.transactions].filter((t) => t.status === 'complete').sort((a, b) => b.created - a.created).slice(0, 40), [data.transactions])
+  const phone = usePhone()
   if (!rows.length) return <Empty title="Quiet league">No moves yet this season.</Empty>
   const TAG: Record<string, string> = { trade: 'TRD', waiver: 'WVR', free_agent: 'ADD', commissioner: 'CMR' }
   return (
@@ -777,20 +778,24 @@ const Activity = ({ select }: WidgetProps) => {
             <span className={cx('w-8 shrink-0 pt-px font-mono text-[10px]', t.type === 'trade' ? 'text-ff-accent' : 'text-ff-text2')}>{TAG[t.type] ?? t.type.slice(0, 3).toUpperCase()}</span>
             <span className="min-w-0 flex-1">
               <span className="block truncate">
-                <TeamTag id={t.roster_ids[0]} />
+                {/* Phones: the team is plain text here, so the line of +Players under it can take the row's height
+                    as their target (two stacked 40px targets do not fit a 46px row). Its page is a tap away in Teams. */}
+                <TeamTag id={t.roster_ids[0]} plain={phone} />
               </span>
-              <span className="block truncate font-mono text-[10.5px]">
+              {/* One line; each name truncates itself rather than the line clipping them all, so a name's target can
+                  reach past the line without being cut off with it (the dashboard spreads it: useHitSpread). */}
+              <span className="flex min-w-0 gap-x-1.5 whitespace-nowrap font-mono text-[10.5px]">
                 {adds.map(([pid]) => (
-                  <button key={pid} onClick={() => select({ player: pid })} className="mr-1.5 text-ff-pos hover:underline">
-                    +{data.players[pid]?.name ?? pid}
+                  <button key={pid} onClick={() => select({ player: pid })} className="ff-hit-spread flex min-w-0 text-ff-pos hover:underline">
+                    <span className="truncate">+{data.players[pid]?.name ?? pid}</span>
                   </button>
                 ))}
                 {drops.map(([pid]) => (
-                  <span key={pid} className="mr-1.5 text-ff-muted">
+                  <span key={pid} className="min-w-0 truncate text-ff-muted">
                     −{data.players[pid]?.name ?? pid}
                   </span>
                 ))}
-                {t.type === 'trade' && t.roster_ids.length > 1 && <span className="text-ff-muted">with {analysis.teamById[t.roster_ids[1]]?.name}</span>}
+                {t.type === 'trade' && t.roster_ids.length > 1 && <span className="min-w-0 truncate text-ff-muted">with {analysis.teamById[t.roster_ids[1]]?.name}</span>}
               </span>
             </span>
           </div>

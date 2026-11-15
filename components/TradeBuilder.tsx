@@ -19,7 +19,7 @@ import { AddIcon, ChevronIcon, TradeIcon } from './icons'
 import { Disclosure } from './Disclosure'
 import PlayerName from './PlayerName'
 import TeamName from './TeamName'
-import { Avatar, Button, Dropdown, PlayerAvatar, WeekBars, cx, fmt, fmtSigned, pct, playerImage, reducedMotion } from './ui'
+import { Avatar, Button, Dropdown, PlayerAvatar, WeekBars, cx, fmt, fmtSigned, pct, playerImage, reducedMotion, byKeyboard } from './ui'
 import { MAX_DEAL_TEAMS } from '../workers/grades/src/tradeLink'
 
 // The trade builder's body: pick the teams and the players, then review the deal priced for every side. On a phone
@@ -173,7 +173,7 @@ const RemoveButton = ({ label, onClick }: { label: string; onClick: () => void }
     onClick={onClick}
     aria-label={label}
     title={label}
-    className="ff-press flex h-10 w-10 shrink-0 items-center justify-center text-ff-muted hover:bg-ff-raised hover:text-ff-neg md:h-8 md:w-8"
+    className="transition-colors flex h-10 w-10 shrink-0 items-center justify-center text-ff-muted hover:bg-ff-raised hover:text-ff-neg md:h-8 md:w-8"
   >
     <Glyph d={CLOSE} size={12} />
   </button>
@@ -194,7 +194,7 @@ const DestPicker = ({ label, value, teams, onChange }: { label: string; value: n
         <span className="flex h-10 max-w-[124px] items-center gap-1 border border-ff-line px-2 font-mono text-[11px] text-ff-text2 hover:border-ff-line2 md:h-7 md:px-1.5 md:text-[10.5px]">
           <span className="text-ff-muted">to</span>
           <span className="truncate">{cur?.label}</span>
-          <ChevronIcon dir={open ? 'up' : 'down'} size={10} className="text-ff-muted" />
+          <ChevronIcon open={open} size={10} className="text-ff-muted" />
         </span>
       )}
     />
@@ -248,8 +248,8 @@ const TeamsSection = ({ deal, update, onView, onClear }: { deal: Deal; update: D
         {deal.teams.map((t) => {
           const team = analysis.teamById[t]
           return (
-            <div key={t} className={cx('tb-fade flex min-w-0 items-center border bg-ff-panel', t === me ? 'border-ff-accent/40' : 'border-ff-line2')}>
-              <button type="button" onClick={() => onView(t)} className="ff-press flex min-h-[52px] min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left hover:bg-ff-raised" title={`Show ${t === me ? 'your' : `${team?.name}'s`} roster`}>
+            <div key={t} className={cx('ff-fade-in flex min-w-0 items-center border bg-ff-panel', t === me ? 'border-ff-accent/40' : 'border-ff-line2')}>
+              <button type="button" onClick={() => onView(t)} className="transition-colors flex min-h-[52px] min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left hover:bg-ff-raised" title={`Show ${t === me ? 'your' : `${team?.name}'s`} roster`}>
                 <Avatar src={team?.avatar ?? null} name={team?.name ?? ''} size={30} />
                 <span className="min-w-0 leading-tight">
                   <span className={cx('block truncate text-[13.5px] font-medium', t === me ? 'text-ff-accent' : 'text-ff-text')}>{t === me ? 'You' : team?.name}</span>
@@ -277,7 +277,7 @@ const TeamsSection = ({ deal, update, onView, onClear }: { deal: Deal; update: D
             onClick={() => setChoosing((x) => !x)}
             aria-expanded={open}
             className={cx(
-              'ff-press flex min-h-[44px] items-center justify-center gap-2 border border-dashed px-3 text-[13px] md:min-h-[36px]',
+              'transition-colors flex min-h-[44px] items-center justify-center gap-2 border border-dashed px-3 text-[13px] md:min-h-[36px]',
               open ? 'border-ff-text2 bg-ff-raised text-ff-text' : 'border-ff-line2 text-ff-text2 hover:border-ff-text2 hover:text-ff-text',
               deal.teams.length % 2 === 0 && 'col-span-2',
             )}
@@ -297,7 +297,7 @@ const TeamsSection = ({ deal, update, onView, onClear }: { deal: Deal; update: D
         )}
       </div>
       {open && (
-        <div className="tb-fade mt-2.5">
+        <div className="ff-fade-in mt-2.5">
           <p className="mb-1.5 text-[13px] text-ff-text">{partners.length === 0 ? 'Who are you trading with?' : 'Bring in another team'}</p>
           <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3" aria-label="Teams in the league">
             {others.map((t) => (
@@ -306,7 +306,7 @@ const TeamsSection = ({ deal, update, onView, onClear }: { deal: Deal; update: D
                   type="button"
                   onClick={() => add(t.rosterId)}
                   className={cx(
-                    'ff-press flex w-full min-w-0 items-center gap-2.5 border border-ff-line bg-ff-sunken/60 px-2.5 text-left hover:border-ff-line2 hover:bg-ff-raised',
+                    'transition-colors flex w-full min-w-0 items-center gap-2.5 border border-ff-line bg-ff-sunken/60 px-2.5 text-left hover:border-ff-line2 hover:bg-ff-raised',
                     partners.length ? 'min-h-[48px] py-1.5' : 'min-h-[56px] py-2',
                   )}
                 >
@@ -384,11 +384,11 @@ const Rosters = ({ deal, update, view, onView }: { deal: Deal; update: DealUpdat
   const perWeek = analysis.horizon.perWeek
   const rosters = useMemo(() => rostersOf(analysis), [analysis])
   const shown = deal.teams.includes(view) ? view : (deal.teams.find((t) => t !== me) ?? me)
-  // Which way the list slid in, decided where the tab changes so it follows the tabs' order.
-  const [dir, setDir] = useState<1 | -1>(1)
+  // Which way the list slid in, decided where the tab changes so it follows the tabs' order; from the keyboard, none.
+  const [dir, setDir] = useState<1 | -1 | 0>(1)
   const go = (t: number) => {
     if (t === shown) return
-    setDir(deal.teams.indexOf(t) > deal.teams.indexOf(shown) ? 1 : -1)
+    setDir(byKeyboard() ? 0 : deal.teams.indexOf(t) > deal.teams.indexOf(shown) ? 1 : -1)
     onView(t)
   }
   const step = (by: 1 | -1) => {
@@ -498,7 +498,7 @@ const Rosters = ({ deal, update, view, onView }: { deal: Deal; update: DealUpdat
         {single ? (
           <p className="px-3 py-6 text-center text-[12.5px] text-ff-muted">Pick a partner above and their roster opens here beside yours.</p>
         ) : (
-          <ul key={shown} className={cx('divide-y divide-ff-line', dir > 0 ? 'tb-slide-next' : 'tb-slide-prev')}>
+          <ul key={shown} className={cx('divide-y divide-ff-line', dir > 0 ? 'tb-slide-next' : dir < 0 && 'tb-slide-prev')}>
             {sorted.map((id) => {
               const to = moving.get(id)
               return <RosterRow key={id} id={id} movingTo={to == null ? null : name(to)} onToggle={toggle} />
@@ -520,7 +520,7 @@ const Hero = ({ side, odds, stale, many }: { side: DealSide; odds: number | null
   const word = tone === 'pos' ? 'Better for you' : tone === 'neg' ? 'Worse for you' : 'About even for you'
   const weeks = side.perWeek.length
   return (
-    <section aria-label="What it does for you" aria-busy={stale || undefined} className={cx('border px-3.5 pb-3 pt-3 transition-opacity duration-150 md:px-4', WASH[tone], stale && 'opacity-60')}>
+    <section aria-label="What it does for you" aria-busy={stale || undefined} className={cx('border px-3.5 pb-3 pt-3 transition-opacity md:px-4', WASH[tone], stale && 'opacity-60')}>
       <div className="flex items-baseline justify-between gap-2">
         <span className={cx('ff-label !text-current', TEXT[tone])}>{word}</span>
         <span className="font-mono text-[10.5px] text-ff-muted">{side.faab ? 'lineup + FAAB' : 'your lineup'}</span>
@@ -582,7 +582,7 @@ const InlinePicker = ({ team, deal, update, onDone }: { team: number; deal: Deal
   const moving = new Set(deal.moves.map((m) => m.player))
   const left = (rosters[team] ?? []).filter((id) => data.players[id] && !moving.has(id)).sort((a, b) => (perWeek[b] ?? 0) - (perWeek[a] ?? 0))
   return (
-    <div className="tb-fade mt-1.5 border border-ff-line2 bg-ff-bg">
+    <div className="ff-fade-in mt-1.5 border border-ff-line2 bg-ff-bg">
       <div className="flex h-10 items-center justify-between gap-2 border-b border-ff-line pl-3 md:h-9">
         <span className="ff-label truncate">{team === me ? 'Your roster' : `${analysis.teamById[team]?.name}'s roster`}</span>
         <button type="button" onClick={onDone} className="h-full px-3.5 text-[12.5px] font-medium text-ff-accent hover:bg-ff-raised">
@@ -616,7 +616,7 @@ const InlinePicker = ({ team, deal, update, onDone }: { team: number; deal: Deal
  */
 const SideRow = ({ lead, children, where, onRemove, removeLabel, wide }: { lead: ReactNode; children: ReactNode; where?: ReactNode; onRemove?: () => void; removeLabel?: string; /** Needs more room before what trails it fits beside it. */ wide?: boolean }) => (
   // Where it goes wraps under the name when both cannot fit, rather than cut the name short.
-  <li className="tb-fade flex min-h-[48px] flex-wrap items-center gap-x-2.5 md:min-h-[44px]">
+  <li className="ff-fade-in flex min-h-[48px] flex-wrap items-center gap-x-2.5 md:min-h-[44px]">
     <span className={cx('flex min-w-0 flex-1 items-center gap-2.5', wide ? 'basis-[15.5rem]' : 'basis-[10rem]')}>
       {lead}
       <span className="min-w-0 flex-1">{children}</span>
@@ -757,7 +757,7 @@ const SideCard = ({
         ) : (
           <li>
             {/* Shaped like a line of the list (a tile where the face goes), so adding reads as the next line. */}
-            <button type="button" onClick={() => setAdding(true)} className="ff-press group -mx-1 flex min-h-[48px] w-[calc(100%+8px)] items-center gap-2.5 px-1 text-left hover:bg-ff-raised md:min-h-[44px]">
+            <button type="button" onClick={() => setAdding(true)} className="transition-colors group -mx-1 flex min-h-[48px] w-[calc(100%+8px)] items-center gap-2.5 px-1 text-left hover:bg-ff-raised md:min-h-[44px]">
               <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center border border-dashed border-ff-line2 text-ff-muted group-hover:border-ff-text2 group-hover:text-ff-text">
                 <AddIcon size={12} />
               </span>
@@ -877,7 +877,7 @@ const Review = ({ deal, update, pricing, onPick, split }: { deal: Deal; update: 
               : 'Pick players from the rosters. Each goes to the other side, or to the team you choose in a bigger trade. Add FAAB to any side.'}
         </p>
         {!split && (
-          <button type="button" onClick={onPick} className="ff-press mt-4 h-10 border border-ff-line2 px-4 text-[13px] text-ff-text hover:bg-ff-raised">
+          <button type="button" onClick={onPick} className="transition-colors mt-4 h-10 border border-ff-line2 px-4 text-[13px] text-ff-text hover:bg-ff-raised">
             {none ? 'Pick a partner' : 'Open the rosters'}
           </button>
         )}
@@ -888,7 +888,7 @@ const Review = ({ deal, update, pricing, onPick, split }: { deal: Deal; update: 
   return (
     <div className="space-y-2.5 px-3 py-3 md:px-4">
       {mine && <Hero side={mine} odds={odds} stale={stale} many={many} />}
-      <div className={cx('space-y-2.5 transition-opacity duration-150', stale && '[&_.num]:opacity-60')}>
+      <div className={cx('space-y-2.5 transition-opacity', stale && '[&_.num]:opacity-60')}>
         {sides.map((s) => (
           <SideCard key={s.rosterId} side={s} deal={deal} update={update} accept={accept[s.rosterId]} adding={adding === s.rosterId} setAdding={(on) => setAdding(on ? s.rosterId : null)} />
         ))}
@@ -969,7 +969,7 @@ const Tray = ({ deal, pricing, onReview }: { deal: Deal; pricing: DealPricing; o
           </span>
           <span className="min-w-0 flex-1 leading-tight">
             <span className="block text-[13.5px] font-medium text-ff-text">{n} moving</span>
-            <span className={cx('num block truncate text-[11px] transition-opacity duration-150', v == null ? 'text-ff-muted' : TEXT[toneOf(v)], pricing.stale && 'opacity-50')}>
+            <span className={cx('num block truncate text-[11px] transition-opacity', v == null ? 'text-ff-muted' : TEXT[toneOf(v)], pricing.stale && 'opacity-50')}>
               {v == null ? (
                 pricing.unpriced ? 'no weeks left to price' : 'pricing…'
               ) : (
@@ -1087,16 +1087,16 @@ export const BuilderHeader = ({
           onClick={onNew}
           aria-label="New trade"
           title="Start another trade (this one is kept, minimized)"
-          className={cx('ff-press flex h-10 shrink-0 items-center justify-center gap-1.5 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text', many ? 'w-10 md:w-auto md:px-2.5' : 'px-2.5')}
+          className={cx('transition-colors flex h-10 shrink-0 items-center justify-center gap-1.5 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text', many ? 'w-10 md:w-auto md:px-2.5' : 'px-2.5')}
         >
           <AddIcon size={12} />
           <span className={cx(many && 'max-md:sr-only')}>New</span>
         </button>
       )}
-      <button type="button" onClick={onMinimize} aria-label="Minimize the builder" title="Minimize (Esc)" className="ff-press flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-text">
+      <button type="button" onClick={onMinimize} aria-label="Minimize the builder" title="Minimize (Esc)" className="transition-colors flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-text">
         <Glyph d={MINIMIZE} />
       </button>
-      <button type="button" onClick={onClose} aria-label="Close and discard the trade" title="Close and discard the trade (you can undo)" className="ff-press flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-neg">
+      <button type="button" onClick={onClose} aria-label="Close and discard the trade" title="Close and discard the trade (you can undo)" className="transition-colors flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-neg">
         <Glyph d={CLOSE} />
       </button>
     </header>
@@ -1201,7 +1201,7 @@ const TradeBuilder = ({
       {/* Scroll chains to the sheet at the top, so pulling down from there minimizes it. */}
       <div ref={scroller} role="tabpanel" id={`${ids}-panel`} aria-labelledby={`${ids}-${step}`} className="ff-scroll relative min-h-0 flex-1 overflow-y-auto">
         {step === 'pick' ? (
-          <div key="pick" className="tb-step-in">
+          <div key="pick" className="ff-fade-in">
             <TeamsSection deal={deal} update={update} onView={showRoster} onClear={onClear} />
             {deal.teams.length > 1 && (
               <div ref={rosterTop} className="px-3 pb-4 pt-3">
@@ -1210,7 +1210,7 @@ const TradeBuilder = ({
             )}
           </div>
         ) : (
-          <div key="review" className="tb-step-in bg-ff-bg">
+          <div key="review" className="ff-fade-in bg-ff-bg">
             <Review deal={deal} update={update} pricing={pricing} onPick={() => goStep('pick')} split={false} />
           </div>
         )}
@@ -1220,7 +1220,7 @@ const TradeBuilder = ({
       ) : (
         <div className="flex h-[60px] shrink-0 items-center gap-2 border-t border-ff-line bg-ff-panel px-3">
           {/* Back to the first step, named as its tab is (the tray's "Review →" is the way forward). */}
-          <button type="button" onClick={() => goStep('pick')} className="ff-press flex h-11 items-center gap-1.5 border border-ff-line2 px-3.5 text-[13px] text-ff-text hover:bg-ff-raised">
+          <button type="button" onClick={() => goStep('pick')} className="transition-colors flex h-11 items-center gap-1.5 border border-ff-line2 px-3.5 text-[13px] text-ff-text hover:bg-ff-raised">
             <span aria-hidden>←</span> Pick players
           </button>
           <span className={cx('min-w-0 flex-1 truncate text-right font-mono text-[11px] text-ff-muted', reviewAction && 'max-[359px]:hidden')}>

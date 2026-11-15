@@ -1,7 +1,7 @@
 import React, { useRef, useState, type CSSProperties } from 'react'
 import type { Analysis } from '../lib/analysis'
 import { countdown, dropsLabel, type Recap } from '../lib/recap'
-import { cx } from './ui'
+import { byKeyboard, cx, motionMs } from './ui'
 import { ChevronIcon, CloseIcon } from './icons'
 import { useNow } from './useReveal'
 
@@ -162,7 +162,7 @@ export const PowerBanner = ({ recap, pending, analysis, onOpen }: { recap: Recap
         <CrownBox outline />
         <span className="relative min-w-0 flex-1 leading-tight">
           <span className="flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ff-text2">
-            <span aria-hidden className="ff-rv-pulse inline-block h-1.5 w-1.5 bg-ff-accent" />
+            <span aria-hidden className="ff-pulse inline-block h-1.5 w-1.5 bg-ff-accent" />
             Week {pending.week} power rank
             <span className="normal-case tracking-normal max-sm:hidden"> · compiling</span>
           </span>
@@ -241,7 +241,9 @@ export const NavBanner = ({
     // The next control down (your team) takes focus before this one goes.
     box.current?.closest('[data-sidebar-body]')?.querySelector<HTMLElement>('[data-sidebar-foot] button')?.focus({ preventScroll: true })
     setFolded(true)
-    window.setTimeout(() => onDismiss?.(), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 140 : 200)
+    // It fades and drops away (ff-leave), then goes; from the keyboard it goes at once.
+    if (byKeyboard()) onDismiss?.()
+    else window.setTimeout(() => onDismiss?.(), motionMs('quick'))
   }
   const close = onDismiss && (
     <button
@@ -249,7 +251,8 @@ export const NavBanner = ({
       onClick={dismiss}
       aria-label={pending ? `Hide until week ${pending.week}'s power rank drops` : `Hide until the next power rank drops`}
       title="Hide until the next one drops"
-      className="absolute right-0 top-0 z-10 flex h-8 w-8 items-center justify-center text-ff-muted transition-colors hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent max-md:h-11 max-md:w-11"
+      // 32px drawn (44 on phones), 40px to the pointer: the extra reaches out past the card's corner into its margin.
+      className="absolute right-0 top-0 z-10 flex h-8 w-8 items-center justify-center text-ff-muted transition-colors before:absolute before:-right-1 before:-top-1 before:h-10 before:w-10 hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent max-md:h-11 max-md:w-11 max-md:before:hidden"
     >
       <CloseIcon size={12} />
     </button>
@@ -262,7 +265,7 @@ export const NavBanner = ({
       <div className="ff-rv-banner is-pending flex min-h-[92px] w-full flex-col justify-between gap-2 p-3" title="Unlocks for everyone in the league at once">
         <Drafting rulerOnly />
         <span className="relative flex items-center gap-1.5 pr-6 font-mono text-[9.5px] uppercase tracking-[0.1em] text-ff-text2">
-          <span aria-hidden className="ff-rv-blink inline-block h-1 w-1 bg-ff-accent" />
+          <span aria-hidden className="ff-blink inline-block h-1 w-1 bg-ff-accent" />
           Wk {pending.week} power rank
         </span>
         <span className="relative flex min-w-0 items-center gap-2.5">
@@ -325,14 +328,10 @@ export const NavBanner = ({
   }
   if (!card) return null
   return (
-    <div ref={box} className={cx('ff-fold shrink-0', folded && 'is-folded')}>
-      <div>
-        <div className="border-t border-ff-line p-2">
-          <div className="relative">
-            {card}
-            {close}
-          </div>
-        </div>
+    <div ref={box} className={cx('ff-leave shrink-0 border-t border-ff-line p-2', folded && 'is-gone')}>
+      <div className="relative">
+        {card}
+        {close}
       </div>
     </div>
   )

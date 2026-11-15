@@ -255,3 +255,82 @@ describe('the layout it chooses', () => {
     expect(trace.some((t) => t.startsWith('stats'))).toBe(true)
   })
 })
+
+describe('the strip and the figures, when the card is crowded', () => {
+  const weeks = Array.from({ length: 8 }, (_, i) => ({ week: 10 + i, delta: i === 2 ? -0.4 : 1 + (i % 3) }))
+  const crowd = (shape: string, names: keyof typeof NAMES, figures: number, note: boolean): TradeCard => {
+    const base = makeCard(shape, names, 'all', note)
+    return { ...base, kind: 'pitch', stats: ALL.slice(0, figures), strip: weeks, net: 1.7 }
+  }
+  const drawn = (card: TradeCard, f: CardFormat) => {
+    const said: NonNullable<Parameters<typeof drawTradeCard>[4]>['said'] = { noteCut: false }
+    const audit: TextBox[] = []
+    const trace: string[] = []
+    drawTradeCard(fakeCanvas(), card, f, DARK, { audit, trace, said })
+    return { said, audit, trace }
+  }
+
+  it('keeps the strip on the wide card with a note and four or five figures', () => {
+    for (const shape of ['one', 'two', 'threeOne', 'fiveFour'])
+      for (const figures of [4, 5]) {
+        const { said, audit, trace } = drawn(crowd(shape, 'short', figures, true), 'og')
+        const label = `${shape} ${figures} ${trace.join(' / ')}`
+        expect(said.weeksLeft, label).toBe(false)
+        expect(trace.some(isStrip), label).toBe(true)
+        expect(cardIssues(audit, 'og'), label).toEqual([])
+        // Every figure is drawn: the note is the one to give way, to a line.
+        for (const s of ALL.slice(0, figures)) expect(audit.some((t) => t.text === s.value), label).toBe(true)
+      }
+  })
+  it('falls back to one full-width column on the wide card when the split has no room, before the last resort', () => {
+    // A figure too wide for the narrow right column at every share, three crowded sides, and the strip.
+    const base = crowd('three', 'short', 1, false)
+    const stat = { ...ALL[0], value: '+1234567.89', unit: 'pts/wk over the season', label: 'Playoff odds with the extra' }
+    const card: TradeCard = { ...base, stats: [stat], sides: base.sides.map((s) => ({ ...s, players: Array.from({ length: 6 }, (_, j) => ({ ...s.players[0], id: `${s.rosterId}-${j}`, name: PLAYERS[j % PLAYERS.length] })) })) }
+    const { said, audit, trace } = drawn(card, 'og')
+    const label = trace.join(' / ')
+    expect(trace.some((t) => /last/.test(t)), label).toBe(false)
+    expect(audit.some((t) => /FIGURES/.test(t.text)), label).toBe(false)
+    expect(audit.some((t) => t.text === stat.value), label).toBe(true)
+    expect(said.weeksLeft, label).toBe(false)
+    expect(trace.some(isStrip), label).toBe(true)
+    expect(cardIssues(audit, 'og'), label).toEqual([])
+  })
+  it('keeps the strip, the whole note and every figure on a four-team square', () => {
+    for (const names of ['short', 'intl'] as const)
+      for (const figures of [3, 4]) {
+        const { said, audit, trace } = drawn(crowd('four', names, figures, true), 'square')
+        const label = `${names} ${figures} ${trace.join(' / ')}`
+        expect(said.weeksLeft, label).toBe(false)
+        expect(said.noteCut, label).toBe(false)
+        expect(cardIssues(audit, 'square'), label).toEqual([])
+      }
+  })
+  it('never draws a figure label cut short: a shorter label is chosen instead', () => {
+    for (const shape of Object.keys(SHAPES))
+      for (const names of Object.keys(NAMES) as (keyof typeof NAMES)[])
+        for (const f of ['square', 'og', 'story'] as const)
+          for (const note of [false, true]) {
+            const card = { ...makeCard(shape, names, 'all', note), strip: weeks, net: 1.7 }
+            const { audit } = drawn(card, f)
+            // A figure's label is the word drawn just before its number.
+            for (const s of card.stats) {
+              const i = audit.findIndex((t) => t.text === s.value)
+              if (i < 1) continue
+              expect(audit[i - 1].text, `${shape}/${names}/${f}`).not.toMatch(/…$/)
+            }
+            for (const t of audit) if (/^(WEEK BY WEEK|WEEKLY|\d+\/\d+)/.test(t.text)) expect(t.text).not.toMatch(/…$/)
+          }
+  })
+  it('sets every row of a card alike: one form for every name on every side, an outsized one aside', () => {
+    const { audit } = drawn(crowd('fiveFour', 'short', 3, true), 'square')
+    const forms = new Set<number>()
+    for (const t of audit) {
+      const p = PLAYERS.find((q) => q !== 'Christopher Brownington-Smythe' && playerNameVariants(q).includes(t.text))
+      if (!p || t.text.endsWith('…')) continue
+      const v = playerNameVariants(p)
+      if (v.length === 3 && new Set(v).size === 3) forms.add(v.indexOf(t.text))
+    }
+    expect(forms.size).toBeLessThanOrEqual(1)
+  })
+})

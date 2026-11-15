@@ -53,7 +53,7 @@ const GameTile = ({ g, maxSwing, me, opp, isKey, now }: { g: SlateGame; maxSwing
       type="button"
       onClick={() => openGame(g.key)}
       className={cx(
-        'ff-press group flex min-w-0 flex-col gap-2 border bg-ff-panel px-3 py-2.5 text-left hover:border-ff-line2 hover:bg-ff-raised/40',
+        'transition-colors group flex min-w-0 flex-col gap-2 border bg-ff-panel px-3 py-2.5 text-left hover:border-ff-line2 hover:bg-ff-raised/40',
         isKey ? 'border-ff-accent/50' : 'border-ff-line',
       )}
     >

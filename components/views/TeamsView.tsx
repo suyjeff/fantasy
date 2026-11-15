@@ -243,7 +243,7 @@ const TeamPage = ({ data, analysis, rosterId, page, onPage, onTeam }: Omit<Teams
           renderButton={(cur, open) => (
             <span className="flex h-7 w-full items-center gap-1.5 px-2 text-left text-[12px] text-ff-text hover:bg-ff-raised md:w-[190px]">
               <span className="min-w-0 flex-1 truncate">{cur?.label}</span>
-              <ChevronIcon dir={open ? 'up' : 'down'} className="text-ff-muted" />
+              <ChevronIcon open={open} className="text-ff-muted" />
             </span>
           )}
         />

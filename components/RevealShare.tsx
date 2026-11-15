@@ -4,7 +4,7 @@ import { sharedUrl } from '../lib/sharedGrades'
 import { useFantasy } from './FantasyContext'
 import { ogText, postCard, readPalette, renderOgCard, renderRankCard, toBlob, type CardInput, type OgInput } from './shareCards'
 import { deepLinkUrl } from './useDeepLink'
-import { cx } from './ui'
+import { byKeyboard, cx } from './ui'
 
 // Sharing the Power Rank. The Share button opens a small sheet: a preview of the card a message will unfurl to, a link
 // that opens the week in the app (asking for a fantasy name first, as any visit does), and the full ranking as a PNG.
@@ -289,6 +289,7 @@ const SharePanel = ({ recap, input, kit, onClose, stack }: { recap: Recap; input
   const { title, description } = useMemo(() => ogText(input.card), [input.card])
   const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 
+  const [instant] = useState(byKeyboard)
   useEffect(() => {
     root.current?.querySelector<HTMLElement>('button:not([disabled])')?.focus({ preventScroll: true })
   }, [])
@@ -321,9 +322,12 @@ const SharePanel = ({ recap, input, kit, onClose, stack }: { recap: Recap; input
       role="dialog"
       aria-label="Share the power rank"
       data-ff-share-open=""
+      // A popover from its Share button: grows from the button's edge (the top right below it on wide screens; from
+      // the bottom on phones, where it sits at the screen's foot), and appears at once when opened from the keyboard.
+      data-instant={instant || undefined}
       className={cx(
-        'ff-fade-in z-40 border border-ff-line2 bg-ff-panel shadow-[0_16px_40px_-12px_rgb(0_0_0/0.5)]',
-        stack ? 'fixed inset-x-2.5 bottom-[calc(env(safe-area-inset-bottom)+10px)]' : 'absolute right-0 top-full mt-1 w-[360px]',
+        'ff-pop z-40 border border-ff-line2 bg-ff-panel shadow-[0_16px_40px_-12px_rgb(0_0_0/0.5)]',
+        stack ? 'ff-pop-up fixed inset-x-2.5 bottom-[calc(env(safe-area-inset-bottom)+10px)]' : 'ff-pop-end absolute right-0 top-full mt-1 w-[360px]',
       )}
     >
       <div className="flex items-center justify-between border-b border-ff-line pl-3">
@@ -339,14 +343,14 @@ const SharePanel = ({ recap, input, kit, onClose, stack }: { recap: Recap; input
             // eslint-disable-next-line @next/next/no-img-element
             <img src={kit.preview} alt={`Preview: ${title}. ${description}`} className="ff-fade-in h-full w-full object-cover" />
           ) : (
-            <span className="absolute inset-0 flex items-center justify-center font-mono text-[10.5px] uppercase tracking-[0.1em] text-ff-muted motion-safe:animate-pulse">Drawing the preview…</span>
+            <span className="absolute inset-0 flex items-center justify-center font-mono text-[10.5px] uppercase tracking-[0.1em] text-ff-muted ff-breathe">Drawing the preview…</span>
           )}
         </div>
         <div>
           <div className="ff-label mb-1">Link</div>
           <div className="flex h-9 items-center border border-ff-line bg-ff-sunken px-2.5 font-mono text-[11.5px] text-ff-text2">
             <span className="min-w-0 flex-1 truncate" title={href ?? undefined}>
-              {preparing ? <span className="text-ff-muted motion-safe:animate-pulse">Preparing…</span> : shown}
+              {preparing ? <span className="ff-breathe text-ff-muted">Preparing…</span> : shown}
             </span>
             {kit.linkStatus === 'failed' && (
               <button type="button" onClick={kit.retryLink} className="-mr-1.5 ml-2 h-8 shrink-0 px-2 uppercase tracking-[0.08em] text-ff-accent hover:bg-ff-raised">

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { WIDGETS, type Selection, type WidgetKind } from '../dashboard/widgets'
-import { Button, PageHeader, cx } from '../ui'
+import { Button, PageHeader, cx, useHitSpread } from '../ui'
 import { Callout } from '../Callout'
 
 // A modular board in the manner of a trading terminal: widgets on a 12-column
@@ -64,7 +64,7 @@ const ChannelChip = ({ ch, onClick }: { ch: number; onClick: () => void }) => (
     onClick={onClick}
     title={ch ? `Linked on channel ${ch}. Click to change.` : 'Not linked. Click to link to a channel.'}
     aria-label={ch ? `Channel ${ch}` : 'Unlinked'}
-    className="flex h-full w-8 shrink-0 items-center justify-center border-r border-ff-line hover:bg-ff-raised"
+    className="ff-hit-spread ff-hit-wide flex h-full w-8 shrink-0 items-center justify-center border-r border-ff-line hover:bg-ff-raised"
   >
     <span className={cx('flex h-3 w-3 items-center justify-center font-mono text-[8px] leading-none', !ch && 'border border-ff-line2 text-ff-muted')} style={ch ? { background: `rgb(var(--ff-c${ch}))`, color: 'rgb(var(--ff-panel))' } : undefined}>
       {ch || ''}
@@ -140,6 +140,8 @@ const DashboardView = () => {
   const [resizing, setResizing] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const grid = useRef<HTMLDivElement>(null)
+  // Phones: the widgets' small header controls (and small controls inside them) reach out to a thumb-sized target.
+  useHitSpread(grid)
   // Channel 0 is "unlinked": each such widget keeps its own selection, keyed by id.
   const [selection, setSelection] = useState<Record<string, Selection>>({})
 
@@ -312,7 +314,7 @@ const DashboardView = () => {
                       onClick={() => setMenu(menu === w.id ? null : w.id)}
                       aria-haspopup="menu"
                       aria-expanded={menu === w.id}
-                      className="flex h-full items-center border-l border-ff-line px-2.5 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text"
+                      className="ff-hit-spread ff-hit-wide flex h-full items-center border-l border-ff-line px-2.5 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text"
                       title="Size, channel, order"
                     >
                       {w.w}·{heightLabel(w.h)}
@@ -331,7 +333,7 @@ const DashboardView = () => {
                     )}
                     <button
                       onClick={() => setLayout((xs) => xs.filter((x) => x.id !== w.id))}
-                      className="flex h-full items-center border-l border-ff-line px-2.5 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-neg"
+                      className="ff-hit-spread ff-hit-wide flex h-full items-center border-l border-ff-line px-2.5 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-neg"
                       aria-label={`Remove ${meta.title}`}
                       title="Remove"
                     >

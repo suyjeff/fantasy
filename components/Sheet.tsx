@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { lockScroll } from './scrollLock'
-import { cx, usePhone } from './ui'
+import { byKeyboard, cx, motionMs, usePhone } from './ui'
 
 /**
  * A modal panel's manners, shared by the sheets and the trade builder: focus moves into it, Tab stays inside, Escape
@@ -68,31 +68,38 @@ export const useModal = (panel: React.RefObject<HTMLElement | null>, onEscape: (
 }
 
 /**
- * How a panel leaves, shared by the sheets and the settings dialog. Wide screens: `close` swaps `data-open` for
- * `data-closing` on `root`, waits `ms` for the exit transition, then reports back; the panel stops taking clicks
- * as it goes. Phones: the swipe sheet slides away, then reports back. `stay` cancels a close in progress (something
- * opened while it was leaving: stay, turn around, and show that). On wide screens the entrance is a transition from
- * the off-screen state the first paint commits, so closing before it has arrived turns it around from where it is.
+ * How a panel arrives and leaves, shared by the sheets and the settings dialog. Wide screens: the entrance is a
+ * transition from the hidden state the first paint commits to `data-open` on `root`, so closing before it has
+ * arrived turns it around from where it is. `close` swaps `data-open` for `data-closing`, waits out the exit (the
+ * `exit` duration token, which the CSS uses too), then reports back; the panel stops taking clicks as it goes.
+ * Phones: the swipe sheet slides away, then reports back. `stay` cancels a close in progress (something opened while
+ * it was leaving: stay, turn around, and show that). Opened or closed from the keyboard, it appears and goes at once.
  */
-export const useLeave = (root: React.RefObject<HTMLElement | null>, onClose: () => void, ms: number, phone: boolean, swipe: React.RefObject<SwipeSheetHandle | null>) => {
+export const useLeave = (root: React.RefObject<HTMLElement | null>, onClose: () => void, exit: 'reveal' | 'panel', phone: boolean, swipe: React.RefObject<SwipeSheetHandle | null>) => {
   const leaving = useRef<number | null>(null)
   const done = useRef(onClose)
   done.current = onClose
   useLayoutEffect(() => {
     const el = root.current
     if (phone || !el) return
+    const instant = byKeyboard()
+    if (instant) el.setAttribute('data-instant', '')
     void el.offsetWidth
     el.setAttribute('data-open', '')
+    if (!instant) return
+    // Commit the open state with no transition, then let later changes (a close by pointer) animate again.
+    void el.offsetWidth
+    el.removeAttribute('data-instant')
   }, [phone]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => window.clearTimeout(leaving.current ?? undefined), [])
   const close = () => {
     if (phone) return swipe.current ? swipe.current.dismiss() : onClose()
     const el = root.current
     if (leaving.current != null) return
-    if (!el) return onClose()
+    if (!el || byKeyboard()) return onClose()
     el.removeAttribute('data-open')
     el.setAttribute('data-closing', '')
-    leaving.current = window.setTimeout(() => done.current(), ms)
+    leaving.current = window.setTimeout(() => done.current(), motionMs(exit))
   }
   const stay = () => {
     const el = root.current
@@ -129,7 +136,7 @@ const Sheet = ({
   const phone = usePhone()
   const swipe = useRef<SwipeSheetHandle>(null)
   // Wide screens slide out the way they came in, then report back; phones slide the sheet away first.
-  const { close: leave, stay } = useLeave(root, onClose, 200, phone, swipe)
+  const { close: leave, stay } = useLeave(root, onClose, 'panel', phone, swipe)
   const close = useRef(leave)
   close.current = leave
 

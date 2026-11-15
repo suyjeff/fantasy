@@ -11,7 +11,8 @@ export const Swatch = ({ theme }: { theme: Theme }) => {
   const l = theme.light ?? theme.dark!
   const chips = [l.panel, t.bg, t.accent, t.s[1]]
   return (
-    <span aria-hidden className="inline-flex shrink-0 border border-ff-line2">
+    // The frame is a step of the text colour, not a rule colour: a theme's own dark chip would melt into a dark rule.
+    <span aria-hidden className="inline-flex shrink-0 border border-ff-text/30">
       {chips.map((c, i) => (
         <span key={i} className="h-3 w-2" style={{ background: c }} />
       ))}

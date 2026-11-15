@@ -50,6 +50,8 @@ export type SettingsProps = {
   sync: SyncInfo
   /** Bumped each time something asks for Settings to open; one that arrives while it is leaving cancels the close. */
   reopen: number
+  /** Bumped to send it off the way its own close does (a palette command that needs the page behind it). */
+  leave?: number
 }
 
 const HORIZON_LONG: Record<HorizonMode, string> = {
@@ -124,10 +126,10 @@ const StartOver = () => {
     )
   return (
     <span role="group" aria-label="Start over" className="flex gap-1.5">
-      <button ref={cancel} type="button" onClick={() => setConfirm(false)} className="ff-press h-8 border border-ff-line bg-ff-panel px-3 text-[12.5px] text-ff-text2 hover:bg-ff-raised max-md:h-10">
+      <button ref={cancel} type="button" onClick={() => setConfirm(false)} className="transition-colors h-8 border border-ff-line bg-ff-panel px-3 text-[12.5px] text-ff-text2 hover:bg-ff-raised max-md:h-10">
         Cancel
       </button>
-      <button type="button" onClick={startOver} className="ff-press h-8 border border-ff-neg/50 bg-ff-neg/10 px-3 text-[12.5px] font-medium text-ff-neg hover:bg-ff-neg/15 max-md:h-10">
+      <button type="button" onClick={startOver} className="transition-colors h-8 border border-ff-neg/50 bg-ff-neg/10 px-3 text-[12.5px] font-medium text-ff-neg hover:bg-ff-neg/15 max-md:h-10">
         Clear and restart
       </button>
     </span>
@@ -361,7 +363,7 @@ const TabList = ({ tab, onTab, vertical, idBase }: { tab: SettingsTab; onTab: (t
             onClick={() => onTab(t.key)}
             className={cx(
               'relative shrink-0 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ff-accent/40',
-              vertical ? 'flex h-8 items-center px-2.5 text-[13px]' : 'h-11 px-3 text-[13px]',
+              vertical ? 'flex h-8 items-center px-2 text-[13px]' : 'h-11 px-3 text-[13px]',
               on ? (vertical ? 'bg-ff-raised font-medium text-ff-text' : 'text-ff-text') : 'text-ff-text2 hover:bg-ff-raised/60 hover:text-ff-text',
             )}
           >
@@ -390,7 +392,7 @@ const Settings = (props: SettingsProps) => {
 
   // Wide screens: a transition from the hidden state the first paint commits, so closing mid-entrance reverses from
   // wherever it is. Leaving is a little quicker than arriving.
-  const { close, stay } = useLeave(root, onClose, 150, phone, swipe)
+  const { close, stay } = useLeave(root, onClose, 'reveal', phone, swipe)
   // Asked to open again while it is leaving (the command palette, say): stay, and show that.
   const first = useRef(true)
   useEffect(() => {
@@ -402,6 +404,12 @@ const Settings = (props: SettingsProps) => {
   }, [reopen]) // eslint-disable-line react-hooks/exhaustive-deps
   const closeRef = useRef(close)
   closeRef.current = close
+  const leaveAsked = useRef(props.leave)
+  useEffect(() => {
+    if (props.leave === leaveAsked.current) return
+    leaveAsked.current = props.leave
+    closeRef.current()
+  }, [props.leave])
   useModal(panel, () => closeRef.current())
   // R reloads from here too (Shell's key stands down while a dialog is open), so the Data pane's hint holds.
   const reloadRef = useRef(props.sync)
@@ -438,7 +446,7 @@ const Settings = (props: SettingsProps) => {
     </div>
   )
   const closeButton = (
-    <button type="button" onClick={() => closeRef.current()} aria-label={phone ? 'Close settings' : 'Close (Esc)'} className="-mr-2 h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text max-md:h-11 max-md:px-3">
+    <button type="button" onClick={() => closeRef.current()} aria-label={phone ? 'Close settings' : 'Close (Esc)'} className="-mr-2 h-8 px-2 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent max-md:h-11 max-md:px-3">
       {phone ? 'DONE' : 'ESC'}
     </button>
   )
@@ -487,7 +495,7 @@ const Settings = (props: SettingsProps) => {
         <div className="flex min-h-0 flex-1">
           <div className="flex w-[180px] shrink-0 flex-col justify-between border-r border-ff-line p-2">
             <TabList tab={tab} onTab={onTab} vertical idBase={idBase} />
-            <p className="px-2.5 pb-1 font-mono text-[10.5px] text-ff-muted">
+            <p className="px-2 pb-1 font-mono text-[10.5px] text-ff-muted">
               <kbd className="mr-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center border border-ff-line px-1 text-[10px]">,</kbd>
               opens settings from any page
             </p>
