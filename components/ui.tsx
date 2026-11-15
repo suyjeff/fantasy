@@ -473,24 +473,41 @@ export const usePhone = () => useMedia('(max-width: 767px)')
 /** Whether motion should be kept to a minimum, read at the moment it is asked. */
 export const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+// Mirrors the tokens at the top of the `.ff` block in styles/fantasy.css, for when they do not resolve (stylesheet not
+// applied yet, no `.ff` ancestor, jsdom): `el.animate({ easing: '' })` throws and a 0ms leave timer cuts the exit short.
+const MOTION_FALLBACK: Record<string, string> = {
+  'dur-press': '100ms',
+  'dur-quick': '120ms',
+  'dur-reveal': '160ms',
+  'dur-panel': '200ms',
+  'dur-travel': '240ms',
+  'ease-out': 'cubic-bezier(0.23, 1, 0.32, 1)',
+  'ease-in-out': 'cubic-bezier(0.77, 0, 0.175, 1)',
+  'ease-drawer': 'cubic-bezier(0.32, 0.72, 0, 1)',
+}
 /** A motion token from styles/fantasy.css ("Motion"), for motion driven from script (WAAPI, leave timers). */
 export const motionToken = (name: string) => {
-  if (typeof document === 'undefined') return ''
-  return getComputedStyle(document.querySelector('.ff') ?? document.documentElement).getPropertyValue(`--ff-${name}`).trim()
+  const fallback = MOTION_FALLBACK[name] ?? ''
+  if (typeof document === 'undefined') return fallback
+  return getComputedStyle(document.querySelector('.ff') ?? document.documentElement).getPropertyValue(`--ff-${name}`).trim() || fallback
 }
 /** A duration token in ms: `motionMs('panel')`. */
-export const motionMs = (name: 'press' | 'quick' | 'reveal' | 'panel' | 'travel') => parseFloat(motionToken(`dur-${name}`)) || 0
+export const motionMs = (name: 'press' | 'quick' | 'reveal' | 'panel' | 'travel') => parseFloat(motionToken(`dur-${name}`)) || parseFloat(MOTION_FALLBACK[`dur-${name}`])
 
 // How the last action came in. A panel opened or closed from the keyboard (a shortcut, Enter on a focused control,
 // Escape) appears and goes at once: keys are pressed far more often than panels are clicked, and motion after a key
 // press only reads as lag. A modifier alone does not count; the next pointer press switches back.
+// Only a recent key counts: a panel that opens long after the last key (the weekly reveal, a `#settings` link, back/forward)
+// was not opened by it.
+const KEY_RECENT_MS = 400
 let lastInput: 'key' | 'pointer' = 'pointer'
+let lastKeyAt = 0
 if (typeof window !== 'undefined') {
-  window.addEventListener('keydown', (e) => !['Shift', 'Control', 'Alt', 'Meta'].includes(e.key) && (lastInput = 'key'), true)
+  window.addEventListener('keydown', (e) => !['Shift', 'Control', 'Alt', 'Meta'].includes(e.key) && ((lastInput = 'key'), (lastKeyAt = performance.now())), true)
   window.addEventListener('pointerdown', () => (lastInput = 'pointer'), true)
 }
-/** Whether the action being handled came from the keyboard. */
-export const byKeyboard = () => lastInput === 'key'
+/** Whether the action being handled came from the keyboard (the last input was a key, pressed just now). */
+export const byKeyboard = () => lastInput === 'key' && performance.now() - lastKeyAt < KEY_RECENT_MS
 
 const PRESSABLE = 'button, a[href], [role="button"], input, select, textarea, summary'
 /**
@@ -498,22 +515,30 @@ const PRESSABLE = 'button, a[href], [role="button"], input, select, textarea, su
  * each `.ff-hit-spread` under `root` reaches out toward 44x44 (its ::before, styles/fantasy.css) without changing a
  * pixel of the layout, as far as it can go before it would meet another control's target. Where two of them face
  * each other (names on consecutive lines), they split the space between them, so the one above reaches up and the
- * one below reaches down. Measured after layout and again whenever the box resizes; wide screens keep the control's
+ * one below reaches down. Measured after layout and again whenever the box resizes, its contents change or something inside it scrolls; wide screens keep the control's
  * own size.
  */
 export const useHitSpread = (root: React.RefObject<HTMLElement | null>) => {
   const phone = usePhone()
+  // Marks the root (in a layout effect, so every instance is marked before any passive effect looks for a marked
+  // ancestor): a list inside a grid that already spreads its targets leaves the work to the grid.
+  useIsoLayoutEffect(() => {
+    const box = root.current
+    if (!phone || !box || box.parentElement?.closest('[data-hit-root]')) return
+    box.setAttribute('data-hit-root', '')
+    return () => box.removeAttribute('data-hit-root')
+  }, [phone]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const box = root.current
-    if (!phone || !box) return
+    if (!phone || !box || box.parentElement?.closest('[data-hit-root]')) return
     let raf = 0
     const measure = () => {
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
         const targets = [...box.querySelectorAll<HTMLElement>('.ff-hit-spread')]
         const near = box.getBoundingClientRect()
-        // Every pressable thing on screen near the box, the targets included.
-        const others = [...document.querySelectorAll<HTMLElement>(PRESSABLE)]
+        // Every pressable thing in the box near its targets, the targets included.
+        const others = [...box.querySelectorAll<HTMLElement>(PRESSABLE)]
           .map((el) => ({ el, r: el.getBoundingClientRect(), spread: el.classList.contains('ff-hit-spread') }))
           .filter(({ r }) => r.width && r.bottom > near.top - 60 && r.top < near.bottom + 60)
         for (const el of targets) {
@@ -562,9 +587,15 @@ export const useHitSpread = (root: React.RefObject<HTMLElement | null>) => {
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(box)
+    // Rows that re-render, and a widget body that scrolls without the box resizing, move the neighbours too.
+    const mo = new MutationObserver(measure)
+    mo.observe(box, { childList: true, subtree: true })
+    box.addEventListener('scroll', measure, { capture: true, passive: true })
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
+      mo.disconnect()
+      box.removeEventListener('scroll', measure, { capture: true })
     }
   }, [phone]) // eslint-disable-line react-hooks/exhaustive-deps
 }

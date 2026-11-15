@@ -91,6 +91,8 @@ const readCardWeek = (league: string | null) => {
 }
 /** Palette commands that leave an open Settings dialog where it is: appearance, reload, and Settings itself. */
 const KEEPS_SETTINGS = /^(?:(?:theme|scheme|density|settings):.+|reload|go:settings)$/
+/** Palette commands that open another modal (the tour, a player sheet, the trade builder or a trade, the reveal). */
+const OPENS_MODAL = /^(?:tour|reveal|build|player:.+|trade:.+)$/
 
 /** `#settings` or `#settings/appearance`: a link that opens the settings dialog. */
 const SETTINGS_HASH = /^#\/?settings(?:\/([a-z]+))?$/
@@ -492,7 +494,8 @@ const FantasyPage = () => {
           horizonWeeks={horizonWeeks}
           playoffWeeks={data?.playoffWeeks ?? []}
           onTour={() => {
-            leaveSettings()
+            // Closed in the same commit, so the tour's focus-return is the control that opened Settings, not this dialog.
+            closeSettings()
             setTour(true)
           }}
           sync={{ loading, progress, loadedAt, source: providerName(data?.provider ?? prefs.provider), onReload: reload, readouts }}
@@ -557,7 +560,8 @@ const FantasyPage = () => {
           // the tour, another league, the weekly reveal), sends the dialog off first. Appearance and reload leave it
           // open, so the change shows in place, the same as setting it from inside.
           onRun={(id) => {
-            if (!KEEPS_SETTINGS.test(id)) leaveSettings()
+            if (OPENS_MODAL.test(id)) closeSettings()
+            else if (!KEEPS_SETTINGS.test(id)) leaveSettings()
           }}
           reveal={paletteReveal}
         />

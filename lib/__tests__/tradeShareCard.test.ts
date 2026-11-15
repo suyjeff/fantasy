@@ -282,6 +282,20 @@ describe('the strip and the figures, when the card is crowded', () => {
         for (const s of ALL.slice(0, figures)) expect(audit.some((t) => t.text === s.value), label).toBe(true)
       }
   })
+  it('falls back to one full-width column on the wide card when the split has no room, before the last resort', () => {
+    // A figure too wide for the narrow right column at every share, three crowded sides, and the strip.
+    const base = crowd('three', 'short', 1, false)
+    const stat = { ...ALL[0], value: '+1234567.89', unit: 'pts/wk over the season', label: 'Playoff odds with the extra' }
+    const card: TradeCard = { ...base, stats: [stat], sides: base.sides.map((s) => ({ ...s, players: Array.from({ length: 6 }, (_, j) => ({ ...s.players[0], id: `${s.rosterId}-${j}`, name: PLAYERS[j % PLAYERS.length] })) })) }
+    const { said, audit, trace } = drawn(card, 'og')
+    const label = trace.join(' / ')
+    expect(trace.some((t) => /last/.test(t)), label).toBe(false)
+    expect(audit.some((t) => /FIGURES/.test(t.text)), label).toBe(false)
+    expect(audit.some((t) => t.text === stat.value), label).toBe(true)
+    expect(said.weeksLeft, label).toBe(false)
+    expect(trace.some(isStrip), label).toBe(true)
+    expect(cardIssues(audit, 'og'), label).toEqual([])
+  })
   it('keeps the strip, the whole note and every figure on a four-team square', () => {
     for (const names of ['short', 'intl'] as const)
       for (const figures of [3, 4]) {

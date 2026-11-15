@@ -1127,6 +1127,11 @@ export const drawTradeCard = (canvas: HTMLCanvasElement, card: TradeCard, format
         })
       }
     }
+  // The split found no room (the sides too wide for the left column at every share): the one full-width column.
+  if (!(pick as Pick | null)) {
+    const one = chooseColumn(e, area.w, area.h, all)
+    if (one) consider({ score: one.score, plans: one.plans, draw: () => place(e, one.plans, area) })
+  }
   const chosen = pick as Pick | null
   if (chosen) {
     trace(chosen.plans)
@@ -1146,15 +1151,18 @@ const lastResort = (e: Env, r: Rect, opt: DrawOptions) => {
   const n = card.stats.length
   let fallback: Plan[] = []
   for (let k = n; k >= (n ? 1 : 0); k--) {
-    const list = k || card.strip ? (card.strip ? planStats(e, r.w, { mode: 'list', cols: 1, sub: false, cap: k, strip: 'row' }) : null) ?? (k ? planStats(e, r.w, { mode: 'list', cols: 1, sub: false, cap: k }) : null) : null
-    for (let cap = 6; cap >= 1; cap--) {
-      const sides = [true, false].flatMap((ledger) => [2, 1].map((cols) => planSides(e, r.w, { kind: 'line', cols, cap, zoom: 1, ppw: false, ledger }))).find((x) => x && x.h <= r.h) ?? planSides(e, r.w, { kind: 'line', cols: 1, cap, zoom: 1, ppw: false })
-      if (!sides) continue
-      const plans = [note, sides, list].filter((x): x is Plan => !!x)
-      fallback = plans
-      if (heightOf(plans, gap) <= r.h) {
-        opt.trace?.push(...plans.map((x) => `${x.what} last`))
-        return place(e, plans, r)
+    // At each count the strip goes first, then (before any figure is dropped) the same figures without it.
+    for (const withStrip of card.strip ? [true, false] : [false]) {
+      const list = withStrip ? planStats(e, r.w, { mode: 'list', cols: 1, sub: false, cap: k, strip: 'row' }) : k ? planStats(e, r.w, { mode: 'list', cols: 1, sub: false, cap: k }) : null
+      for (let cap = 6; cap >= 1; cap--) {
+        const sides = [true, false].flatMap((ledger) => [2, 1].map((cols) => planSides(e, r.w, { kind: 'line', cols, cap, zoom: 1, ppw: false, ledger }))).find((x) => x && x.h <= r.h) ?? planSides(e, r.w, { kind: 'line', cols: 1, cap, zoom: 1, ppw: false })
+        if (!sides) continue
+        const plans = [note, sides, list].filter((x): x is Plan => !!x)
+        fallback = plans
+        if (heightOf(plans, gap) <= r.h) {
+          opt.trace?.push(...plans.map((x) => `${x.what} last`))
+          return place(e, plans, r)
+        }
       }
     }
   }
