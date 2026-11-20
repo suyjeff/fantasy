@@ -10,9 +10,10 @@ import { BuildIcon } from '../icons'
 import { Badge, DeltaChip, PlayerAvatar, cx, fmt, fmtSigned, pct, reducedMotion } from '../ui'
 
 // The cards Assistant GM lays down as it finds things, drawn with the app's own pieces: player and team names that
-// open their sheets, the trade builder's pricing, the odds bars and stat tiles. Each lands with its corners closing
-// in on it and the frame settling from the accent to a hairline (styles/fantasy.css, .asgm-card), and its figures
-// tick from where they were to where they land. Reduced motion: the card fades in, the figures are simply there.
+// open their sheets, the trade builder's pricing, the odds bars and stat tiles. A card is content on a wash, not a
+// box: its header is a mono label line, its rows keep the hairlines a table needs and nothing else. Each lands with its
+// corners closing in on it and a ring settling from the accent to nothing (styles/fantasy.css, .asgm-card), and its
+// figures tick from where they were to where they land. Reduced motion: the card fades in, the figures are there.
 
 /** How long a fresh card's figures count and its bars fill: --asgm-count in styles/fantasy.css. A staged sequence,
  *  so it keeps its own length (on the app's ease-out curve) rather than a UI duration. */
@@ -48,15 +49,16 @@ const Corners = () => (
 
 const KIND_LABEL: Record<AsgmCard['kind'], string> = { players: 'Players', lineup: 'Lineup', trade: 'Trade', odds: 'Odds', waivers: 'Waivers', compare: 'Compare' }
 
-/** A card's frame: the Panel's header (a mono label and an aside), a hairline box, and the landing marks. */
+/** A card's frame: a label line (its number, its kind in the accent, its title, an aside), the wash under it, and the
+ *  landing marks. No border: the wash and the space around it group it. */
 export const CardFrame = ({ card, n, aside, children, fresh }: { card: AsgmCard; n: number; aside?: ReactNode; children: ReactNode; fresh: boolean }) => (
-  <section aria-label={`${KIND_LABEL[card.kind]}: ${card.title}`} className={cx('asgm-card relative min-w-0 border border-ff-line bg-ff-panel', fresh && 'is-fresh')} style={{ '--d': `${Math.min(n, 4) * 40}ms` } as React.CSSProperties}>
+  <section aria-label={`${KIND_LABEL[card.kind]}: ${card.title}`} className={cx('asgm-card relative min-w-0 border border-transparent', fresh && 'is-fresh')} style={{ '--d': `${Math.min(n, 4) * 40}ms` } as React.CSSProperties}>
     <Corners />
-    <header className="flex min-h-8 items-center justify-between gap-3 border-b border-ff-line px-3 py-1">
+    <header className="flex min-h-9 items-center justify-between gap-3 px-3 pb-1 pt-2">
       <span className="flex min-w-0 items-baseline gap-2">
         <span className="num shrink-0 text-[10px] text-ff-muted">{String(n + 1).padStart(2, '0')}</span>
         <span className="ff-label shrink-0 !text-ff-accent">{KIND_LABEL[card.kind]}</span>
-        <span className="min-w-0 truncate text-[12px] font-medium text-ff-text">{card.title}</span>
+        <span className="min-w-0 truncate text-[12.5px] font-semibold text-ff-text">{card.title}</span>
       </span>
       {aside && <span className="shrink-0 font-mono text-[10.5px] text-ff-muted">{aside}</span>}
     </header>
@@ -75,9 +77,9 @@ const Note = ({ children, inset }: { children: ReactNode; inset: string }) => <p
 const PlayersCard = ({ card }: { card: Extract<AsgmCard, { kind: 'players' }> }) => {
   const { data } = useFantasy()
   return (
-    <ul className="divide-y divide-ff-line/70">
+    <ul className="divide-y divide-ff-line/80 px-3 pb-1">
       {card.rows.map((r) => (
-        <li key={r.id} className="flex items-start gap-3 px-3 py-1.5">
+        <li key={r.id} className="flex items-start gap-3 py-2">
           <div className="min-w-0 flex-1">
             <PlayerName player={data.players[r.id]} id={r.id} size={24} className="min-w-0" />
             {r.note && <Note inset="pl-8">{r.note}</Note>}
@@ -107,7 +109,7 @@ const LineupCard = ({ card, fresh }: { card: Extract<AsgmCard, { kind: 'lineup' 
   const gain = card.total.after - card.total.before
   return (
     <>
-      <div className="flex items-end justify-between gap-3 border-b border-ff-line px-3 py-2.5">
+      <div className="flex items-end justify-between gap-3 px-3 pb-3 pt-1.5">
         <div>
           <div className="ff-label">Projected</div>
           <div className="mt-1 flex items-baseline gap-2">
@@ -115,14 +117,14 @@ const LineupCard = ({ card, fresh }: { card: Extract<AsgmCard, { kind: 'lineup' 
             <span className="num text-[13px] text-ff-muted line-through decoration-ff-muted/50">{fmt(card.total.before)}</span>
             <span aria-hidden className="font-mono text-[11px] text-ff-muted">→</span>
             <span className="sr-only"> to </span>
-            <span className="num text-[21px] font-medium leading-none tracking-[-0.02em] text-ff-text">{fmt(total)}</span>
+            <span className="num text-[24px] font-semibold leading-none tracking-[-0.02em] text-ff-text">{fmt(total)}</span>
           </div>
         </div>
         <DeltaChip value={gain} suffix={<span className="ml-0.5 text-[9.5px]">pts</span>} title="Projected points gained by the changes" />
       </div>
-      <ol className="divide-y divide-ff-line/70">
+      <ol className="mx-3 divide-y divide-ff-line/80 border-t border-ff-line/80 pb-1">
         {card.changes.map((c) => (
-          <li key={`${c.out}-${c.in}`} className="grid grid-cols-[38px_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-1.5 px-3 py-2">
+          <li key={`${c.out}-${c.in}`} className="grid grid-cols-[38px_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-1.5 py-2.5">
             <span className="row-span-2 self-start pt-[3px] font-mono text-[10.5px] font-semibold text-ff-text2">{c.slot.replace('SUPER_FLEX', 'SF')}</span>
             <span className="flex min-w-0 items-center gap-2">
               <Badge tone="pos" className="w-10 shrink-0 justify-center">
@@ -153,14 +155,15 @@ const TradeCardView = ({ card, onOpen }: { card: Extract<AsgmCard, { kind: 'trad
   const teams = [...card.deal.teams].sort((a, b) => Number(b === me) - Number(a === me))
   return (
     <>
-      <div className={cx('grid gap-px bg-ff-line', teams.length > 2 ? 'sm:grid-cols-3' : 'grid-cols-2')}>
+      {/* The sides' columns keep a hairline between them: that is the deal's structure. */}
+      <div className={cx('grid px-3', teams.length > 2 ? 'divide-ff-line/80 max-sm:divide-y sm:grid-cols-3 sm:divide-x' : 'grid-cols-2 divide-x divide-ff-line/80')}>
         {teams.map((t) => {
           const gets = card.deal.moves.filter((m) => m.to === t).map((m) => m.player)
           const faab = card.deal.faab.filter((f) => f.to === t).reduce((a, f) => a + f.dollars, 0) - card.deal.faab.filter((f) => f.from === t).reduce((a, f) => a + f.dollars, 0)
           const side = read?.sides.find((s) => s.rosterId === t)
           const v = headline(side)
           return (
-            <div key={t} className="min-w-0 bg-ff-panel px-3 py-2.5">
+            <div key={t} className={cx('min-w-0 py-2', teams.length > 2 ? 'sm:[&:not(:first-child)]:pl-3 sm:[&:not(:last-child)]:pr-3' : '[&:not(:first-child)]:pl-3 [&:not(:last-child)]:pr-3')}>
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <TeamName id={t} size={16} className="min-w-0 text-[12px] font-medium" />
               </div>
@@ -174,8 +177,8 @@ const TradeCardView = ({ card, onOpen }: { card: Extract<AsgmCard, { kind: 'trad
                 {faab > 0 && <li className="num text-[12px] text-ff-text2">${faab} FAAB</li>}
                 {!gets.length && faab <= 0 && <li className="text-[12px] text-ff-muted">nothing</li>}
               </ul>
-              <div className="mt-2 flex items-baseline gap-1 border-t border-ff-line/70 pt-1.5" title="Points a week added to their best lineup, over the horizon">
-                <span className={cx('num text-[16px] font-medium leading-none', v == null ? 'text-ff-muted' : v > 0.25 ? 'text-ff-pos' : v < -0.25 ? 'text-ff-neg' : 'text-ff-text')}>{v == null ? '…' : fmtSigned(v, 1)}</span>
+              <div className="mt-2.5 flex items-baseline gap-1" title="Points a week added to their best lineup, over the horizon">
+                <span className={cx('num text-[17px] font-semibold leading-none', v == null ? 'text-ff-muted' : v > 0.25 ? 'text-ff-pos' : v < -0.25 ? 'text-ff-neg' : 'text-ff-text')}>{v == null ? '…' : fmtSigned(v, 1)}</span>
                 <span className="font-mono text-[10px] text-ff-muted">pts/wk</span>
               </div>
             </div>
@@ -183,7 +186,7 @@ const TradeCardView = ({ card, onOpen }: { card: Extract<AsgmCard, { kind: 'trad
         })}
       </div>
       {(card.verdict || onOpen) && (
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-ff-line px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 pb-3 pt-2">
           {card.verdict && <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-ff-text2">{card.verdict}</p>}
           {onOpen && (
             <button type="button" onClick={() => onOpen(card.deal)} className="ff-aqua ff-aqua-soft shrink-0">
@@ -208,9 +211,9 @@ const OddsRow = ({ label, before, after, fresh, wide }: { label: ReactNode; befo
   const at = grown ? after : (before ?? 0)
   const d = before != null ? Math.round((after - before) * 100) : 0
   return (
-    <li className="asgm-odds grid grid-cols-[minmax(0,1fr)_minmax(48px,112px)_auto] items-center gap-x-3 px-3 py-1.5">
+    <li className="asgm-odds grid grid-cols-[minmax(0,1fr)_minmax(48px,112px)_auto] items-center gap-x-3 px-3 py-[7px]">
       <span className="asgm-odds-name min-w-0 truncate text-[12.5px] text-ff-text">{label}</span>
-      <span className="asgm-odds-bar relative h-1.5 bg-ff-accent/15" aria-hidden>
+      <span className="asgm-odds-bar relative h-1.5 bg-ff-accent/[0.16]" aria-hidden>
         <span className="asgm-fill absolute inset-y-0 left-0 w-full bg-ff-accent" style={{ transform: `scaleX(${Math.max(0, Math.min(1, at))})` }} />
         {before != null && <span className="absolute -inset-y-1 w-px bg-ff-text2" style={{ left: `${Math.max(0, Math.min(1, before)) * 100}%` }} title="Before" />}
       </span>
@@ -233,14 +236,14 @@ const OddsCard = ({ card, fresh }: { card: Extract<AsgmCard, { kind: 'odds' }>; 
   const any = card.rows.some((r) => r.before != null)
   return (
     <>
-      <ul className="py-1">
+      <ul className="pb-1.5">
         {card.rows.map((r) => {
           const team = byName.get(r.label)
           return <OddsRow key={r.label} label={team != null ? <TeamName id={team} size={16} /> : r.label} before={r.before} after={r.after} fresh={fresh} wide={any} />
         })}
       </ul>
       {any && (
-        <p className="flex items-center gap-3 border-t border-ff-line px-3 py-1.5 font-mono text-[10px] text-ff-muted">
+        <p className="flex items-center gap-3 px-3 pb-2.5 pt-0.5 font-mono text-[10px] text-ff-muted">
           <span className="inline-flex items-center gap-1.5">
             <span aria-hidden className="inline-block h-2.5 w-px bg-ff-text2" />
             before
@@ -258,9 +261,9 @@ const OddsCard = ({ card, fresh }: { card: Extract<AsgmCard, { kind: 'odds' }>; 
 const WaiversCard = ({ card }: { card: Extract<AsgmCard, { kind: 'waivers' }> }) => {
   const { data } = useFantasy()
   return (
-    <ol className="divide-y divide-ff-line/70">
+    <ol className="divide-y divide-ff-line/80 px-3 pb-1">
       {card.rows.map((r) => (
-        <li key={r.add} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2">
+        <li key={r.add} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 py-2.5">
           <div className="min-w-0 space-y-1.5">
             <div className="flex min-w-0 items-start gap-2">
               <Badge tone="pos" className="mt-0.5 w-10 shrink-0 justify-center">
@@ -281,7 +284,7 @@ const WaiversCard = ({ card }: { card: Extract<AsgmCard, { kind: 'waivers' }> })
             )}
           </div>
           <div className="text-right">
-            <div className={cx('num text-[18px] font-medium leading-none', r.bid != null ? 'text-ff-text' : 'text-ff-muted')}>{r.bid != null ? `$${r.bid}` : '–'}</div>
+            <div className={cx('num text-[18px] font-semibold leading-none', r.bid != null ? 'text-ff-text' : 'text-ff-muted')}>{r.bid != null ? `$${r.bid}` : '–'}</div>
             <div className="ff-label mt-1">bid</div>
           </div>
         </li>
@@ -302,13 +305,14 @@ const CompareCard = ({ card }: { card: Extract<AsgmCard, { kind: 'compare' }> })
     { label: 'Plays', title: 'Chance he plays in a given week', get: (id) => data.context[id]?.play ?? null, show: (v) => pct(v) },
   ]
   const shown = rows.filter((r) => ids.some((id) => r.get(id) != null))
-  const cols = { gridTemplateColumns: `84px repeat(${ids.length}, minmax(0, 1fr))` }
+  const cols = { gridTemplateColumns: `68px repeat(${ids.length}, minmax(0, 1fr))` }
   return (
-    <div className="text-[12px]">
-      <div className="grid border-b border-ff-line" style={cols}>
+    // A table: its rows keep their hairlines; the columns are told apart by alignment, and the better figure is marked.
+    <div className="px-3 pb-1 text-[12px]">
+      <div className="grid" style={cols}>
         <span />
         {ids.map((id) => (
-          <div key={id} className="flex min-w-0 flex-col items-start gap-1.5 border-l border-ff-line px-2.5 py-2">
+          <div key={id} className="flex min-w-0 flex-col items-start gap-1.5 pb-2.5 pl-2 pt-1">
             <PlayerAvatar id={id} player={data.players[id]} size={32} />
             <PlayerName player={data.players[id]} id={id} avatar={false} className="min-w-0 max-w-full" />
           </div>
@@ -321,14 +325,14 @@ const CompareCard = ({ card }: { card: Extract<AsgmCard, { kind: 'compare' }> })
           const best = nums.length > 1 ? (r.low ? Math.min(...nums) : Math.max(...nums)) : null
           const tie = best != null && vals.filter((v) => v === best).length > 1
           return (
-            <div key={r.label} className="grid border-b border-ff-line/70 last:border-b-0" style={cols}>
-              <dt className="ff-label flex items-center whitespace-nowrap px-3 py-1.5" title={r.title}>
+            <div key={r.label} className="grid border-t border-ff-line/80" style={cols}>
+              <dt className="ff-label flex items-center whitespace-nowrap py-1.5" title={r.title}>
                 {r.label}
               </dt>
               {vals.map((v, i) => {
                 const top = v != null && v === best && !tie
                 return (
-                  <dd key={ids[i]} className={cx('num flex items-center gap-1 border-l border-ff-line px-2.5 py-1.5 text-[13px]', top ? 'font-medium text-ff-pos' : 'text-ff-text')}>
+                  <dd key={ids[i]} className={cx('num flex items-center gap-1 py-1.5 pl-2 text-[13px]', top ? 'font-semibold text-ff-pos' : 'text-ff-text')}>
                     {v == null ? <span className="text-ff-muted">–</span> : r.show(v)}
                     {top && (
                       <>

@@ -2,6 +2,7 @@
 // /assistant/chat), which picks the model; the rest are the user's own key, called straight from the browser, so the
 // key never touches our worker. Tool calling is normalised: each adapter takes the same messages and tool specs and
 // returns the same { text, toolCalls }; text streams through onText where the provider streams.
+import { ASGM_TOOL_NAMES_V1 } from '../../workers/grades/src/asgmShared'
 import { sharedUrl } from '../sharedGrades'
 import { clientId } from './keys'
 import type { Schema } from './tools'
@@ -369,30 +370,54 @@ const gemini = async (key: StoredKey, req: CompleteReq): Promise<CompleteRes> =>
 
 export const houseUrl = () => sharedUrl()
 
+/**
+ * Set once the relay has refused a tool it does not know: it is the first deployed version, so it is offered only the
+ * tools that version allows, for the rest of this page's life. A refusal is free (the relay checks before it meters).
+ */
+let houseV1 = false
+export const resetHouseVersion = () => {
+  houseV1 = false
+}
+
 const house = async (req: CompleteReq): Promise<CompleteRes> => {
   const base = houseUrl()
   if (!base) throw new AsgmError('offline', "The free model isn't set up on this site. Add your own key in settings.")
-  const body = {
-    client: clientId(),
-    turn: req.turn ?? newId('t'),
-    step: req.step ?? 0,
-    messages: toOpenAiMessages(null, req.messages),
-    tools: req.tools.map((t) => ({ name: t.name, description: t.description, parameters: t.params })),
+  const send = async (v1: boolean) => {
+    const tools = v1 ? req.tools.filter((t) => ASGM_TOOL_NAMES_V1.includes(t.name)) : req.tools
+    const body = {
+      client: clientId(),
+      turn: req.turn ?? newId('t'),
+      step: req.step ?? 0,
+      messages: toOpenAiMessages(null, req.messages),
+      tools: tools.map((t) => ({ name: t.name, description: t.description, parameters: t.params })),
+    }
+    try {
+      return await fetch(`${base}/assistant/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: req.signal })
+    } catch (e) {
+      if (req.signal.aborted || (e as Error)?.name === 'AbortError') throw new AsgmError('aborted', 'Stopped.')
+      throw new AsgmError('offline', "Can't reach the free model. Check your connection and try again.")
+    }
   }
-  let res: Response
-  try {
-    res = await fetch(`${base}/assistant/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: req.signal })
-  } catch (e) {
-    if (req.signal.aborted || (e as Error)?.name === 'AbortError') throw new AsgmError('aborted', 'Stopped.')
-    throw new AsgmError('offline', "Can't reach the free model. Check your connection and try again.")
-  }
+  let res = await send(houseV1)
   let j: any = null
   try {
     j = await res.json()
   } catch {
     // not JSON
   }
+  if (res.status === 400 && !houseV1 && /^tool not allowed/.test(String(j?.error ?? ''))) {
+    houseV1 = true
+    res = await send(true)
+    j = null
+    try {
+      j = await res.json()
+    } catch {
+      // not JSON
+    }
+  }
   if (!res.ok) {
+    // The relay says why a model call came back empty (what Workers AI returned): for whoever reads the console.
+    if (j?.why && typeof console !== 'undefined') console.warn(`[asgm] free model: ${String(j.why).slice(0, 200)}`)
     const code = j?.code
     const msg = typeof j?.error === 'string' ? j.error : null
     if (code === 'quota') throw new AsgmError('quota', msg ?? "That's today's free questions for this browser. They reset at midnight UTC; add your own key in settings to keep going.")

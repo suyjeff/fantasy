@@ -151,8 +151,9 @@ export const parseToolCall = (text: string): { name: string; arguments: string }
     else if (ch === '}' && --depth === 0) {
       try {
         const j = JSON.parse(text.slice(start, i + 1)) as { name?: string; arguments?: unknown }
-        if (!j.name || !TOOLS.has(j.name)) return null
-        return { name: j.name, arguments: JSON.stringify(j.arguments ?? {}) }
+        const name = toolName(j.name)
+        if (!name) return null
+        return { name, arguments: JSON.stringify(j.arguments ?? {}) }
       } catch {
         return null
       }
@@ -180,6 +181,48 @@ export const replyText = (r: unknown): string => {
   return ''
 }
 
+/** A tool name as a model may write it: "player", "functions.player", "functions/player". Null unless it is one of ours. */
+const toolName = (raw: unknown): string | null => {
+  const n = String(raw ?? '').trim().replace(/^(functions|tools?)[./:]/, '')
+  return TOOLS.has(n) ? n : null
+}
+const argText = (a: unknown) => (typeof a === 'string' ? a || '{}' : JSON.stringify(a ?? {}))
+
+/**
+ * Native tool calls in a reply. gpt-oss is trained to call tools in its own format, and does so even when the tools are
+ * only described in the prompt: Workers AI hands those back as Responses `function_call` items (or chat `tool_calls`),
+ * with no text at all. Reading only the text turned every such reply into an empty answer.
+ */
+export const replyCalls = (r: unknown): { name: string; arguments: string }[] => {
+  const o = r as Record<string, any> | null
+  if (!o || typeof o !== 'object') return []
+  const out: { name: string; arguments: string }[] = []
+  const add = (name: unknown, args: unknown) => {
+    const n = toolName(name)
+    if (n) out.push({ name: n, arguments: argText(args) })
+  }
+  if (Array.isArray(o.output)) for (const x of o.output) if (x?.type === 'function_call') add(x.name, x.arguments)
+  for (const c of o.choices?.[0]?.message?.tool_calls ?? []) add(c?.function?.name ?? c?.name, c?.function?.arguments ?? c?.arguments)
+  for (const c of o.tool_calls ?? []) add(c?.function?.name ?? c?.name, c?.function?.arguments ?? c?.arguments)
+  return out
+}
+
+/** Output item types and reasons a caller may see: anything else reads as "other". */
+const ITEM = new Set(['message', 'reasoning', 'function_call'])
+const INCOMPLETE = new Set(['max_output_tokens', 'content_filter'])
+/**
+ * What came back, as a coarse shape label (item types from a fixed list, never the model's or provider's text), for
+ * the error a failed call returns: so a failure can be read from outside without leaking anything.
+ */
+export const replyShape = (r: unknown): string => {
+  const o = r as Record<string, any> | null
+  if (!o || typeof o !== 'object') return 'not an object'
+  const items = Array.isArray(o.output) ? o.output.slice(0, 6).map((x: any) => (ITEM.has(x?.type) ? x.type : 'other')).join(',') : null
+  const inc = INCOMPLETE.has(o.incomplete_details?.reason) ? ` incomplete:${o.incomplete_details.reason}` : ''
+  const kind = items != null ? `output[${items}]` : Array.isArray(o.choices) ? 'chat' : typeof o.response === 'string' ? 'response' : 'unknown'
+  return `${kind}${inc}`
+}
+
 const usageOf = (r: unknown): { input: number; output: number } | null => {
   const u = (r as { usage?: Record<string, number> } | null)?.usage
   if (!u) return null
@@ -198,7 +241,7 @@ const waiPrompt = (body: ChatBody) => {
 /** The worst a Workers AI call for this request could cost: its prompt at three characters a token, the whole output allowance. */
 export const worstNeurons = (body: ChatBody) => neuronsFor(Math.ceil(waiPrompt(body).chars / 3), ASGM.wai.maxOut)
 
-export type WaiResult = { reply: Reply | null; neurons: number; calls: number; denied: boolean }
+export type WaiResult = { reply: Reply | null; neurons: number; calls: number; denied: boolean; /** Why there is no reply, in a few words. */ why?: string }
 
 type Shape = 'responses' | 'chat'
 /**
@@ -238,9 +281,12 @@ export const callWorkersAi = async (env: AsgmEnv, body: ChatBody, meter: Meter, 
     let r: unknown
     try {
       r = await ai.run(ASGM.wai.model, payload[shape])
-    } catch {
+    } catch (e) {
       // It may have run before failing: the worst case stays charged.
       out.neurons += worst
+      // The provider's own words stay in the worker's log; the caller gets only which request shape failed.
+      console.error(`[asgm] workers-ai ${shape} threw: ${String((e as Error)?.message ?? e).slice(0, 300)}`)
+      out.why = `${shape}: threw`
       continue
     }
     waiShape = shape
@@ -249,9 +295,14 @@ export const callWorkersAi = async (env: AsgmEnv, body: ChatBody, meter: Meter, 
     out.neurons += actual
     if (actual !== worst) await meter.settleWai({ worst, actual, now })
     const text = replyText(r).trim()
-    const call = parseToolCall(text)
-    if (call && body.tools.length) out.reply = { content: '', tool_calls: [{ id: `wai_${Date.now().toString(36)}`, ...call }] }
-    else if (text) out.reply = { content: text.replace(/TOOL_CALL[\s\S]*$/, '').trim() || text, tool_calls: [] }
+    const id = (i: number) => `wai_${Date.now().toString(36)}${i}`
+    const native = body.tools.length ? replyCalls(r).slice(0, ASGM_LIMITS.toolCalls) : []
+    const call = body.tools.length ? parseToolCall(text) : null
+    const visible = text.replace(/TOOL_CALL[\s\S]*$/, '').trim()
+    if (native.length) out.reply = { content: visible, tool_calls: native.map((c, i) => ({ id: id(i), ...c })) }
+    else if (call) out.reply = { content: '', tool_calls: [{ id: id(0), ...call }] }
+    else if (text) out.reply = { content: visible || text, tool_calls: [] }
+    else out.why = `${shape}: no text (${replyShape(r)})`
     return out
   }
   return out
@@ -296,9 +347,9 @@ export const handleChat = async (req: Request, env: AsgmEnv, origin: string, ip:
   }
   const fresh = r.fresh
   /** No answer: the question goes back (the round trip and any neurons stay spent), then the error. */
-  const refuse = async (status: number, code: string, error: string) => {
+  const refuse = async (status: number, code: string, error: string, why?: string) => {
     const back = await meter.settle({ ...who, fresh }).catch(() => null)
-    return send({ error, code, remaining: back?.remaining ?? r.remaining, ...meta }, status, origin)
+    return send({ error, code, remaining: back?.remaining ?? r.remaining, ...meta, ...(why ? { why } : {}) }, status, origin)
   }
 
   let reply = await callGroq(env, body, fetcher)
@@ -309,7 +360,7 @@ export const handleChat = async (req: Request, env: AsgmEnv, origin: string, ip:
     const w = await callWorkersAi(env, body, meter, now)
     if (!w.reply) {
       if (w.denied && !w.calls) return refuse(503, 'budget', 'The free model has used its budget for today. It resets at midnight UTC; add your own key in settings to keep going now.')
-      return refuse(502, 'provider', 'The model had an error. Try again in a minute.')
+      return refuse(502, 'provider', 'The model had an error. Try again in a minute.', w.why)
     }
     reply = w.reply
     provider = 'workers-ai'

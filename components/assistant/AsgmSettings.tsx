@@ -23,19 +23,21 @@ export const providerLine = (s: Pick<AsgmState, 'provider' | 'house' | 'storedKe
   return `free model · ${s.house.remaining} of ${s.house.limit} left today`
 }
 
+/** A choice as a block on the wash; chosen, it takes the accent's wash and its rule down the left (the app's selected
+ *  row), and its square fills. No frame around it; a transparent edge for forced colours. */
 const Radio = ({ checked, onSelect, title, sub, children, id }: { checked: boolean; onSelect: () => void; title: string; sub: React.ReactNode; children?: React.ReactNode; id: string }) => (
-  <div className={cx('border', checked ? 'border-ff-accent/50 bg-ff-accent/[0.04]' : 'border-ff-line bg-ff-panel')}>
+  <div className={cx('border border-transparent transition-[background-color,box-shadow] duration-ff-quick', checked ? 'bg-ff-accent/[0.07] shadow-[inset_2px_0_0_rgb(var(--ff-accent))]' : 'asgm-wash asgm-wash-btn')}>
     <label htmlFor={id} className="flex min-h-11 cursor-pointer items-start gap-2.5 px-3 py-2.5">
       <input id={id} type="radio" name="asgm-use" checked={checked} onChange={onSelect} className="peer sr-only" />
-      <span aria-hidden className={cx('mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ff-accent', checked ? 'border-ff-accent' : 'border-ff-line2')}>
+      <span aria-hidden className={cx('mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center border bg-ff-panel peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ff-accent', checked ? 'border-ff-accent' : 'border-ff-muted/70')}>
         {checked && <span className="h-1.5 w-1.5 bg-ff-accent" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-medium text-ff-text">{title}</span>
+        <span className="block text-[13px] font-semibold text-ff-text">{title}</span>
         <span className="mt-0.5 block text-[12px] leading-snug text-ff-text2">{sub}</span>
       </span>
     </label>
-    {checked && children && <div className="border-t border-ff-line/70 px-3 pb-3 pt-2.5">{children}</div>}
+    {checked && children && <div className="px-3 pb-3 pl-[34px] pt-0.5">{children}</div>}
   </div>
 )
 
@@ -163,22 +165,22 @@ const KeyForm = () => {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {dirty ? (
-          <button type="button" onClick={save} className="transition-colors h-8 bg-ff-text px-3 text-[12.5px] font-medium text-ff-panel hover:bg-ff-text/85 max-md:h-10">
+          <button type="button" onClick={save} className="asgm-press h-8 border border-transparent bg-ff-text px-3 text-[12.5px] font-medium text-ff-panel hover:bg-ff-text/85 max-md:h-10">
             Save and test
           </button>
         ) : (
-          <button type="button" onClick={test} className="transition-colors h-8 border border-ff-line2 bg-ff-panel px-3 text-[12.5px] text-ff-text hover:bg-ff-raised max-md:h-10">
+          <button type="button" onClick={test} className="asgm-press h-8 border border-transparent bg-ff-text/[0.07] px-3 text-[12.5px] font-medium text-ff-text hover:bg-ff-text/[0.12] max-md:h-10">
             Test key
           </button>
         )}
         {saved && (
-          <button type="button" onClick={remove} className="transition-colors h-8 px-2.5 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-neg max-md:h-10">
+          <button type="button" onClick={remove} className="asgm-press h-8 px-2.5 text-[12.5px] text-ff-text2 hover:bg-ff-neg/[0.08] hover:text-ff-neg max-md:h-10">
             Remove key
           </button>
         )}
         {/* Removing acts at once; Undo puts the key back, since nothing else in the app keeps a copy. */}
         {!saved && removed && (
-          <button type="button" onClick={undo} className="transition-colors h-8 border border-ff-line2 bg-ff-panel px-3 text-[12.5px] font-medium text-ff-text hover:bg-ff-raised max-md:h-10">
+          <button type="button" onClick={undo} className="asgm-press h-8 border border-transparent bg-ff-text/[0.07] px-3 text-[12.5px] font-medium text-ff-text hover:bg-ff-text/[0.12] max-md:h-10">
             Undo
           </button>
         )}
@@ -220,20 +222,20 @@ const AsgmSettings = ({ onDone, inline }: { onDone?: () => void; inline?: boolea
   const reset = s.house ? resetTime(s.house.resetsAt || nextUtcMidnight()) : null
   const left = s.house ? `${s.house.remaining} of ${s.house.limit} questions left today${reset ? ` · resets ${reset}` : ''}` : 'A few questions a day from this browser, free.'
   return (
-    <div className={cx('space-y-3', !inline && 'px-3 py-3')}>
+    <div className={cx('space-y-3', !inline && 'px-3 pb-4 pt-3')}>
       {!inline && (
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="ff-label">Who answers</h3>
           {onDone && (
-            <button type="button" onClick={onDone} className="ff-hit inline-flex items-center gap-1 font-mono text-[11px] text-ff-text2 transition-colors hover:text-ff-text">
+            <button type="button" onClick={onDone} className="ff-hit asgm-press inline-flex items-center gap-1 font-mono text-[11px] text-ff-text2 hover:text-ff-text">
               <ChevronIcon dir="left" size={10} />
               back<span className="sr-only"> to the conversation</span>
             </button>
           )}
         </div>
       )}
-      {s.mock && <p className="border border-ff-warn/35 bg-ff-warn/[0.07] px-3 py-2 text-[12px] text-ff-text2">This page has ?asgm=mock: every answer is canned, whatever is set here.</p>}
-      <fieldset className="space-y-2">
+      {s.mock && <p className="bg-ff-warn/[0.08] px-3 py-2 text-[12px] text-ff-text2 shadow-[inset_2px_0_0_rgb(var(--ff-warn))]">This page has ?asgm=mock: every answer is canned, whatever is set here.</p>}
+      <fieldset className="space-y-[3px]">
         <legend className="sr-only">Who answers</legend>
         <Radio
           id={houseId}
@@ -252,7 +254,7 @@ const AsgmSettings = ({ onDone, inline }: { onDone?: () => void; inline?: boolea
         </Radio>
       </fieldset>
       {s.use === 'key' && !s.storedKey && <p className="text-[12px] text-ff-muted">Until a key is saved, questions go to the free model.</p>}
-      <p className="border-t border-ff-line pt-2.5 text-[11.5px] leading-snug text-ff-muted">
+      <p className="pt-1 text-[11.5px] leading-snug text-ff-muted">
         <span>
           Your key stays in this browser and goes straight to the provider. It never touches our server. The GM reads your league from this page; the model only sees the numbers it asks for.
         </span>

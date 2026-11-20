@@ -70,14 +70,13 @@ const Float = ({ close, onDock, onExpand }: { close: () => void; onDock?: () => 
       aria-modal="false"
       aria-labelledby={titleId}
       data-instant={instant}
-      className="asgm-float fixed right-4 z-[33] flex w-[360px] max-w-[calc(100vw-32px)] flex-col lg:w-[400px] border border-ff-line2 bg-ff-panel shadow-[0_18px_60px_-12px_rgba(0,0,0,0.45),0_2px_8px_rgba(0,0,0,0.12)]"
+      // Elevation by layered shadows and a ring, not a frame (styles/fantasy.css, .asgm-float).
+      className="asgm-float fixed right-4 z-[33] flex w-[360px] max-w-[calc(100vw-32px)] flex-col bg-ff-panel lg:w-[400px]"
       // Never up into the page's 44px title row, where the GM's own button lives.
       // Under 1024px (a tablet, a narrow window) it is narrower and at most about two thirds of the height, so the
       // page it is talking about stays in view above and beside it; a full sheet there would hide the page entirely.
       style={{ bottom: lifted ? 88 : 16, height: `min(${roomy ? '660px' : '68dvh'}, calc(100dvh - ${(lifted ? 88 : 16) + 56}px))` }}
     >
-      <span aria-hidden className="asgm-reg asgm-reg-tl" />
-      <span aria-hidden className="asgm-reg asgm-reg-br" />
       <AsgmChat variant="float" titleId={titleId} onClose={close} onDock={onDock} onExpand={onExpand} />
     </div>
   )
@@ -98,7 +97,7 @@ const Dock = ({ close, onDock, onExpand }: { close: () => void; onDock: () => vo
     }
   }, [])
   return (
-    <aside ref={panel} data-asgm="" aria-labelledby={titleId} data-instant={instant} className="asgm-dock fixed bottom-0 right-0 top-0 z-[32] flex flex-col border-l border-ff-line bg-ff-panel pr-[env(safe-area-inset-right)]">
+    <aside ref={panel} data-asgm="" aria-labelledby={titleId} data-instant={instant} className="asgm-dock fixed bottom-0 right-0 top-0 z-[32] flex flex-col bg-ff-panel pr-[env(safe-area-inset-right)]">
       <AsgmChat variant="dock" titleId={titleId} onClose={close} onDock={onDock} onExpand={onExpand} />
     </aside>
   )
@@ -119,10 +118,10 @@ const PhoneSheet = ({ close, onExpand }: { close: () => void; onExpand: () => vo
       backdropClassName="bg-black/45"
       panelRef={panel}
       panelProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId, tabIndex: -1, ...({ 'data-asgm': '' } as object) }}
-      panelClassName="flex h-[calc(100dvh-40px)] w-full flex-col border-t border-ff-line2 bg-ff-panel shadow-[0_-8px_40px_rgba(0,0,0,0.35)] outline-none"
+      panelClassName="asgm-sheet flex h-[calc(100dvh-40px)] w-full flex-col bg-ff-panel outline-none"
     >
       <div className="flex h-3 shrink-0 items-end justify-center" aria-hidden>
-        <span className="h-1 w-10 bg-ff-line2" />
+        <span className="h-1 w-9 bg-ff-text/20" />
       </div>
       <AsgmChat variant="sheet" titleId={titleId} onClose={leave} onExpand={onExpand} onGoto={leave} />
     </SwipeSheet>
