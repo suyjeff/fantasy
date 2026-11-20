@@ -12,6 +12,7 @@ import { AddIcon } from './icons'
 import { CompareProvider, CompareToggle } from './useCompare'
 import { ShareTradeButton } from './TradeShare'
 import { cx, fmtSigned, reducedMotion, useMedia, usePhone } from './ui'
+import { useAsgmContext } from './assistant/AsgmProvider'
 
 // The trade builder's home: up to three trades for the whole app, kept above the pages so they survive being
 // minimized and moving between sections. One is open at a time: a sheet from the bottom on a phone, a large dialog
@@ -185,7 +186,7 @@ const DockHost = ({ state, set, api }: HostProps) => {
             'fixed z-[31] flex',
             phone
               ? 'inset-x-0 bottom-[calc(48px+env(safe-area-inset-bottom))] flex-col shadow-[0_-10px_28px_-10px_rgba(0,0,0,0.5)]'
-              : 'bottom-4 right-4 max-w-[calc(100vw-32px)] items-end justify-end gap-2',
+              : 'asgm-clear bottom-4 right-4 max-w-[calc(100vw-32px)] items-end justify-end gap-2',
           )}
         >
           {/* One accent rule across the top of the phone's stack, not one per bar. */}
@@ -227,6 +228,9 @@ const Body = ({ state, set, api, trade, layout, titleId, onMinimize, onClose }: 
   const undo = () => set(dock.undoDock)
   const dismiss = () => set(dock.dismissUndo)
   const pricing = useDealPricing(trade.deal, true)
+  // The trade on screen is what Assistant GM is asked about, while it has anything in it.
+  const line = dealSummary(trade.deal, me, name)
+  useAsgmContext(dealActive(trade.deal) ? { view: 'trades/builder', label: `Trade builder: ${line}`, focus: { kind: 'trade', deal: trade.deal, label: line } } : { view: 'trades/builder', label: 'Trade builder' })
   const u = state.undo
   // In the builder: undo the replace or the clear this trade just had, or (opened empty) bring back the trade last
   // discarded.
@@ -256,6 +260,7 @@ const Body = ({ state, set, api, trade, layout, titleId, onMinimize, onClose }: 
       layout={layout}
       onClear={clear}
       reviewAction={<CompareToggle deal={trade.deal} tradeId={id} className="md:hidden" />}
+      onAsk={onMinimize}
       header={
         <>
           <BuilderHeader

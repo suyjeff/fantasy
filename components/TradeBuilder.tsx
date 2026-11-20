@@ -3,6 +3,7 @@ import { bandTone, oddsTone, type AcceptRead } from '../lib/behavior'
 import {
   addDealTeam,
   dealActive,
+  dealSummary,
   readDeal,
   redirectPlayer,
   removeDealTeam,
@@ -21,6 +22,7 @@ import PlayerName from './PlayerName'
 import TeamName from './TeamName'
 import { Avatar, Button, Dropdown, PlayerAvatar, WeekBars, cx, fmt, fmtSigned, pct, playerImage, reducedMotion } from './ui'
 import { MAX_DEAL_TEAMS } from '../workers/grades/src/tradeLink'
+import { AskGm } from './assistant/AsgmButtons'
 
 // The trade builder's body: pick the teams and the players, then review the deal priced for every side. On a phone
 // the two are steps of one sheet; on a wide screen they sit side by side. It holds no deal of its own: the dock
@@ -515,8 +517,8 @@ const Rosters = ({ deal, update, view, onView }: { deal: Deal; update: DealUpdat
 // ---- Review ----
 
 /** The verdict for you, first and largest: what your lineup gains a week, how often, at what value, and the odds. */
-const Hero = ({ side, odds, stale, many }: { side: DealSide; odds: number | null; stale: boolean; /** Two or more other teams, so "yes" is all of them. */ many: boolean }) => {
-  const { data } = useFantasy()
+const Hero = ({ side, odds, stale, many, deal, onAsk }: { side: DealSide; odds: number | null; stale: boolean; /** Two or more other teams, so "yes" is all of them. */ many: boolean; deal: Deal; onAsk?: () => void }) => {
+  const { data, analysis } = useFantasy()
   const v = side.faab ? side.net.mid : side.lineup
   const tone = toneOf(v)
   const word = tone === 'pos' ? 'Better for you' : tone === 'neg' ? 'Worse for you' : 'About even for you'
@@ -561,6 +563,26 @@ const Hero = ({ side, odds, stale, many }: { side: DealSide; odds: number | null
           <dd className={cx('num mt-1 text-[16px]', odds == null ? 'text-ff-muted' : TEXT[oddsTone(odds)])}>{odds == null ? '–' : pct(odds)}</dd>
         </div>
       </dl>
+      {/* A close call gets a second opinion: odds near a coin flip, a gain too small to be sure of, or a lineup gain
+          bought with trade value (or the reverse). A clear deal gets none. */}
+      {(() => {
+        const coin = odds != null && odds >= 0.3 && odds <= 0.7
+        const thin = Math.abs(v) < 1
+        const split = Math.abs(side.value) > 0.5 && Math.sign(side.value) !== Math.sign(v) && Math.abs(v) >= 0.25
+        if (!coin && !thin && !split) return null
+        const name = (t: number) => analysis.teamById[t]?.name ?? `#${t}`
+        const line = dealSummary(deal, side.rosterId, name)
+        const why = coin ? `${oddsLabel(many) === 'All say yes' ? 'Every side saying yes is' : 'They say yes'} about ${pct(odds!)}: no sure thing.` : thin ? `${fmtSigned(v, 1)} pts/wk is close to nothing.` : `It ${v > 0 ? 'helps your lineup but costs trade value' : 'gains trade value but costs your lineup'}.`
+        const prompt = coin
+          ? `Should I send this trade (${line})? It's ${fmtSigned(v, 1)} pts/wk for me and about ${pct(odds!)} they say yes. What would get it over the line?`
+          : `Is this trade worth making (${line})? It's ${fmtSigned(v, 1)} pts/wk for my lineup and ${fmtSigned(side.value, 1)} in trade value${odds != null ? `, ${pct(odds)} they say yes` : ''}.`
+        return (
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-ff-line/70 pt-2.5">
+            <span className="min-w-0 text-[11.5px] text-ff-text2">{why}</span>
+            <AskGm prompt={prompt} leave={onAsk} context={{ view: 'trades/builder', label: `Trade builder: ${line}`, focus: { kind: 'trade', deal, label: line } }} />
+          </div>
+        )
+      })()}
       {(side.cuts.length > 0 || side.problems.length > 0) && (
         <div className="mt-2 space-y-0.5 text-[11.5px]">
           {side.cuts.length > 0 && <p className="text-ff-text2">You would cut {side.cuts.map((id) => data.players[id]?.name ?? id).join(', ')} to fit.</p>}
@@ -853,7 +875,7 @@ const SideCard = ({
   )
 }
 
-const Review = ({ deal, update, pricing, onPick, split }: { deal: Deal; update: DealUpdate; pricing: DealPricing; onPick: () => void; split: boolean }) => {
+const Review = ({ deal, update, pricing, onPick, split, onAsk }: { deal: Deal; update: DealUpdate; pricing: DealPricing; onPick: () => void; split: boolean; onAsk?: () => void }) => {
   const many = deal.teams.length > 2
   const { analysis } = useFantasy()
   const me = analysis.myRosterId!
@@ -889,7 +911,7 @@ const Review = ({ deal, update, pricing, onPick, split }: { deal: Deal; update: 
   const sides = [...read.sides].sort((a, b) => Number(b.rosterId === me) - Number(a.rosterId === me))
   return (
     <div className="space-y-2.5 px-3 py-3 md:px-4">
-      {mine && <Hero side={mine} odds={odds} stale={stale} many={many} />}
+      {mine && <Hero side={mine} odds={odds} stale={stale} many={many} deal={deal} onAsk={onAsk} />}
       <div className={cx('space-y-2.5 transition-opacity duration-150', stale && '[&_.num]:opacity-60')}>
         {sides.map((s) => (
           <SideCard key={s.rosterId} side={s} deal={deal} update={update} accept={accept[s.rosterId]} adding={adding === s.rosterId} setAdding={(on) => setAdding(on ? s.rosterId : null)} />
@@ -1121,6 +1143,7 @@ const TradeBuilder = ({
   header,
   onClear,
   reviewAction,
+  onAsk,
 }: {
   deal: Deal
   update: DealUpdate
@@ -1134,6 +1157,8 @@ const TradeBuilder = ({
   onClear: () => void
   /** An action for the review step's footer (the compare toggle, on a phone, where the header has no room for it). */
   reviewAction?: ReactNode
+  /** Assistant GM is being asked about this deal: the builder steps aside (minimizes) so the GM is in front. */
+  onAsk?: () => void
 }) => {
   const { analysis } = useFantasy()
   const me = analysis.myRosterId
@@ -1188,7 +1213,7 @@ const TradeBuilder = ({
             )}
           </div>
           <div className="ff-scroll min-h-0 overflow-y-auto overscroll-contain bg-ff-bg">
-            <Review deal={deal} update={update} pricing={pricing} onPick={() => {}} split />
+            <Review deal={deal} update={update} pricing={pricing} onPick={() => {}} split onAsk={onAsk} />
           </div>
         </div>
       </div>
@@ -1213,7 +1238,7 @@ const TradeBuilder = ({
           </div>
         ) : (
           <div key="review" className="tb-step-in bg-ff-bg">
-            <Review deal={deal} update={update} pricing={pricing} onPick={() => goStep('pick')} split={false} />
+            <Review deal={deal} update={update} pricing={pricing} onPick={() => goStep('pick')} split={false} onAsk={onAsk} />
           </div>
         )}
       </div>

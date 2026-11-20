@@ -90,7 +90,8 @@ const TeamsIndex = ({ data, analysis, onTeam }: { data: LeagueData; analysis: An
     {
       key: 'form',
       label: 'Last 5',
-      hideBelow: 'md',
+      // From xl: below it (or beside a docked Assistant GM) the table keeps this week's matchup in view instead.
+      hideBelow: 'xl',
       render: (t) => (
         <span className="flex gap-0.5" role="img" aria-label={(seasonById[t.rosterId]?.weeks ?? []).slice(-5).map((w) => w.result ?? '–').join(' ')}>
           {(seasonById[t.rosterId]?.weeks ?? []).slice(-5).map((w) => (

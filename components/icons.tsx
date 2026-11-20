@@ -88,3 +88,35 @@ export const InfoIcon = ({ className, size }: { className?: string; size?: numbe
     <rect x="6.5" y="3.5" width="1" height="1" fill="currentColor" stroke="none" />
   </Svg>
 )
+
+/**
+ * Assistant GM's mark: a football on the diagonal, its laces stitched across the seam. Drawn on the same 14px grid
+ * and 1px hairline as the rest; the curves keep geometric precision so the ball stays round at 12px.
+ */
+export const FootballIcon = ({ className, size = 14 }: { className?: string; size?: number }) => (
+  <svg aria-hidden width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" shapeRendering="geometricPrecision" className={cx('shrink-0', className)}>
+    <path d="M1.5 12.5C0.6 7 7 0.6 12.5 1.5C13.4 7 7 13.4 1.5 12.5Z" />
+    <path d="M3.4 8.1 5.9 10.6M8.1 3.4 10.6 5.9" />
+    <path d="M5.6 8.4 8.4 5.6M5.8 6.8 7.2 8.2M6.8 5.8 8.2 7.2" />
+  </svg>
+)
+
+/**
+ * The AI mark that rides after Assistant GM's name: a four-point star with a small one off its shoulder, in the
+ * accent. Solid, so it reads at 9px. `live` lets it turn slowly while the GM is working (motion only, never the only
+ * sign of it).
+ */
+export const Sparkle = ({ className, size = 10, live, title }: { className?: string; size?: number; live?: boolean; title?: string }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 12 12"
+    role={title ? 'img' : undefined}
+    aria-label={title}
+    aria-hidden={title ? undefined : true}
+    className={cx('asgm-sparkle shrink-0 text-ff-accent', live && 'is-live', className)}
+  >
+    <path className="asgm-sparkle-a" d="M5 1.2C5.4 3.9 6.1 4.6 8.8 5C6.1 5.4 5.4 6.1 5 8.8C4.6 6.1 3.9 5.4 1.2 5C3.9 4.6 4.6 3.9 5 1.2Z" fill="currentColor" />
+    <path className="asgm-sparkle-b" d="M9.6 7.4C9.75 8.45 10.05 8.75 11.1 8.9C10.05 9.05 9.75 9.35 9.6 10.4C9.45 9.35 9.15 9.05 8.1 8.9C9.15 8.75 9.45 8.45 9.6 7.4Z" fill="currentColor" />
+  </svg>
+)

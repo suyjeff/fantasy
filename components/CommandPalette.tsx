@@ -6,7 +6,8 @@ import { useAvailability } from './useAvailability'
 import { SECTIONS, sectionCode, type SectionKey } from './Shell'
 import { Swatch, type Density } from './ThemePicker'
 import { useOpenTrades, useTradeDock } from './TradeDock'
-import { TradeIcon } from './icons'
+import { FootballIcon, TradeIcon } from './icons'
+import { useAsgmControl } from './assistant/AsgmProvider'
 import { Avatar, PlayerAvatar, cx, fmt, ownerLabel, shortcutLabel } from './ui'
 
 // Cmd/Ctrl+K: one box that reaches every section and tab, every player in the
@@ -137,6 +138,7 @@ const CommandPalette = ({
   const { status } = useAvailability(data, analysis)
   const dock = useTradeDock()
   const trades = useOpenTrades()
+  const asgm = useAsgmControl()
   const current = themeById(theme)
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
@@ -211,12 +213,14 @@ const CommandPalette = ({
           run: () => dock.openTrade(t.id),
         }),
       )
+    if (asgm)
+      items.push({ id: 'asgm', group: 'Actions', label: 'Ask Assistant GM', keywords: 'ai assistant gm chat question help advice', icon: <FootballIcon size={14} className="text-ff-accent" />, hint: 'G', weight: 3, run: () => asgm.open() })
     items.push({ id: 'tour', group: 'Actions', label: 'Replay the tour', keywords: 'help guide onboarding intro walkthrough', run: onTour })
     items.push({ id: 'reload', group: 'Actions', label: `Reload from ${source}`, keywords: 'refresh sync', hint: 'R', run: onReload })
     for (const l of leagues)
       if (l.id !== data.league.league_id) items.push({ id: `league:${l.id}`, group: 'Actions', label: `Switch league: ${l.name}`, keywords: 'league', run: () => onLeague(l.id) })
     return items
-  }, [analysis, go, onTheme, onScheme, current, scheme, density, onDensity, onReload, source, onTour, leagues, onLeague, data.league.league_id, dock, trades])
+  }, [analysis, go, onTheme, onScheme, current, scheme, density, onDensity, onReload, source, onTour, leagues, onLeague, data.league.league_id, dock, trades, asgm])
 
   // Players worth finding: anyone rostered here or with a value or a projection ahead.
   const pool = useMemo(
@@ -263,14 +267,21 @@ const CommandPalette = ({
       .slice(0, 8)
       .map((y) => ({ i: playerItem(y.x.p), s: y.s }))
     const order: Item['group'][] = ['Go to', 'Players', 'Teams', 'Actions']
-    return [...scored, ...players]
+    const found = [...scored, ...players]
       .sort((a, b) => order.indexOf(a.i.group) - order.indexOf(b.i.group) || b.s - a.s || (b.i.weight ?? 0) - (a.i.weight ?? 0))
       .reduce<Item[]>((out, { i }) => {
         // At most 8 a group, so one kind of result never buries the rest.
         if (out.filter((o) => o.group === i.group).length < 8) out.push(i)
         return out
       }, [])
-  }, [q, fixed, pool, recent, status]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Something that reads like a question can go straight to Assistant GM: first when it ends in "?", else last.
+    const asked = q.trim()
+    if (asgm && asked.length >= 6 && (asked.includes(' ') || asked.endsWith('?'))) {
+      const ask: Item = { id: 'asgm:ask', group: 'Actions', label: `Ask Assistant GM: “${asked}”`, icon: <FootballIcon size={14} className="text-ff-accent" />, run: () => asgm.open({ prompt: asked, send: true }) }
+      return asked.endsWith('?') ? [ask, ...found] : [...found, ask]
+    }
+    return found
+  }, [q, fixed, pool, recent, status, asgm]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => setActive(0), [q])
   useEffect(() => {
@@ -282,7 +293,7 @@ const CommandPalette = ({
   const run = (item: Item | undefined) => {
     if (!item) return
     const id = item.id
-    try {
+    if (id !== 'asgm:ask') try {
       const next = [id, ...loadRecent().filter((x) => x !== id)].slice(0, 8)
       window.localStorage.setItem(RECENT_KEY, JSON.stringify(next))
     } catch {

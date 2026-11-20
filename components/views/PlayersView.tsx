@@ -10,7 +10,7 @@ import { ShowMore } from './ShowMore'
 import { AvailabilityChip } from '../AvailabilityChip'
 import { useAvailability } from '../useAvailability'
 import { clearsLabel, filterPlayers, POS_FILTERS, type Availability, type OwnFilter, type PosFilter } from '../../lib/availability'
-import { Badge, FadeStrip, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, PlayerAvatar, usePhone, type Column } from '../ui'
+import { Badge, FadeStrip, Num, PageHeader, Panel, Reasons, Segmented, Sparkline, Table, compact, cx, fmt, fmtSigned, pct, signedPct, PlayerAvatar, usePhone, useXl, type Column } from '../ui'
 
 type Basis = 'ahead' | 'todate'
 const PAGE = 60
@@ -42,6 +42,7 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
   useEffect(() => setLimit(PAGE), [pos, own, query, basis])
   const { adjust, openPlayer } = useFantasy()
   const phone = usePhone()
+  const xl = useXl()
   const adjusted = Object.entries(adjust.all)
   const { status } = useAvailability(data, analysis)
   const positions = useMemo(() => [...new Set(analysis.slots.flatMap((s) => s.eligible))], [analysis.slots])
@@ -140,7 +141,8 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
       sort: (id) => perWeek[id] ?? 0,
       render: (id) => <span className="text-ff-text">{fmt(perWeek[id])}</span>,
     },
-    { key: 'raw', label: 'Base', align: 'right', hideBelow: 'sm', title: 'Per week before injury and role adjustments: Sleeper, with the coming week blended with prop lines', sort: (id) => data.context[id]?.raw ?? perWeek[id] ?? 0, render: (id) => fmt(data.context[id]?.raw ?? perWeek[id]) },
+    // From xl; below it, in the row's fold-out (see the table's expand).
+    { key: 'raw', label: 'Base', align: 'right', hideBelow: 'xl', title: 'Per week before injury and role adjustments: Sleeper, with the coming week blended with prop lines', sort: (id) => data.context[id]?.raw ?? perWeek[id] ?? 0, render: (id) => fmt(data.context[id]?.raw ?? perWeek[id]) },
     ...(data.market
       ? [
           {
@@ -197,7 +199,8 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             key: 'gap',
             label: 'vs ECR',
             align: 'right' as const,
-            hideBelow: 'md' as const,
+            // From xl, beside ECR itself; below it, in the row's fold-out, so the row fits without a sideways scroll.
+            hideBelow: 'xl' as const,
             title: 'Consensus position rank minus the model’s. Positive: the model likes this player more than the experts do.',
             sort: (id: string) => (data.consensus!.byId[id]?.posRank != null && aheadRank[id] ? data.consensus!.byId[id].posRank! - aheadRank[id] : -999),
             render: (id: string) => {
@@ -220,9 +223,12 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
         ]
       : []),
     ...(data.playoffWeeks.length
-      ? [{ key: 'po', label: 'Playoff opp', hideBelow: 'lg' as const, render: (id: string) => <PlayoffSchedule context={data.context[id]} weeks={data.playoffWeeks} /> }]
+      ? // From xl, as Context below: the player's sheet has his schedule, playoff weeks marked, at any width.
+        [{ key: 'po', label: 'Playoff opp', hideBelow: 'xl' as const, render: (id: string) => <PlayoffSchedule context={data.context[id]} weeks={data.playoffWeeks} /> }]
       : []),
-    { key: 'why', label: 'Context', hideBelow: 'lg', render: (id) => <ContextNotes context={data.context[id]} players={players} max={2} /> },
+    // The wordy column from xl, so the figures fit without a sideways scroll on a narrower page (or beside a docked
+    // Assistant GM); each row's fold-out still has the notes.
+    { key: 'why', label: 'Context', hideBelow: 'xl', render: (id) => <ContextNotes context={data.context[id]} players={players} max={2} /> },
   ]
 
   const todate: Column<string>[] = [
@@ -350,12 +356,36 @@ const PlayersView = ({ data, analysis, sub, onSub }: { data: LeagueData; analysi
             defaultSort={basis === 'ahead' ? 'val' : 'war'}
             rowClass={(id) => cx(rosteredBy[id] === myRosterId && 'ff-mine')}
             onRowClick={(id) => openPlayer(id)}
-            canExpand={(id) => !!data.context[id]?.notes.length}
+            // Below xl the Base and vs ECR columns are hidden (so the row fits), and every row folds out to them.
+            canExpand={(id) => !!data.context[id]?.notes.length || (basis === 'ahead' && !xl)}
             // On a phone the notes stay closed until asked for: a few open ones push the list a screen apart.
             defaultOpen={(id) => !phone && prominent(data.context[id]?.notes)}
             expand={(id) => {
               const items = contextReasons(data.context[id], players)
-              return items.length ? <Reasons items={items} /> : null
+              const ecr = data.consensus?.byId[id]?.posRank
+              const figures =
+                basis === 'ahead' && !xl ? (
+                  // On the name's edge, as the notes below line their text up with it.
+                  <dl className="flex flex-wrap gap-x-5 gap-y-1 pl-[calc(var(--ff-reason-pl,0.75rem)+30px)] pr-3 pt-2 font-mono text-[11px] text-ff-muted">
+                    <div className="flex items-baseline gap-1.5" title="Per week before injury and role adjustments: Sleeper, with the coming week blended with prop lines">
+                      <dt>Base</dt>
+                      <dd className="num text-ff-text2">{fmt(data.context[id]?.raw ?? perWeek[id])}/wk</dd>
+                    </div>
+                    {data.consensus && (
+                      <div className="flex items-baseline gap-1.5" title="Consensus position rank minus the model’s. Positive: the model likes this player more than the experts do.">
+                        <dt>vs ECR</dt>
+                        <dd>{ecr != null && aheadRank[id] ? <Num value={ecr - aheadRank[id]} signed digits={0} /> : <span>–</span>}</dd>
+                      </div>
+                    )}
+                  </dl>
+                ) : null
+              if (!figures && !items.length) return null
+              return (
+                <div className="space-y-1.5">
+                  {figures}
+                  {items.length > 0 && <Reasons items={items} />}
+                </div>
+              )
             }}
             empty="No players match."
           />

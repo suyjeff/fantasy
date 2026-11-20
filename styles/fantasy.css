@@ -519,9 +519,26 @@ html.ff-page body {
     outline-color: transparent;
   }
 }
+/* A widget lays out by its own width, not the window's: a narrow one (a third of the board, or half of it beside a
+   docked Assistant GM) drops its optional columns, the ones marked sm:inline, so the names keep their room. */
+.ff .ff-widget-body {
+  container-type: inline-size;
+}
+@container (max-width: 459px) {
+  .ff .ff-widget-body .sm\:inline {
+    display: none;
+  }
+}
 /* Edit mode draws the twelve columns behind the widgets. */
+/* At xl, as the grid's classes read it: a wider window while Assistant GM is docked (tailwind.config.js). */
 @media (min-width: 1280px) {
-  .ff .ff-grid-guides {
+  html:not([data-asgm-dock]) .ff .ff-grid-guides {
+    background-image: linear-gradient(to right, rgb(var(--ff-accent) / 0.06) calc(100% - var(--ff-gl)), transparent 0);
+    background-size: calc((100% + var(--ff-gl)) / 12) 100%;
+  }
+}
+@media (min-width: 1680px) {
+  html[data-asgm-dock] .ff .ff-grid-guides {
     background-image: linear-gradient(to right, rgb(var(--ff-accent) / 0.06) calc(100% - var(--ff-gl)), transparent 0);
     background-size: calc((100% + var(--ff-gl)) / 12) 100%;
   }
@@ -1044,7 +1061,7 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   transition-timing-function: var(--ff-ease-out), ease, ease, ease, ease;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .ff :is(.ff-press, .ff-aqua):not(:disabled):active {
+  .ff :is(.ff-press, .ff-aqua):not(:disabled):not([aria-disabled='true']):active {
     scale: 0.97;
     transition-duration: 100ms;
   }
@@ -1746,5 +1763,343 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
   }
   .ff .tb-dialog-root[data-leaving] .tb-dialog {
     transform: none;
+  }
+}
+
+/* ---------- Assistant GM (components/assistant) ----------
+ * The GM at work should feel like work: steps tick and settle, a scan crosses whatever is running, cards land with
+ * their registration marks closing in and their frame settling from the accent to a hairline, figures count to where
+ * they land, and the answer streams behind a caret. Every state is also said in words or glyphs (a check, a cross,
+ * "Working"), never by motion alone, and under reduced motion every one of these is a plain fade or nothing. */
+
+/* Docked at the right from 1440px: the page makes room rather than being covered. The trade dock's minimized cards
+   and the page's sticky header move over with it. */
+html[data-asgm-dock] {
+  --asgm-w: 400px;
+}
+@media (min-width: 1800px) {
+  html[data-asgm-dock] {
+    --asgm-w: 440px;
+  }
+}
+.ff .asgm-dock {
+  width: var(--asgm-w, 400px);
+}
+@media (min-width: 1440px) {
+  html[data-asgm-dock] .ff > main {
+    padding-right: var(--asgm-w);
+  }
+  html[data-asgm-dock] .ff .asgm-clear {
+    right: calc(16px + var(--asgm-w));
+    max-width: calc(100vw - 32px - var(--asgm-w));
+  }
+}
+
+/* The window rises out of its corner; the dock slides in from the edge. */
+@keyframes asgm-float-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+}
+@keyframes asgm-dock-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+.ff .asgm-float {
+  transform-origin: 100% 100%;
+  animation: asgm-float-in 200ms var(--ff-ease-out);
+}
+.ff .asgm-dock {
+  animation: asgm-dock-in 220ms var(--ff-ease-drawer);
+}
+
+/* Registration marks on the window's and the page's frame, as the reveal draws them. */
+.ff .asgm-reg {
+  position: absolute;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  pointer-events: none;
+  border-color: rgb(var(--ff-accent));
+  border-style: solid;
+  border-width: 0;
+}
+.ff .asgm-reg-tl {
+  left: -1px;
+  top: -1px;
+  border-left-width: 1px;
+  border-top-width: 1px;
+}
+.ff .asgm-reg-br {
+  right: -1px;
+  bottom: -1px;
+  border-right-width: 1px;
+  border-bottom-width: 1px;
+}
+
+/* The engineering-sheet ground behind the welcome. */
+.ff .asgm-grid {
+  background-image: radial-gradient(rgb(var(--ff-text) / 0.1) 1px, transparent 1.3px);
+  background-size: 12px 12px;
+  background-position: -6px -6px;
+  mask-image: linear-gradient(115deg, transparent 20%, black 85%);
+}
+.ff .asgm-hero {
+  background: linear-gradient(180deg, rgb(var(--ff-accent) / 0.05), transparent 70%), rgb(var(--ff-panel));
+}
+.ff .asgm-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 48px;
+  height: 2px;
+  background: rgb(var(--ff-accent));
+}
+
+/* A name in an answer: a link, marked by a dotted rule (not by colour alone), lit like the app's names on hover. */
+.ff .asgm-link {
+  display: inline;
+  padding: 0;
+  font: inherit;
+  color: rgb(var(--ff-text));
+  text-align: inherit;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: rgb(var(--ff-accent) / 0.55);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color 120ms ease-out;
+}
+@media (hover: hover) {
+  .ff .asgm-link:hover {
+    color: rgb(var(--ff-accent));
+    text-decoration-style: solid;
+  }
+}
+.ff .asgm-link:focus-visible {
+  outline: 2px solid rgb(var(--ff-accent));
+  outline-offset: 1px;
+}
+
+/* The caret the answer streams behind: a block, blinking on the house's step. */
+.ff .asgm-caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.17em;
+  background: rgb(var(--ff-accent));
+  animation: ff-blink 1s steps(1) infinite;
+}
+
+/* "Working…": three dots that count up. */
+.ff .asgm-dots::after {
+  content: '…';
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+  animation: asgm-dots 1.2s steps(1) infinite;
+}
+@keyframes asgm-dots {
+  0% { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+}
+
+/* A step running: its square turns a quarter at a time, and a scan crosses the row. Done, its detail fades up. */
+.ff .asgm-tick {
+  animation: asgm-tick 800ms steps(4) infinite;
+}
+@keyframes asgm-tick {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ff .asgm-step.is-running::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgb(var(--ff-accent) / 0.1) 45%, rgb(var(--ff-accent) / 0.16) 50%, transparent 58%);
+  background-size: 220% 100%;
+  animation: asgm-scan 1.3s linear infinite;
+}
+@keyframes asgm-scan {
+  from {
+    background-position: 160% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+.ff .asgm-step.is-fresh {
+  animation: asgm-step-in 220ms var(--ff-ease-out) both;
+}
+@keyframes asgm-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.ff .asgm-step .asgm-detail:not(:empty) {
+  animation: ff-fade-in 260ms var(--ff-ease-out);
+}
+/* The live log's top edge carries a thin scan of its own. */
+.ff .asgm-log {
+  position: relative;
+}
+.ff .asgm-log.is-live::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(var(--ff-accent)) 50%, transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: asgm-rule 1.6s var(--ff-ease-in-out) infinite;
+}
+@keyframes asgm-rule {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}
+
+/* A card lays out by its own width. Narrow (a phone, a 320px window), an odds row gives its team the whole first
+   line and draws the bar under it, so a name is never cut to two letters to make room for the bar. */
+.ff .asgm-card {
+  container-type: inline-size;
+}
+@container (max-width: 380px) {
+  .ff .asgm-odds {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'name figs' 'bar bar';
+    row-gap: 4px;
+  }
+  .ff .asgm-odds-name {
+    grid-area: name;
+  }
+  .ff .asgm-odds-bar {
+    grid-area: bar;
+  }
+  .ff .asgm-odds-figs {
+    grid-area: figs;
+  }
+}
+
+/* A card landing: it rises in, its corners close in from outside, and its frame settles from the accent. */
+.ff .asgm-card.is-fresh {
+  animation:
+    asgm-card-in 320ms var(--ff-ease-out) var(--d, 0ms) both,
+    asgm-card-settle 1100ms ease-out var(--d, 0ms) both;
+}
+@keyframes asgm-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes asgm-card-settle {
+  from {
+    border-color: rgb(var(--ff-accent) / 0.8);
+  }
+}
+.ff .asgm-corner {
+  position: absolute;
+  z-index: 1;
+  width: 6px;
+  height: 6px;
+  pointer-events: none;
+  border-color: rgb(var(--ff-accent));
+  border-style: solid;
+  border-width: 0;
+  opacity: 0;
+}
+.ff .asgm-corner-tl { left: -1px; top: -1px; border-left-width: 1px; border-top-width: 1px; --cx: -6px; --cy: -6px; }
+.ff .asgm-corner-tr { right: -1px; top: -1px; border-right-width: 1px; border-top-width: 1px; --cx: 6px; --cy: -6px; }
+.ff .asgm-corner-bl { left: -1px; bottom: -1px; border-left-width: 1px; border-bottom-width: 1px; --cx: -6px; --cy: 6px; }
+.ff .asgm-corner-br { right: -1px; bottom: -1px; border-right-width: 1px; border-bottom-width: 1px; --cx: 6px; --cy: 6px; }
+.ff .asgm-card.is-fresh .asgm-corner {
+  animation: asgm-corner 1100ms var(--ff-ease-out) var(--d, 0ms) both;
+}
+@keyframes asgm-corner {
+  0% {
+    opacity: 0;
+    transform: translate(var(--cx), var(--cy));
+  }
+  30% {
+    opacity: 1;
+    transform: none;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The AI mark turns slowly while the GM works; the badge's corner ticks breathe with it. */
+.ff .asgm-sparkle .asgm-sparkle-a,
+.ff .asgm-sparkle .asgm-sparkle-b {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.ff .asgm-sparkle.is-live .asgm-sparkle-a {
+  animation: asgm-twinkle 1.6s var(--ff-ease-in-out) infinite;
+}
+.ff .asgm-sparkle.is-live .asgm-sparkle-b {
+  animation: asgm-twinkle 1.6s var(--ff-ease-in-out) 0.4s infinite;
+}
+@keyframes asgm-twinkle {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: rotate(90deg) scale(0.7);
+    opacity: 0.6;
+  }
+}
+.ff .asgm-badge.is-live > span:not(:last-child) {
+  animation: ff-pulse 1.4s steps(2, jump-none) infinite;
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .ff .asgm-trigger:hover .asgm-sparkle-a,
+  .ff .asgm-ask:hover .asgm-sparkle-a {
+    animation: asgm-twinkle 900ms var(--ff-ease-in-out) 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff :is(.asgm-float, .asgm-card.is-fresh, .asgm-step.is-fresh) {
+    animation: ff-fade-in 160ms ease-out both;
+  }
+  .ff .asgm-dock {
+    animation: ff-fade-in 160ms ease-out;
+  }
+  .ff :is(.asgm-tick, .asgm-caret) {
+    animation: none;
+  }
+  /* The same selectors as the live rules above, so these win on order rather than losing on specificity. */
+  .ff .asgm-sparkle.is-live .asgm-sparkle-a,
+  .ff .asgm-sparkle.is-live .asgm-sparkle-b,
+  .ff .asgm-badge.is-live > span:not(:last-child) {
+    animation: none;
+  }
+  .ff .asgm-dots::after {
+    animation: none;
+  }
+  .ff .asgm-step.is-running::after,
+  .ff .asgm-log.is-live::before,
+  .ff .asgm-corner {
+    display: none;
   }
 }

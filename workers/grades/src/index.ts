@@ -14,9 +14,20 @@ import { LEAGUE_ID } from './links'
 import { handlePost as handleShare, serve as serveShare, type ShareKV } from './share'
 import { handleTradePost, serveTrade } from './trade'
 import { cleanGrade, clientKey, clientOf, contribute, LIMITS, priorFor, type Contribution, type StoredGrade, type Sum } from './aggregate'
+import { handleChat, handleStatus, type AiBinding, type AsgmEnv } from './assistant'
+import type { MeterNamespace } from './meter'
+
+// The Assistant GM's meter, a SQLite-backed Durable Object (wrangler.toml): exported from the main module, as wrangler wants.
+export { AsgmMeter } from './meter'
 
 export interface Env {
   GRADES: ShareKV
+  /** The assistant's allowances, one SQLite-backed Durable Object (src/meter.ts). */
+  ASGM_METER?: MeterNamespace
+  /** Workers AI ([ai] binding in wrangler.toml): the assistant's fallback model, metered by ASGM_METER. */
+  AI?: AiBinding
+  /** Optional secret: the assistant's first-choice model on Groq's free tier (`wrangler secret put GROQ_API_KEY`). */
+  GROQ_API_KEY?: string
 }
 
 const LEAGUE = LEAGUE_ID
@@ -160,6 +171,11 @@ export default {
     if (!origin) return send({ error: 'origin not allowed' }, 403, null)
     const ip = req.headers.get('cf-connecting-ip') ?? 'unknown'
     try {
+      if (url.pathname === '/assistant/chat' && req.method === 'POST') return await handleChat(req, env as unknown as AsgmEnv, origin, ip)
+      if (url.pathname === '/assistant/status' && req.method === 'GET') {
+        if (limited(`as:${ip}`, 60)) return send({ error: 'slow down' }, 429, origin, { 'retry-after': '60' })
+        return await handleStatus(url, env as unknown as AsgmEnv, origin, ip)
+      }
       if (url.pathname === '/share' && req.method === 'POST') return await handleShare(req, env, origin, ip)
       if (url.pathname === '/trade' && req.method === 'POST') return await handleTradePost(req, env, origin, ip)
       if (url.pathname === '/grades' && req.method === 'POST') {

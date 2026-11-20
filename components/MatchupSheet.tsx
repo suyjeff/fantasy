@@ -2,7 +2,8 @@ import React from 'react'
 import { useFantasy } from './FantasyContext'
 import { Benches, Deciders, LineupDuel, decidedBy, useMatchups } from './matchup'
 import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
-import { Avatar, Badge, odds } from './ui'
+import { Avatar, Badge, odds, pct } from './ui'
+import { AskGm } from './assistant/AsgmButtons'
 
 /**
  * One fantasy matchup over the page: the score as it stands and where it is heading, what it is worth to each side,
@@ -73,6 +74,29 @@ const MatchupSheet = ({ week, a, b }: { week: number; a: number; b: number }) =>
           <span className="num text-[15px] font-medium text-ff-text">{worth(stA) != null && worth(stB) != null ? `${worth(stA)} / ${worth(stB)}` : '…'}</span>
           <span className="ml-1.5 text-[10.5px] text-ff-muted">playoff points at stake</span>
         </div>
+        {(() => {
+          // Your own matchup, still to be decided and not a sure thing: what can you still do to win it?
+          const me = analysis.myRosterId
+          const mine = me === a || me === b
+          const done = m.kindA === 'final' && m.kindB === 'final'
+          const p = me === a ? m.p : 1 - m.p
+          if (!mine || done || p > 0.85 || p < 0.1) return null
+          const opp = me === a ? B : A
+          const label = `${A?.name ?? '?'} vs ${B?.name ?? '?'}, wk ${week}`
+          return (
+            <div className="flex items-center justify-between gap-3 border-b border-ff-line px-4 py-2">
+              <span className="min-w-0 truncate text-[12px] text-ff-text2">
+                You&apos;re {pct(p)} to win
+                {m.close ? ': a close one' : ''}
+              </span>
+              <AskGm
+                prompt={`How do I beat ${opp?.name ?? 'them'} in week ${week}? I'm ${pct(p)} to win${deciding ? `, and it comes down to ${deciding}` : ''}.`}
+                leave={close}
+                context={{ view: 'sheet/matchup', label, focus: { kind: 'matchup', week, rosterIds: [a, b], label } }}
+              />
+            </div>
+          )
+        })()}
         {(stA || stB) && (
           <p className="px-4 py-3 text-[12.5px] leading-[1.5] text-ff-text2">
             {stA && (

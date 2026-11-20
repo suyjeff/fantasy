@@ -454,7 +454,9 @@ const TradesView = ({
               </Empty>
             ) : (
               <>
-                <div className="ff-grid-gap grid grid-cols-1 lg:grid-cols-2">
+                {/* Two across only where each card gets the room it is laid out for (its send and get side by side), by
+                    the page's own width rather than the window's: one column beside a docked Assistant GM. */}
+                <div className="ff-grid-gap grid grid-cols-1 lg:grid-cols-[repeat(auto-fill,minmax(min(100%,500px),1fr))]">
                   {shown.slice(0, visible).map((versions) => (
                     <TradeCard
                       key={`${versions[0].partnerId}:${versions[0].get.join('+')}`}

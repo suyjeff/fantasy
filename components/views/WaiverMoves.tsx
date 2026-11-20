@@ -11,6 +11,7 @@ import { Badge, Button, Empty, N, Panel, Reasons, Stat, StatGrid, cx, fmt, fmtSi
 import { Callout } from '../Callout'
 import { InsightMark } from '../InsightMark'
 import { Disclosure } from '../Disclosure'
+import { AskGm } from '../assistant/AsgmButtons'
 
 /** The bid's basis in words, so a range of "$1-1" never has to explain itself. */
 const bidNote = (b: BidAdvice, min: number) =>
@@ -37,6 +38,7 @@ const MoveCard = ({
   why,
   alts,
   mark,
+  ask,
 }: {
   rank: number
   add: string
@@ -50,6 +52,8 @@ const MoveCard = ({
   why: Reason[]
   alts: { id: string; text: React.ReactNode }[]
   mark?: React.ReactNode
+  /** Assistant GM, for a bid that is a real judgement call. */
+  ask?: React.ReactNode
 }) => {
   const { data } = useFantasy()
   const players = data.players
@@ -89,6 +93,7 @@ const MoveCard = ({
             <dt className="ff-label">Bid</dt>
             <dd className={cx('num mt-1 text-[20px] font-medium leading-none', bid ? 'text-ff-text' : 'text-ff-muted')}>{bid ? `$${bid.amount}` : '–'}</dd>
             <dd className="mt-1 text-[11px] leading-snug text-ff-muted">{bid ? bid.note : 'no FAAB in this league'}</dd>
+            {ask && <dd className="mt-1.5">{ask}</dd>}
           </div>
         </dl>
         {(why.length > 0 || alts.length > 0) && (
@@ -329,6 +334,16 @@ const WaiverMoves = ({
                   why={caseFor(u.id, u.pos, bid)}
                   alts={u.alts.map((a) => ({ id: a.id, text: <N tone="pos">{fmtSigned(a.add, 1)}</N> }))}
                   mark={lowValue && i === 0 ? <InsightMark label="best add" title="The note below is about this add" /> : undefined}
+                  ask={
+                    // A bid is a judgement call when the league's going rate is a range and it is real money, or rivals
+                    // want him too: the top three such adds get a second opinion.
+                    bid && faab && i < 3 && bid.bid > faab.minBid && (bid.high > bid.low || others.some((r) => analysis.needs[r]?.worstPos === u.pos)) ? (
+                      <AskGm
+                        prompt={`How much should I bid on ${players[u.id]?.name}${u.drop ? `, dropping ${players[u.drop]?.name}` : ''}? The app says $${bid.bid}; the league pays $${bid.low}–${bid.high} for this and I have $${mine} left.`}
+                        context={{ view: 'waivers/moves', label: `Waivers: ${players[u.id]?.name}`, focus: { kind: 'waivers', rosterId: me!, label: 'Your waiver moves' } }}
+                      />
+                    ) : undefined
+                  }
                 />
               )
             })}

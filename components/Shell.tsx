@@ -2,12 +2,12 @@ import React, { useEffect, useLayoutEffect, useRef, useState, type ReactNode } f
 import Head from 'next/head'
 import { MONKE } from './brand'
 import Tour, { TOUR } from './Tour'
-import { PanelIcon } from './icons'
+import { FootballIcon, PanelIcon, Sparkle } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { lockScroll } from './scrollLock'
 import { Avatar, Dropdown, PhoneBarContext, cx, shortcutLabel, usePhone, type PhoneBarSlot } from './ui'
 
-export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'matchups', 'power', 'playoffs', 'teams', 'players', 'monke', 'model'] as const
+export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'matchups', 'power', 'playoffs', 'teams', 'players', 'monke', 'model', 'gm'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 type Group = 'Overview' | 'Your team' | 'League' | 'Engine'
@@ -27,13 +27,15 @@ export const SECTIONS: Section[] = [
   { key: 'players', label: 'Players', short: 'Players', group: 'League' },
   { key: 'monke', label: 'M.O.N.K.E.', short: 'MONKE', group: 'Engine' },
   { key: 'model', label: 'Tuning', short: 'Tuning', group: 'Engine' },
+  // Last in the register, so it takes no number; its key is G. It is listed with your team.
+  { key: 'gm', label: 'Assistant GM', short: 'GM', group: 'Your team' },
 ]
 const GROUPS: Group[] = ['Overview', 'Your team', 'League', 'Engine']
 
 export { MONKE }
 
-/** The two-digit register number shown beside a section, which is also its keyboard shortcut. */
-export const sectionCode = (key: SectionKey) => String(SECTIONS.findIndex((s) => s.key === key) + 1).padStart(2, '0')
+/** The two-digit register number shown beside a section, which is also its keyboard shortcut (Assistant GM's is G). */
+export const sectionCode = (key: SectionKey) => (key === 'gm' ? 'G' : String(SECTIONS.findIndex((s) => s.key === key) + 1).padStart(2, '0'))
 
 /** What the phone's bottom bar carries; everything else lives in the drawer. */
 const TAB_BAR: SectionKey[] = ['dash', 'slate', 'trades', 'me']
@@ -71,6 +73,8 @@ export type ShellProps = {
   onSidebar?: (open: boolean) => void
   /** A banner at the foot of the sections, above the settings (the weekly power-rank reveal). Given the drawer's close on phones. */
   navFooter?: (close?: () => void) => ReactNode
+  /** Assistant GM's button for the phone's top bar, beside Find. */
+  assistant?: ReactNode
 }
 
 /** The wordmark. Shared by the shell and onboarding. */
@@ -247,7 +251,7 @@ const SidebarBody = ({
                 data-tour-key={key}
                 onClick={() => onNavigate(key)}
                 aria-current={active ? 'page' : undefined}
-                aria-keyshortcuts={i <= 9 ? String(i) : i === 10 ? '0' : undefined}
+                aria-keyshortcuts={key === 'gm' ? 'G' : i <= 9 ? String(i) : i === 10 ? '0' : undefined}
                 title={key === 'monke' ? MONKE.long : undefined}
                 className={cx(
                   'group flex h-11 w-full items-center gap-3 px-3 text-left text-[14px] transition-colors md:h-7 md:text-[13px]',
@@ -258,13 +262,22 @@ const SidebarBody = ({
                       : 'text-ff-text2 hover:bg-ff-raised/60 hover:text-ff-text',
                 )}
               >
-                {/* Numbers are keyboard shortcuts, so phones (the drawer) leave them out. */}
-                <span className={cx('num hidden w-4 text-[10.5px] md:inline', active ? 'text-ff-text' : 'text-ff-muted')}>{String(i).padStart(2, '0')}</span>
-                <span className={cx('flex-1', active && 'font-medium')}>{label}</span>
-                {/* 1–9 then 0 for the tenth; past that a section has no key. */}
-                {i <= 10 && (
+                {/* Numbers are keyboard shortcuts, so phones (the drawer) leave them out. Assistant GM has its ball. */}
+                {key === 'gm' ? (
+                  <span aria-hidden className="flex w-4 justify-center text-ff-accent max-md:-ml-0.5 max-md:w-5">
+                    <FootballIcon size={13} />
+                  </span>
+                ) : (
+                  <span className={cx('num hidden w-4 text-[10.5px] md:inline', active ? 'text-ff-text' : 'text-ff-muted')}>{String(i).padStart(2, '0')}</span>
+                )}
+                <span className={cx('flex flex-1 items-center gap-1', active && 'font-medium')}>
+                  {label}
+                  {key === 'gm' && <Sparkle size={8} className="-mt-2" />}
+                </span>
+                {/* 1–9 then 0 for the tenth; past that a section has no key (Assistant GM's is G). */}
+                {(i <= 10 || key === 'gm') && (
                   <kbd className="hidden h-[18px] min-w-[18px] items-center justify-center border border-ff-line px-1 font-mono text-[10px] text-ff-muted group-hover:inline-flex md:inline-flex md:opacity-0 md:group-hover:opacity-100">
-                    {i === 10 ? 0 : i}
+                    {key === 'gm' ? 'G' : i === 10 ? 0 : i}
                   </kbd>
                 )}
               </button>
@@ -452,6 +465,7 @@ const Shell = (props: ShellProps) => {
           <div className="truncate text-[15px] font-medium">{bar ? bar.title : current?.label}</div>
           {(bar ? bar.sub : leagueName) && <div className="truncate font-mono text-[10.5px] text-ff-muted">{bar ? bar.sub : leagueName}</div>}
         </div>
+        {props.assistant}
         {props.onSearch && (
           <button onClick={props.onSearch} className="flex h-full items-center border-l border-ff-line px-3 font-mono text-[11px] tracking-[0.1em] text-ff-text2" aria-label="Find a page, player or team">
             FIND
@@ -481,7 +495,7 @@ const Shell = (props: ShellProps) => {
 
       <main className={cx('max-w-full overflow-x-clip pt-[var(--ff-top)] md:pt-0', sidebarOpen && 'md:pl-[calc(220px+env(safe-area-inset-left))]')}>
         <PhoneBarContext.Provider value={setBar}>
-          <div ref={page} className={cx('ff-gutter mx-auto pb-24 md:pb-12', section === 'dash' ? 'max-w-none' : 'max-w-[1440px]')}>{children}</div>
+          <div ref={page} className={cx('ff-gutter mx-auto', section === 'gm' ? 'pb-[calc(48px+env(safe-area-inset-bottom)+10px)] md:pb-2' : 'pb-24 md:pb-12', section === 'dash' ? 'max-w-none' : 'max-w-[1440px]')}>{children}</div>
         </PhoneBarContext.Provider>
       </main>
 
