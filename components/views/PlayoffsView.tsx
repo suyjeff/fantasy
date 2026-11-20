@@ -7,6 +7,7 @@ import { Bracket, CHAOS, Delta, Feed, Headline, Standings, setupKey, type Chaos 
 import TeamName from '../TeamName'
 import { Avatar, Button, Empty, FadeStrip, Meter, PageHeader, Panel, Segmented, Stat, StatGrid, TabSection, Tabs, cx, fmt, odds, pct, probShade, usePhone, type PageChange } from '../ui'
 import { Callout } from '../Callout'
+import { AskGm } from '../assistant/AsgmButtons'
 import { OddsGrid } from './PowerView'
 
 // What if is a page of its own on phones only; on wide screens it sits beside the race.
@@ -259,6 +260,18 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
           <Button size="sm" variant="ghost" onClick={reset} className="ml-auto">
             Reset
           </Button>
+        )}
+        {/* While your spot is still in doubt: which results matter, and what you can do about them. */}
+        {me != null && f.sim[me] && f.sim[me].clinch == null && f.sim[me].playoffs > 0.03 && f.sim[me].playoffs < 0.97 && weeks.length > 0 && (
+          <AskGm
+            className={tweaked ? undefined : 'ml-auto'}
+            prompt={
+              tweaked
+                ? `With ${[nLocks > 0 ? `${nLocks} result${nLocks === 1 ? '' : 's'} picked` : '', chaosLabel].filter(Boolean).join(' and ')}, my playoff odds go from ${odds(f.sim[me].playoffs)} to ${odds(scenario[me]?.playoffs ?? f.sim[me].playoffs)}. What does that mean for my moves?`
+                : `I'm ${odds(f.sim[me].playoffs)} to make the playoffs. Which games matter most, and what should I do to raise my odds?`
+            }
+            context={{ view: 'playoffs/whatif', label: tweaked ? `Playoff what-ifs: ${[nLocks > 0 ? `${nLocks} picked` : '', chaosLabel].filter(Boolean).join(', ')}` : 'Playoff odds' }}
+          />
         )}
       </div>
       {weeks.length === 0 ? (

@@ -48,6 +48,11 @@ import { useReveal } from '../components/useReveal'
 import { useDeepLink } from '../components/useDeepLink'
 import DeepLinkNote from '../components/DeepLinkNote'
 import { SharedTradeOpener } from '../components/TradeShare'
+import { AsgmProvider } from '../components/assistant/AsgmProvider'
+import { AsgmHost, AsgmRoute } from '../components/assistant/AsgmHost'
+import { AsgmHeaderButton, AsgmTopBarButton } from '../components/assistant/AsgmButtons'
+import AsgmPage from '../components/assistant/AsgmPage'
+import { PageTrailContext } from '../components/ui'
 
 const PREFS_KEY = 'ff:prefs'
 
@@ -271,6 +276,10 @@ const FantasyPage = () => {
   const analysis = useMemo(() => (core && prefs ? withWeights(core, prefs.weights) : null), [core, prefs?.weights]) // eslint-disable-line react-hooks/exhaustive-deps
   const history = useMemo(() => (loaded && coreLoaded ? buildHistory(loaded, coreLoaded) : null), [loaded, coreLoaded])
   const models = useMemo(() => (data && core && history ? buildModels(data, core, history) : null), [data, core, history])
+  // What Assistant GM reads, and its button for every page header (kept steady, so headers don't re-render for it).
+  const asgmLeague = useMemo(() => (data && analysis && models ? { data, analysis, models } : null), [data, analysis, models])
+  const goGm = useCallback(() => route.go('gm'), [route.go]) // eslint-disable-line react-hooks/exhaustive-deps
+  const asgmTrail = useMemo(() => <AsgmHeaderButton />, [])
 
   // The one detail sheet, over whatever page you are on. Opening another from inside it swaps the content in place
   // and keeps a short trail back; the same thing twice in a row is one entry.
@@ -425,7 +434,11 @@ const FantasyPage = () => {
   }
 
   return (
+    // Assistant GM sits above the shell, so the shell's own buttons (the phone's top bar) and every page header can open it.
+    <AsgmProvider league={data && analysis && models ? asgmLeague : null} leagueId={data?.league.league_id ?? null} onPage={section === 'gm'} goPage={goGm}>
+    <PageTrailContext.Provider value={asgmTrail}>
     <Shell
+      assistant={<AsgmTopBarButton />}
       section={section}
       onNavigate={(s) => route.go(s)}
       title={title}
@@ -520,6 +533,7 @@ const FantasyPage = () => {
           {section === 'players' && <PlayersView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'slate' && <SlateView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'matchups' && <MatchupsView />}
+          {section === 'gm' && <AsgmPage />}
           {section === 'playoffs' && <PlayoffsView sub={route.sub} onSub={route.setSub} />}
           {(section === 'model' || section === 'monke') && (
             <ModelView
@@ -537,6 +551,8 @@ const FantasyPage = () => {
             />
           )}
         </div>
+        <AsgmRoute section={section} sub={route.sub} />
+        <AsgmHost />
         {sheets.length > 0 && <SheetHost stack={sheets} onBack={backSheet} onClose={closeSheet} />}
         <RevealHost api={reveal} />
         <SharedTradeOpener trade={deepLink.trade} finish={deepLink.finish} />
@@ -584,6 +600,8 @@ const FantasyPage = () => {
         )
       )}
     </Shell>
+    </PageTrailContext.Provider>
+    </AsgmProvider>
   )
 }
 

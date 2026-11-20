@@ -121,6 +121,12 @@ export type PhoneBarSlot = { title: ReactNode; sub?: ReactNode } | null
 /** Provided by the shell; `PageHeader` uses it so a page can name itself in the top bar. */
 export const PhoneBarContext = createContext<(slot: PhoneBarSlot) => void>(() => {})
 
+/**
+ * What sits at the far right of every page's title row on a wide screen, after the page's own actions: Assistant GM's
+ * button (components/assistant). Provided once, above the pages.
+ */
+export const PageTrailContext = createContext<ReactNode>(null)
+
 /** The text a node shows, to tell whether it changed without comparing elements that are new on every render. */
 const nodeText = (n: ReactNode): string => {
   if (n == null || typeof n === 'boolean') return ''
@@ -160,6 +166,7 @@ export const PageHeader = ({
 }) => {
   const phone = usePhone()
   const setBar = useContext(PhoneBarContext)
+  const trail = useContext(PageTrailContext)
   // The title and meta are usually fresh elements each render, so the bar follows their text, not their identity.
   const latest = useRef({ title, meta })
   latest.current = { title, meta }
@@ -202,7 +209,17 @@ export const PageHeader = ({
             <h1 className="hidden min-w-0 truncate text-[15px] font-medium leading-tight tracking-[-0.01em] text-ff-text md:block">{title}</h1>
             {meta && <span className="min-w-0 truncate font-mono text-[10.5px] text-ff-muted">{meta}</span>}
           </div>
-          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+          {(actions || trail) && (
+            <div className="flex shrink-0 items-center gap-2">
+              {actions}
+              {trail && (
+                <>
+                  {actions && <span aria-hidden className="mx-0.5 h-4 w-px bg-ff-line" />}
+                  {trail}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
       {tabs && <div className={cx('ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 md:top-11', glass)}>{tabs}</div>}
@@ -453,6 +470,33 @@ export const Segmented = <K extends string>({
 
 /** The command palette's shortcut as this platform writes it. */
 export const shortcutLabel = () => (typeof navigator !== 'undefined' && /Mac|iP(hone|ad|od)/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K')
+
+/**
+ * Whether the page is at xl as the `xl:` classes read it: 1280px of page, so a 1680px window while Assistant GM is
+ * docked beside it (tailwind.config.js). For a choice made in script that has to agree with what an xl: class shows.
+ */
+export const useXl = () => {
+  const read = () =>
+    typeof window !== 'undefined' && window.matchMedia(document.documentElement.hasAttribute('data-asgm-dock') ? '(min-width: 1680px)' : '(min-width: 1280px)').matches
+  // Starts false on the server and on the first client render alike, then reads the page in the effect: no hydration mismatch.
+  const [xl, setXl] = useState(false)
+  useEffect(() => {
+    const update = () => setXl(read())
+    const a = window.matchMedia('(min-width: 1280px)')
+    const b = window.matchMedia('(min-width: 1680px)')
+    a.addEventListener('change', update)
+    b.addEventListener('change', update)
+    const mo = new MutationObserver(update)
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-asgm-dock'] })
+    update()
+    return () => {
+      a.removeEventListener('change', update)
+      b.removeEventListener('change', update)
+      mo.disconnect()
+    }
+  }, [])
+  return xl
+}
 
 /** Whether a media query matches, kept live across rotation and resizing. */
 export const useMedia = (query: string) => {

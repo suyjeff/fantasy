@@ -5,3 +5,17 @@ compatibility_date = "2025-01-01"
 [[kv_namespaces]]
 binding = "GRADES"
 id = "bbfa6a461a7f4fb2806cf2092dd3063e"
+
+# Workers AI, the Assistant GM's fallback model (src/assistant.ts meters it under the free 10,000 neurons a day).
+[ai]
+binding = "AI"
+
+# The Assistant GM's meter: every allowance it keeps, in one SQLite-backed Durable Object (src/meter.ts). SQLite
+# Durable Objects are on the Workers Free plan.
+[[durable_objects.bindings]]
+name = "ASGM_METER"
+class_name = "AsgmMeter"
+
+[[migrations]]
+tag = "asgm-v1"
+new_sqlite_classes = ["AsgmMeter"]

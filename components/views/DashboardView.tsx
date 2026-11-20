@@ -182,7 +182,8 @@ const DashboardView = () => {
     e.stopPropagation()
     const el = e.currentTarget
     el.setPointerCapture(e.pointerId)
-    const wide = window.matchMedia('(min-width: 1280px)').matches
+    // xl, as the grid's classes read it: 1280px of page, so a wider window while Assistant GM is docked (tailwind.config.js).
+    const wide = window.matchMedia(document.documentElement.hasAttribute('data-asgm-dock') ? '(min-width: 1680px)' : '(min-width: 1280px)').matches
     const GAP = parseFloat(getComputedStyle(grid.current).columnGap) || 8
     const colW = (grid.current.clientWidth - GAP * 11) / 12
     const x0 = e.clientX
@@ -341,7 +342,7 @@ const DashboardView = () => {
                     </button>
                   </span>
                 </header>
-                <div className="ff-scroll min-h-0 flex-1 overflow-auto">
+                <div className="ff-widget-body ff-scroll min-h-0 flex-1 overflow-auto">
                   <Body sel={sel} select={(s) => setSelection((all) => ({ ...all, [key]: { ...(all[key] ?? {}), ...s } }))} w={w.w} h={w.h} />
                 </div>
                 {/* Selection frame, in the manner of a design tool: an accent outline, square handles on the

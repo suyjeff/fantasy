@@ -16,6 +16,8 @@ import { useNews } from '../useNews'
 import type { NewsItem } from '../../lib/news'
 import { Button, DeltaChip, Empty, Num, PageHeader, Panel, REASON_MARK, Segmented, Stat, StatGrid, Swap, Table, TabSection, GridFill, Tabs, ago, cx, fmt, fmtSigned, pct, usePhone, type PageChange, type Reason } from '../ui'
 import { Callout } from '../Callout'
+import { AskGm } from '../assistant/AsgmButtons'
+import { lastName } from '../../lib/names'
 import RosterTable, { type Basis } from './RosterTable'
 import { BOX_LINE, WeekScore } from '../ui'
 import { useSlate } from '../useSlate'
@@ -220,6 +222,25 @@ const MeView = ({
     return w && w.kind !== 'proj' ? boxScore(w.line, players[id!]?.pos ?? '').join(' · ') || null : null
   }
   const swaps = lineupRows.filter((r) => r.swap)
+  // A start the projections barely separate: the starter and the bench player who could take his slot, within a point.
+  // Only those get an Ask GM; a clear call needs no second opinion.
+  const surname = (id: string) => (players[id] ? lastName(players[id].name) : id)
+  const closeCall = (() => {
+    if (!proj || weekOn) return null
+    const set = new Set(lineupRows.map((r) => r.id).filter(Boolean))
+    const bench = me.players.filter((id) => !set.has(id) && players[id] && (proj[id] ?? 0) > 0)
+    let best: { start: string; bench: string; gap: number } | null = null
+    for (const r of lineupRows) {
+      if (!r.id || r.swap || r.shift) continue
+      for (const b of bench) {
+        if (!players[b].fpos.some((f) => r.eligible.includes(f))) continue
+        const gap = (proj[r.id] ?? 0) - (proj[b] ?? 0)
+        if (gap >= 0 && gap < 1 && (!best || gap < best.gap)) best = { start: r.id, bench: b, gap }
+      }
+    }
+    return best
+  })()
+  const lineupCtx = week != null ? { view: 'me/overview', label: `Your lineup, wk ${week}`, focus: { kind: 'lineup' as const, rosterId: me.rosterId, week, label: `Week ${week} lineup` } } : undefined
   const shifts = lineupRows.filter((r) => r.shift)
   // Every change the best lineup makes, whether or not it fits one slot: the one number the badge and the stat share.
   const changes = lineupCheck?.changes ?? 0
@@ -269,18 +290,29 @@ const MeView = ({
           <div className="border-b border-ff-line">
             <Callout kind="insight" compact>
               <ul className="space-y-0.5 text-ff-text">
-                {swaps.map((r) => (
-                  <li key={r.i}>
-                    Start {players[r.swap!]?.name} <span className="num text-ff-text2">{fmt(proj?.[r.swap!])}</span>
-                    {r.id ? (
-                      <>
-                        {' '}over {players[r.id]?.name} <span className="num text-ff-text2">{fmt(proj?.[r.id])}</span>
-                      </>
-                    ) : (
-                      <> in the empty {r.slot} slot</>
-                    )}
-                  </li>
-                ))}
+                {swaps.map((r) => {
+                  // Within a point and a half, the projections alone don't settle it: worth a second opinion.
+                  const close = r.id && proj ? Math.abs((proj[r.swap!] ?? 0) - (proj[r.id] ?? 0)) < 1.5 : false
+                  return (
+                    <li key={r.i}>
+                      Start {players[r.swap!]?.name} <span className="num text-ff-text2">{fmt(proj?.[r.swap!])}</span>
+                      {r.id ? (
+                        <>
+                          {' '}over {players[r.id]?.name} <span className="num text-ff-text2">{fmt(proj?.[r.id])}</span>
+                        </>
+                      ) : (
+                        <> in the empty {r.slot} slot</>
+                      )}
+                      {close && r.id && (
+                        <AskGm
+                          className="ml-2 align-[1px]"
+                          prompt={`Start ${players[r.swap!]?.name} or ${players[r.id]?.name} at ${r.slot} in week ${week}? They project ${fmt(proj?.[r.swap!])} and ${fmt(proj?.[r.id])}.`}
+                          context={lineupCtx}
+                        />
+                      )}
+                    </li>
+                  )
+                })}
                 {shifts.map((r) => (
                   <li key={`shift-${r.i}`}>
                     Start {players[r.shift!]?.name} <span className="num text-ff-text2">{fmt(proj?.[r.shift!])}</span> in {r.id ? <>{players[r.id]?.name}'s</> : 'the empty'} {r.slot} slot, shifting starters between slots to fit
@@ -295,6 +327,20 @@ const MeView = ({
             Your lineup matches the projected optimum.
           </div>
         ))}
+      {closeCall && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-ff-line px-3 py-2 text-[12.5px] text-ff-text2">
+          <span className="ff-label !text-ff-warn">Close call</span>
+          <span className="min-w-0">
+            {surname(closeCall.start)} <span className="num text-ff-text">{fmt(proj?.[closeCall.start])}</span> over {surname(closeCall.bench)}{' '}
+            <span className="num text-ff-text">{fmt(proj?.[closeCall.bench])}</span>
+          </span>
+          <AskGm
+            className="ml-auto"
+            prompt={`${players[closeCall.start]?.name} or ${players[closeCall.bench]?.name} this week? The projections have them ${fmt(proj?.[closeCall.start])} to ${fmt(proj?.[closeCall.bench])}.`}
+            context={lineupCtx}
+          />
+        </div>
+      )}
       <Table
         dense
         rows={lineupRows}

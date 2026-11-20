@@ -6,6 +6,8 @@ import { useLeave, useModal } from './Sheet'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { ModeControl, ThemePreviews, ThemeSelect, onlyMode, type Density } from './ThemePicker'
 import { Button, Dropdown, Segmented, cx, useMedia, usePhone } from './ui'
+import { useAsgmControl, useAsgmMaybe } from './assistant/AsgmProvider'
+import { providerLine } from './assistant/AsgmSettings'
 
 // Settings, as a dialog over whatever page is open: a list of categories down the left (a strip of tabs along the
 // top on phones) and the picked one's settings on the right, one row each, name and a line on what it does at the
@@ -136,7 +138,31 @@ const StartOver = () => {
   )
 }
 
-const AccountPane = ({ prefs, update, leagues, leagueId, seasons, onTour }: SettingsProps) => {
+/** Assistant GM keeps its own settings (the free model or your key) beside the conversation; this row points there. */
+const AssistantSection = ({ onClose }: { onClose: () => void }) => {
+  const control = useAsgmControl()
+  const s = useAsgmMaybe()
+  if (!control || !s?.ready) return null
+  return (
+    <Section title="Assistant GM">
+      <Row label="Model and key" hint={<>The free model, or your own key, kept in this browser. Now: <span className="font-mono text-[11.5px]">{providerLine(s)}</span>.</>}>
+        <Button
+          size="sm"
+          onClick={() => {
+            // Gone in the same commit, as for the tour, so the GM opens over the page rather than under this dialog.
+            onClose()
+            if (!s.onPage) control.open()
+            s.setSettings(true)
+          }}
+        >
+          Open
+        </Button>
+      </Row>
+    </Section>
+  )
+}
+
+const AccountPane = ({ prefs, update, leagues, leagueId, seasons, onTour, onClose }: SettingsProps) => {
   const espn = prefs.provider === 'espn'
   const phone = usePhone()
   return (
@@ -172,6 +198,7 @@ const AccountPane = ({ prefs, update, leagues, leagueId, seasons, onTour }: Sett
           />
         </Row>
       </Section>
+      <AssistantSection onClose={onClose} />
       <Section title="Help">
         <Row label="Tour" hint="A quick walk through every page.">
           <Button size="sm" onClick={onTour}>

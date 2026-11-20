@@ -6,7 +6,8 @@ import { useFantasy } from './FantasyContext'
 import LinesBlock from './LinesBlock'
 import PlayerNews from './PlayerNews'
 import TeamName from './TeamName'
-import { SheetBody, SheetContent, SheetHeader, SheetSection } from './Sheet'
+import { SheetBody, SheetContent, SheetHeader, SheetSection, useSheet } from './Sheet'
+import { AskGm } from './assistant/AsgmButtons'
 import { Badge, PlayerAvatar, PosTag, Pts, ScoreDelta, ScoreState, Stat, ago, cx, fmt, fmtSigned, isOut, pct } from './ui'
 import { useSlate } from './useSlate'
 import { boxParts, useWeekNow, type PlayerWeek } from './useWeekNow'
@@ -93,6 +94,7 @@ const ThisWeek = ({ week, w, pos, loaded }: { week: number; w: PlayerWeek; pos: 
  */
 const PlayerSheet = ({ id }: { id: string }) => {
   const { data, analysis } = useFantasy()
+  const { close } = useSheet()
   const p = data.players[id]
   const ctx = data.context[id]
   const owner = analysis.rosteredBy[id]
@@ -186,6 +188,24 @@ const PlayerSheet = ({ id }: { id: string }) => {
               />
             </div>
 
+            {(() => {
+              // Assistant GM for the calls a sheet raises: one of yours on the edge of the roster (little value over
+              // a free agent, or hurt without much), or a free agent worth a claim. Not for a stud or another team's
+              // player.
+              const fringe = standing.kind === 'mine' && ((market ?? 0) < 2.5 || (out && (market ?? 0) < 5))
+              const claim = (standing.kind === 'fa' || standing.kind === 'waivers') && (market ?? 0) > 0.5
+              if (!fringe && !claim) return null
+              const why = fringe ? (out ? `${p.injury}: hold him or move on?` : `${fmtSigned(market ?? 0, 1)} value: the edge of your roster`) : `${fmtSigned(market, 1)} value, ${standing.kind === 'waivers' ? 'on waivers' : 'free to add'}`
+              const prompt = fringe
+                ? `Keep, trade or drop ${p.name}? He's ${fmt(perWeek)} pts/wk ahead, ${market != null ? `${fmtSigned(market, 1)} value` : 'no value read'}${p.injury ? `, ${p.injury}` : ''}.`
+                : `Is ${p.name} worth a claim, and who would I drop for him? He's ${fmt(perWeek)} pts/wk ahead, ${fmtSigned(market, 1)} value.`
+              return (
+                <div className="flex items-center justify-between gap-3 border-b border-ff-line px-4 py-2">
+                  <span className="min-w-0 truncate text-[12px] text-ff-text2">{why}</span>
+                  <AskGm prompt={prompt} leave={close} context={{ view: 'sheet/player', label: p.name, focus: { kind: 'player', id, label: p.name } }} />
+                </div>
+              )
+            })()}
             <section className="px-4 py-3">
               <AdjustControl id={id} />
               <p className="mt-1.5 text-[11px] leading-snug text-ff-muted">Saved in this browser for this league. Applies everywhere: lineups, trades, odds, waivers.</p>

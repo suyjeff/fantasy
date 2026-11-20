@@ -5,6 +5,8 @@ import MatchupSheet from './MatchupSheet'
 import PlayerSheet from './PlayerSheet'
 import Sheet, { SheetNavContext } from './Sheet'
 import TeamSheet from './TeamSheet'
+import { useAsgmContext } from './assistant/AsgmProvider'
+import type { AsgmContext } from '../lib/assistant'
 
 /** What a sheet can show. Every entity in the app opens one of these. */
 export type SheetRef = { kind: 'player'; id: string } | { kind: 'team'; id: number } | { kind: 'game'; key: string } | { kind: 'matchup'; week: number; a: number; b: number }
@@ -26,6 +28,25 @@ const SheetHost = ({ stack, onBack, onClose }: { stack: SheetRef[]; onBack: () =
   const key = top ? sheetKey(top) : null
   if (!key && seen) setSeen(null)
   else if (key && seen?.key !== key) setSeen({ key, depth: stack.length, step: !seen ? 'open' : stack.length < seen.depth ? 'back' : 'push' })
+  // What the sheet shows is what Assistant GM is asked about while it is open.
+  const pl = top?.kind === 'player' ? data.players[top.id] : null
+  const asgm: AsgmContext | null = !top
+    ? null
+    : top.kind === 'player'
+      ? pl
+        ? { view: 'sheet/player', label: pl.name, focus: { kind: 'player', id: top.id, label: pl.name } }
+        : null
+      : top.kind === 'team'
+        ? analysis.teamById[top.id]
+          ? { view: 'sheet/team', label: analysis.teamById[top.id].name, focus: { kind: 'team', rosterId: top.id, label: analysis.teamById[top.id].name } }
+          : null
+        : top.kind === 'matchup'
+          ? (() => {
+              const label = `${analysis.teamById[top.a]?.name ?? '?'} vs ${analysis.teamById[top.b]?.name ?? '?'}, wk ${top.week}`
+              return { view: 'sheet/matchup', label, focus: { kind: 'matchup', week: top.week, rosterIds: [top.a, top.b], label } }
+            })()
+          : null
+  useAsgmContext(asgm)
   // A ref to something no longer in the league (a switch mid-render, a stale link) opens nothing rather than an empty sheet.
   if (!top || (top.kind === 'player' && !data.players[top.id]) || (top.kind === 'team' && !analysis.teamById[top.id])) return null
   const name = (r: SheetRef | undefined): string => {
