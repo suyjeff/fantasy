@@ -1,10 +1,10 @@
 // The context pack: what the model sees before it has asked for anything. The league in a few lines, the asking
 // manager's roster, what they are looking at, and the tools this question obviously needs, already run, so most
 // questions are answered in one model call. A quick reading of the question decides which tools those are.
-import { normName, lastName } from '../names'
 import type { Deal } from '../deal'
 import { nameOf, teamName, type AsgmLeague } from './league'
-import { currentWeek, depthLabels, expOf, gameOf, opponentIn, pct, projOf, r1, resolvePlayer } from './resolve'
+import { findTeams, findPlayers } from './find'
+import { currentWeek, depthLabels, expOf, gameOf, opponentIn, pct, projOf, r1 } from './resolve'
 import { priceDeal, runTool, toolLabel, type Args, type ToolOut } from './tools'
 import type { AsgmContext } from './types'
 
@@ -21,6 +21,13 @@ export type Intent =
   | 'news'
   | 'rankings'
   | 'team'
+  | 'owner'
+  | 'opponent'
+  | 'roster'
+  | 'leaders'
+  | 'moves'
+  | 'needs'
+  | 'schedule'
   | 'player'
   | 'general'
 
@@ -32,6 +39,8 @@ export type Reading = {
   players: string[]
   /** Teams it names (other than the asker's). */
   teams: number[]
+  /** It names the asker's own team by name. */
+  mineNamed: boolean
   week: number | null
   position: string | null
   budget: number | null
@@ -47,73 +56,9 @@ const POS_OF: [RegExp, string][] = [
   [/^(def|dst|d\/st|defen)/i, 'DEF'],
   [/^flex/i, 'FLEX'],
 ]
-/** Surnames that are everyday words: they count only written as a name (capitalised). */
-const WORDY = new Set(['love', 'hill', 'swift', 'young', 'white', 'brown', 'mayer', 'brooks', 'chase', 'moore', 'price', 'rice', 'hunt', 'hall', 'gray', 'green', 'king', 'cook', 'mims', 'allen', 'jones', 'smith', 'johnson', 'williams', 'davis', 'harris', 'wilson'])
-
-/** Every player worth matching by name: rostered, projected, or ranked. */
-const nameIndex = (lg: AsgmLeague) => {
-  const key = 'nameIndex'
-  if (lg.memo.has(key)) return lg.memo.get(key) as { full: Map<string, string[]>; last: Map<string, string[]> }
-  const { data, analysis } = lg
-  const full = new Map<string, string[]>()
-  const last = new Map<string, string[]>()
-  for (const p of Object.values(data.players)) {
-    const relevant = analysis.rosteredBy[p.id] != null || (analysis.horizon.perWeek[p.id] ?? 0) > 1 || data.consensus?.byId[p.id] != null
-    if (!relevant || !['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].includes(p.pos)) continue
-    const f = normName(p.name)
-    if (f) full.set(f, [...(full.get(f) ?? []), p.id])
-    const l = normName(lastName(p.name))
-    if (l && l.length >= 4 && p.pos !== 'DEF') last.set(l, [...(last.get(l) ?? []), p.id])
-  }
-  const out = { full, last }
-  lg.memo.set(key, out)
-  return out
-}
-
-/** Players a question names: full names anywhere, surnames when written as a name, and "my RB2"-style labels. */
-export const playersIn = (lg: AsgmLeague, text: string): string[] => {
-  const { full, last } = nameIndex(lg)
-  const norm = ` ${normName(text)} `
-  const found: { id: string; at: number }[] = []
-  const taken: [number, number][] = []
-  const prefer = (ids: string[]) => {
-    const mine = ids.find((id) => lg.analysis.rosteredBy[id] === lg.myRosterId)
-    if (mine) return mine
-    return [...ids].sort((a, b) => (lg.analysis.rosteredBy[b] != null ? 1 : 0) - (lg.analysis.rosteredBy[a] != null ? 1 : 0) || (lg.analysis.market[b] ?? 0) - (lg.analysis.market[a] ?? 0))[0]
-  }
-  for (const [n, ids] of full) {
-    const at = norm.indexOf(` ${n} `)
-    if (at >= 0) {
-      found.push({ id: prefer(ids), at })
-      taken.push([at, at + n.length + 1])
-    }
-  }
-  // Surnames: as a capitalised word in what was typed, not inside a full name already found.
-  const words = text.match(/[A-Z][A-Za-z.'’-]+/g) ?? []
-  for (const w of words) {
-    const n = normName(w)
-    const ids = last.get(n)
-    if (!ids) continue
-    const at = norm.indexOf(` ${n} `)
-    if (at < 0 || taken.some(([a, b]) => at >= a && at <= b)) continue
-    if (WORDY.has(n) && ids.length > 1 && !ids.some((id) => lg.analysis.rosteredBy[id] === lg.myRosterId)) continue
-    found.push({ id: prefer(ids), at })
-  }
-  for (const m of text.matchAll(/\b(?:my\s+)(qb|rb|wr|te)\s?(\d)\b/gi)) {
-    const r = resolvePlayer(lg, `${m[1]}${m[2]}`)
-    if (r.ok === true) found.push({ id: (r as { value: string }).value, at: normName(text.slice(0, m.index ?? 0)).length })
-  }
-  const seen = new Set<string>()
-  return found
-    .sort((a, b) => a.at - b.at)
-    .map((f) => f.id)
-    .filter((id) => (seen.has(id) ? false : (seen.add(id), true)))
-}
-
-const teamsIn = (lg: AsgmLeague, text: string) => {
-  const norm = ` ${normName(text)} `
-  return lg.analysis.teams.filter((t) => t.rosterId !== lg.myRosterId && normName(t.name).length >= 3 && norm.includes(` ${normName(t.name)} `)).map((t) => t.rosterId)
-}
+/** Players a question names, in the order it names them: full names, surnames, first names, nicknames, initials,
+ * typos, and "my RB2" / "<team>'s WR1" labels (lib/assistant/find.ts). */
+export const playersIn = (lg: AsgmLeague, text: string): string[] => findPlayers(lg, text)
 
 /** A quick reading of the question: what it is about, and who. */
 export const readQuestion = (lg: AsgmLeague, text: string, context?: AsgmContext): Reading => {
@@ -124,7 +69,7 @@ export const readQuestion = (lg: AsgmLeague, text: string, context?: AsgmContext
   }
   add('faab', /\bfaab\b|\bbid\b|\$\s?\d+|\bbudget\b/)
   add('values', /sell[- ]?high|buy[- ]?low|\bsell\b.*\bwhich\b|which .*\bsell\b|overvalued|undervalued/)
-  add('trade', /\btrade|\boffer|\bdeal\b|\baccept|\bsell\b|\bbuy\b|\bacquire|\bpackage|\bfleece|\bsend\b|\bfor my\b|what would it take|\bpry\b|\b(take|give|swap|flip)\b.+\bfor\b|\bget\b.+\bfrom\b/)
+  add('trade', /\btrade|\boffer|\bdeal\b|\baccept|\bsell\b|\bbuy\b|\bacquire|\bpackage|\bfleece|\bsend\b|\bfor my\b|what would it take|\bwant for\b|\bpry\b|\b(take|give|swap|flip)\b.+\bfor\b|\bget\b.+\bfrom\b/)
   if (/\bupgrade|\bimprove\b|\bhelp at\b/.test(t)) {
     const view = context?.view ?? ''
     if (/^waivers?/.test(view)) add('waivers', /./)
@@ -142,14 +87,23 @@ export const readQuestion = (lg: AsgmLeague, text: string, context?: AsgmContext
   add('compare', /compare|\bvs\.?\b|\bversus\b|\bor\b|\bbetter\b|softer|easier|harder|schedule|rest of (the )?season|\bros\b/)
   add('news', /\bnews\b|injur|\bhurt\b|status|questionable|doubtful|what happened|\bout\b this week|\blatest\b|\bupdate\b/)
   add('rankings', /\bbest (available )?(qb|rb|wr|te|k|kicker|def|defense|dst|flex)|\btop \d+|\brank(ings?)?\b/)
+  // League-wide lookups: who owns whom, any team's opponent, roster, the league's leaders, needs and moves.
+  add('owner', /\bwho(?:'?s| is)? (?:has|have|owns?|got|rostered)\b(?! (?:the|a|an|more|most|better|best|softer|easier|harder|any)\b)|\b(?:which|what) team(?:'?s| is)? (?:has|have|owns?|got|rostered)\b|\bwhose (?:team|roster)\b|\bowner\b|\bwho owns\b|\bon (?:which|what|whose) (?:team|roster)\b|\b(?:is|are) \S+(?: \S+){0,3} (?:available|rostered|a free agent|taken|owned|on (?:the )?(?:wire|waivers))\b/)
+  add('opponent', /\bwho (?:does|do|is|are|am|will|did)\b.*\b(?:play|playing|face|facing|against|matched)\b|\bopponent\b|\bwho(?:'s| is) .* (?:playing|facing)\b|\bplays? (?:this|next) week\b/)
+  add('roster', /\broster\b|\bwho(?:'s| is| are) on\b|\bwhat (?:\w+ )?(?:does|do) .* have\b|\bwho (?:does|do) .* have\b|\bdepth\b/)
+  add('leaders', /\bleads? the league\b|\bleaders?\b|\bmost (?:fantasy )?points\b|\btop[- ]scor|\bhighest[- ]scoring\b|\bscored the most\b/)
+  add('moves', /\btransactions?\b|\brecent (?:moves|trades|adds|pickups|claims)\b|\bwho (?:traded|picked up|added|dropped|claimed)\b|\blast trade\b|\btrades? (?:this season|so far|in the league|happened)\b|\bwaiver (?:claims|history)\b|\bwhat trades\b/)
+  add('needs', /\b(?:which|what) teams? (?:needs?|is (?:thin|weak)|could use|is desperate)\b|\bwho needs\b|\bneeds? (?:a |an )?(?:qb|rb|wr|te)s? (?:the )?most\b|\bevery team'?s needs?\b/)
+  add('schedule', /\bhow did .* (?:do|score|play)\b|\blast week\b|\bhead[- ]to[- ]head\b|\bh2h\b|\bremaining (?:schedule|opponents)\b|\bwho(?:'s| is| do .*) (?:left|still to play)\b|\bschedule\b/)
   add('team', /my team|\broster\b|\bneeds?\b|weakness|strength|scout|\bbyes?\b/)
-  const players = playersIn(lg, text)
+  const named = findTeams(lg, text)
+  const players = findPlayers(lg, text)
   if (!intents.length) intents.push(players.length ? 'player' : 'general')
   const w = /\bweek\s*(\d{1,2})\b|\bw(\d{1,2})\b/i.exec(text)
   const pm = POS.exec(text)
   const position = pm ? (POS_OF.find(([re]) => re.test(pm[1]))?.[1] ?? null) : null
   const b = /\$\s?(\d{1,4})/.exec(text) ?? /(\d{1,4})\s?(?:dollars|bucks|faab)/i.exec(text)
-  return { intents, players, teams: teamsIn(lg, text), week: w ? Number(w[1] ?? w[2]) : /next week/i.test(text) ? currentWeek(lg) + 1 : null, position, budget: b ? Number(b[1]) : null }
+  return { intents, players, teams: named.filter((r) => r !== lg.myRosterId), mineNamed: lg.myRosterId != null && named.includes(lg.myRosterId), week: w ? Number(w[1] ?? w[2]) : /next week/i.test(text) ? currentWeek(lg) + 1 : null, position, budget: b ? Number(b[1]) : null }
 }
 
 /** The tools to run before the model sees the question: from what is on screen, then from the question. At most two. */
@@ -168,10 +122,28 @@ export const planPreRuns = (lg: AsgmLeague, text: string, context: AsgmContext |
   const has = (i: Intent) => r.intents.includes(i)
   const f = context?.focus
 
+  const other = r.teams[0]
+  const otherName = other != null ? teamName(lg, other) : undefined
+  const meToo = /\b(my|me|i|us|we)\b/i.test(text)
+
+  // League-wide lookups first: they name exactly what they need.
+  if (has('owner') && r.players.length) for (const id of r.players.slice(0, 2)) add('player', { player: nameOf(lg, id) })
+  if (has('needs')) add('league_needs', r.position && ['QB', 'RB', 'WR', 'TE'].includes(r.position) ? { position: r.position } : {})
+  if (has('moves')) add('transactions', { ...(otherName ? { team: otherName } : {}), ...(/trade/i.test(text) ? { type: 'trade' } : /waiver|claim/i.test(text) ? { type: 'waiver' } : {}) })
+  if (has('leaders') && r.position) add('rankings', { position: r.position, basis: 'season', pool: 'all' })
+  if (has('opponent') && !has('trade')) add('matchup', { ...(week ? { week } : {}), ...(otherName && !/\bmy\b|\bi\b|\bam\b/i.test(text) ? { team: otherName } : {}) })
+  if (has('schedule') && other != null && r.players.length < 2) {
+    if (r.teams.length >= 2) add('schedule', { team: otherName, vs: teamName(lg, r.teams[1]) })
+    else if (meToo && /head[- ]to[- ]head|h2h|\bvs\b|against|\bplayed\b/i.test(text)) add('schedule', { team: 'me', vs: otherName })
+    else add('schedule', { team: otherName })
+  }
+  if (has('roster') && (other != null || r.mineNamed) && !has('trade')) add('team', { team: otherName ?? teamName(lg, me) })
+  if (has('standings') && other != null) add('team', { team: otherName })
+
   // The question first: it says what is wanted; the screen says what it is about.
   if (has('faab') && free.length) add('faab_bid', { player: nameOf(lg, free[0]), ...(r.budget != null ? { budget: r.budget } : {}) })
   if (has('values')) add('trade_values', { team: /\b(buy|league|anyone|target)\b/i.test(text) && !/\bmy\b/i.test(text) ? 'league' : 'me', ...(r.position && r.position !== 'FLEX' ? { position: r.position } : {}) })
-  if (has('trade') && !has('values')) {
+  if (has('trade') && !has('values') && !has('moves')) {
     if (f?.kind === 'trade') add('evaluate_trade', {}, f.deal)
     else if (mine.length && theirs.length) add('evaluate_trade', { give: mine.map((id) => nameOf(lg, id)), get: theirs.map((id) => nameOf(lg, id)) })
     else if (theirs.length) add('find_trades', { target: nameOf(lg, theirs[0]) })
@@ -182,7 +154,8 @@ export const planPreRuns = (lg: AsgmLeague, text: string, context: AsgmContext |
   if (has('faab') && !free.length) add('waivers', {})
   if (has('playoffs')) add('playoff_odds', /win out/i.test(text) ? { win_out: true } : {})
   if (has('lineup') && !has('trade')) {
-    if (r.players.length >= 2 && span !== 'playoffs' && span !== 'ros') add('start_sit', { players: r.players.slice(0, 4).map((id) => nameOf(lg, id)), ...(week ? { week } : {}) })
+    if (r.players.length >= 2 && !/playoff|rest of (the )?season|\bros\b/i.test(text)) add('start_sit', { players: r.players.slice(0, 4).map((id) => nameOf(lg, id)), ...(week ? { week } : {}) })
+    else if (other != null && !(meToo && /\b(should|do) i\b/i.test(text))) add('lineup', { team: otherName, ...(week ? { week } : {}) })
     else add('lineup', week ? { week } : {})
   }
   if (has('compare') && r.players.length >= 2 && !runs.some((x) => x.tool === 'start_sit' || x.tool === 'evaluate_trade')) {
@@ -196,8 +169,9 @@ export const planPreRuns = (lg: AsgmLeague, text: string, context: AsgmContext |
     if (r.players.length === 1) add('player', { player: nameOf(lg, r.players[0]) })
   }
   if (has('rankings') && r.position) add('rankings', { position: r.position, pool: /available|wire|free agent|pick ?up/i.test(text) ? 'available' : 'all', basis: /rest of|ros\b|season/i.test(text) ? 'ros' : 'week', ...(week ? { week } : {}) })
-  if (has('team')) add('team', r.teams.length ? { team: teamName(lg, r.teams[0]) } : {})
+  if (has('team') && !has('needs')) add('team', r.teams.length ? { team: teamName(lg, r.teams[0]) } : {})
   if (r.players.length === 1 && !runs.length) add('player', { player: nameOf(lg, r.players[0]) })
+  if (other != null && !runs.length) add('team', { team: otherName })
 
   // What is on screen.
   if (f) {
@@ -318,5 +292,8 @@ export const clip = (s: string, max: number) => {
 export const packText = (brief: string, pre: { label: string; tool: string; text: string }[]) => {
   const parts = [`CONTEXT (computed by the app just now; the only numbers you may use besides tool results):`, brief]
   for (const p of pre) parts.push(`[${p.tool}] ${p.label}\n${clip(p.text, TOOL_LIMIT)}`)
+  // A pre-run that reached a verdict for the asking manager ("Call for <team> (you): …") says so; the model leads with it
+  // however the question is worded. A Call line about another team is about that team, and says so in its own words.
+  if (pre.some((p) => /Call for [^:\n]* \(you\):/.test(p.text))) parts.push('Answer with the app\'s verdict first: the line starting "Call for … (you)" above is the call for the asking manager.')
   return clip(parts.join('\n\n'), PACK_LIMIT)
 }

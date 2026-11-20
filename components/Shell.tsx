@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState, type ReactNode } f
 import Head from 'next/head'
 import { MONKE } from './brand'
 import Tour, { TOUR } from './Tour'
-import { ChevronIcon, FootballIcon, GearIcon, PanelIcon, Sparkle } from './icons'
+import { ChevronIcon, GearIcon, PanelIcon, Sparkle } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { lockScroll } from './scrollLock'
 import { Avatar, Dropdown, PhoneBarContext, byKeyboard, cx, motionMs, motionToken, reducedMotion, shortcutLabel, usePhone, type PhoneBarSlot } from './ui'
@@ -229,14 +229,9 @@ const SidebarBody = ({
                       : 'text-ff-text2 hover:bg-ff-raised/60 hover:text-ff-text',
                 )}
               >
-                {/* Numbers are keyboard shortcuts, so phones (the drawer) leave them out. Assistant GM has its ball. */}
-                {key === 'gm' ? (
-                  <span aria-hidden className="flex w-4 justify-center text-ff-accent max-md:-ml-0.5 max-md:w-5">
-                    <FootballIcon size={13} />
-                  </span>
-                ) : (
-                  <span className={cx('num hidden w-4 text-[10.5px] md:inline', active ? 'text-ff-text' : 'text-ff-muted')}>{String(i).padStart(2, '0')}</span>
-                )}
+                {/* Numbers are keyboard shortcuts, so phones (the drawer) leave them out. Assistant GM's register is its
+                    key, G, in the accent its sparkle carries: the same column as the numbers, no icon. */}
+                <span className={cx('num hidden w-4 text-[10.5px] md:inline', key === 'gm' ? 'text-ff-accent' : active ? 'text-ff-text' : 'text-ff-muted')}>{sectionCode(key)}</span>
                 <span className={cx('flex flex-1 items-center gap-1', active && 'font-medium')}>
                   {label}
                   {key === 'gm' && <Sparkle size={8} className="-mt-2" />}

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runTurn, houseStatus, keys, testKey, listModels } from '../assistant'
-import { AsgmError, complete, toAnthropicMessages, toGeminiContents, toOpenAiMessages, type CompleteReq, type Msg } from '../assistant/providers'
+import { AsgmError, complete, resetHouseVersion, toAnthropicMessages, toGeminiContents, toOpenAiMessages, type CompleteReq, type Msg } from '../assistant/providers'
 import type { AsgmEvent, StoredKey } from '../assistant/types'
 import { fixtureLeague } from './assistantFixture'
 import { checkBody } from '../../workers/grades/src/assistant'
-import { ASGM_LIMITS } from '../../workers/grades/src/asgmShared'
+import { ASGM_LIMITS, ASGM_TOOL_NAMES_V1 } from '../../workers/grades/src/asgmShared'
 import type { AsgmMessage } from '../assistant/types'
 
 // Every provider behind one call shape, against a mocked fetch: streaming text, tool calls, errors that say what to do.
@@ -218,7 +218,59 @@ describe('a whole turn', () => {
   })
   afterEach(() => {
     delete process.env.NEXT_PUBLIC_FF_GRADES_URL
+    resetHouseVersion()
   })
+
+  it('answers a plain lookup from the league itself: no model, no request, any team', async () => {
+    const lg = fixtureLeague()
+    mockFetch(new Error('no network'))
+    const events: AsgmEvent[] = []
+    await runTurn({ history: [], text: 'what team has Puka', league: lg, provider: 'house' }, (e) => events.push(e), new AbortController().signal)
+    expect(calls).toHaveLength(0)
+    expect(events.map((e) => e.type)).toEqual(['step', 'step', 'card', 'action', 'text', 'done'])
+    expect(events[1]).toMatchObject({ type: 'step', tool: 'lookup', status: 'done', label: 'Looking up who has Puka Nacua' })
+    expect((events[4] as { delta: string }).delta).toMatch(/^Fourth & Long has Puka Nacua \(WR, LAR\), their WR\d\./)
+    expect(events[3]).toMatchObject({ action: { kind: 'openTeam', rosterId: 4 } })
+    expect(events[5]).toEqual({ type: 'done', provider: 'app', model: 'instant lookup' })
+    // A judgment about the same player is the model's.
+    mockFetch(json({ message: { content: 'Pass.', tool_calls: [] }, provider: 'workers-ai', model: 'm' }))
+    await runTurn({ history: [], text: 'should I trade for Puka?', league: lg, provider: 'house' }, () => {}, new AbortController().signal)
+    expect(calls).toHaveLength(1)
+  }, 30_000)
+
+  it('answers from the pack when the free model fails on a step that offers tools', async () => {
+    // The live relay on Workers AI returned 502 whenever the model reached for a tool: answer without tools instead.
+    const lg = fixtureLeague()
+    mockFetch(json({ error: 'The model had an error. Try again in a minute.', code: 'provider', remaining: 15 }, 502), json({ message: { content: 'Two-Point Tries: +4.4 pts/wk from a league-average WR.', tool_calls: [] }, provider: 'workers-ai', model: 'm', remaining: 14 }))
+    const events: AsgmEvent[] = []
+    await runTurn({ history: [], text: 'which team needs a WR most', league: lg, provider: 'house' }, (e) => events.push(e), new AbortController().signal)
+    expect(calls).toHaveLength(2)
+    expect(body(0).tools.length).toBeGreaterThan(0)
+    expect(body(1).tools).toEqual([])
+    expect(body(1).step).toBe(1)
+    expect(body(1).messages[body(1).messages.length - 1].content).toMatch(/^No more tools for this question/)
+    expect(events[events.length - 1]).toMatchObject({ type: 'done', remaining: 14 })
+    // Only once: a second failure is the manager's error to see.
+    mockFetch(json({ error: 'x', code: 'provider' }, 502))
+    const again: AsgmEvent[] = []
+    await runTurn({ history: [], text: 'which team needs a WR most', league: lg, provider: 'house' }, (e) => again.push(e), new AbortController().signal)
+    expect(calls).toHaveLength(2)
+    expect(again[again.length - 1]).toMatchObject({ type: 'error', code: 'provider' })
+  }, 30_000)
+
+  it('offers a relay that predates the newer tools only the ones it knows, from then on', async () => {
+    const lg = fixtureLeague()
+    mockFetch(json({ error: 'tool not allowed: league_needs' }, 400), () => json({ message: { content: 'Two-Point Tries.', tool_calls: [] }, provider: 'workers-ai', model: 'm' }))
+    await runTurn({ history: [], text: 'which team needs a WR most', league: lg, provider: 'house' }, () => {}, new AbortController().signal)
+    expect(calls).toHaveLength(2)
+    expect(body(0).tools.map((t: { name: string }) => t.name)).toContain('league_needs')
+    expect(body(1).tools.every((t: { name: string }) => ASGM_TOOL_NAMES_V1.includes(t.name))).toBe(true)
+    // The next question goes straight to the old set: no refused request first.
+    mockFetch(() => json({ message: { content: 'Two-Point Tries.', tool_calls: [] }, provider: 'workers-ai', model: 'm' }))
+    await runTurn({ history: [], text: 'which team needs a WR most', league: lg, provider: 'house' }, () => {}, new AbortController().signal)
+    expect(calls).toHaveLength(1)
+    expect(body(0).tools.some((t: { name: string }) => t.name === 'league_needs')).toBe(false)
+  }, 30_000)
 
   it('pre-runs, relays to the house worker, runs the tool it asks for, then answers', async () => {
     const lg = fixtureLeague()

@@ -14,9 +14,10 @@ import { nextUtcMidnight, resetTime } from './store'
 import { blocks, nameIndex, plain, spans, type NameIndex } from './text'
 
 // The conversation, one component for every way it is shown: `float` (the window in the corner), `dock` (the panel at
-// the right), `page` (Assistant GM's own page) and `sheet` (the phone's). A question is a quiet box at the right; an
-// answer is the GM at work (a log of steps, each running then done), then the call, then the cards it found, then
-// buttons that take you to the part of the app that acts on it.
+// the right), `page` (Assistant GM's own page) and `sheet` (the phone's). A question is a wash of the accent at the
+// right; an answer is the GM at work (a slim log of steps, each running then done, that folds away), then the call,
+// then the cards it found, then buttons that take you to the part of the app that acts on it. It groups by space and
+// tone, not frames: see "Surfaces" in styles/fantasy.css (Assistant GM).
 
 type Gm = Extract<AsgmMessage, { role: 'gm' }>
 export type ChatVariant = 'float' | 'dock' | 'page' | 'sheet'
@@ -44,8 +45,8 @@ const IconBtn = ({ d, label, title, onClick, pressed, className, children }: { d
     aria-pressed={pressed}
     title={title ?? label}
     className={cx(
-      'transition-colors flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent md:h-8 md:w-8',
-      pressed && 'bg-ff-raised text-ff-text',
+      'asgm-press asgm-wash-btn flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent md:h-8 md:w-8',
+      pressed && 'bg-[var(--asgm-wash-hover)] text-ff-text',
       className,
     )}
   >
@@ -59,7 +60,7 @@ const Header = ({ variant, titleId, onClose, onDock, onExpand }: { variant: Chat
   const s = useAsgm()
   const live = !!s.running
   return (
-    <header className={cx('relative flex shrink-0 items-center gap-2 border-b border-ff-line pl-3 pr-1', variant === 'page' || variant === 'dock' ? 'h-11' : 'h-12')}>
+    <header className={cx('relative flex shrink-0 items-center gap-2.5 pl-3 pr-1', variant === 'page' || variant === 'dock' ? 'h-11' : 'h-12')}>
       {/* Under 360px the badge gives its room to the name, so the title is never cut. */}
       {variant !== 'page' && <AsgmBadge size={28} live={live} className="max-[359px]:hidden" />}
       <div className="min-w-0 flex-1 leading-tight">
@@ -67,7 +68,7 @@ const Header = ({ variant, titleId, onClose, onDock, onExpand }: { variant: Chat
           <span className="ff-label">{live ? <span className="text-ff-accent">Working…</span> : 'Conversation'}</span>
         ) : (
           <>
-            <h2 id={titleId} className="truncate text-[14px] font-medium text-ff-text">
+            <h2 id={titleId} className="truncate text-[14px] font-semibold tracking-[-0.005em] text-ff-text">
               <AsgmName live={live} />
             </h2>
             <p className="truncate font-mono text-[10.5px] text-ff-muted">{live ? <span className="text-ff-accent">working…</span> : providerLine(s)}</p>
@@ -130,8 +131,9 @@ const StepGlyph = ({ status }: { status: 'running' | 'done' | 'error' }) =>
   )
 
 /**
- * The GM at work: each tool it runs as a line, running then done with what it found. Open while it works; once the
- * answer is in it folds to one line ("5 steps · 3.2s"), to open again on a click.
+ * The GM at work: each tool it runs as a line, running then done with what it found, on a slim strip with a pip per
+ * step. Open while it works; once the answer is in it folds to one line ("Worked 5 steps · 3.2s"), to open again on a
+ * click.
  */
 const WorkLog = ({ m, live, fresh }: { m: Gm; live: boolean; fresh: boolean }) => {
   const [open, setOpen] = useState(live)
@@ -147,55 +149,64 @@ const WorkLog = ({ m, live, fresh }: { m: Gm; live: boolean; fresh: boolean }) =
   if (!live && !steps.length) return null
   const done = steps.filter((s) => s.status === 'done').length
   return (
-    <div className={cx('asgm-log border', live ? 'is-live border-ff-accent/35 bg-ff-accent/[0.03]' : 'border-ff-line bg-ff-sunken/60')}>
+    <div className={cx('asgm-log', live && 'is-live')}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        aria-controls={open ? id : undefined}
+        aria-controls={id}
         disabled={live}
-        className="flex h-7 w-full items-center gap-2 px-2.5 text-left font-mono text-[10.5px] uppercase tracking-[0.08em] text-ff-muted enabled:hover:text-ff-text2 max-md:h-9"
+        className="asgm-wash-btn group flex h-8 w-full items-center gap-2.5 pl-3 pr-2.5 text-left font-mono text-[10.5px] uppercase tracking-[0.08em] text-ff-text2 transition-colors enabled:hover:text-ff-text max-md:h-10"
       >
         {live ? (
-          <>
-            <span className="text-ff-accent">{writing ? 'Writing' : 'Working'}</span>
-            <span aria-hidden className="asgm-dots text-ff-accent" />
-          </>
+          <span className="flex items-baseline text-ff-accent">
+            {writing ? 'Writing' : 'Working'}
+            <span aria-hidden className="asgm-dots" />
+          </span>
         ) : (
           <>
-            <ChevronIcon dir="right" size={9} open={open} />
+            <ChevronIcon dir="right" size={9} open={open} className="-ml-0.5 text-ff-muted group-enabled:group-hover:text-ff-text2" />
             <span>
               {m.error && m.error.code !== 'aborted' ? 'Stopped at' : 'Worked'} {done} step{done === 1 ? '' : 's'}
             </span>
           </>
         )}
-        <span className="ml-auto num normal-case tracking-normal">{live ? clock(elapsed) : took != null ? `${(took / 1000).toFixed(1)}s` : ''}</span>
-      </button>
-      {open && (
-        <ol id={id} className="border-t border-ff-line/70 py-0.5" aria-label="Steps">
-          {steps.map((s) => (
-            <li key={s.id} className={cx('asgm-step relative grid grid-cols-[12px_minmax(0,1fr)_auto] items-start gap-x-2 overflow-hidden px-2.5 py-[5px]', s.status === 'running' && 'is-running', fresh && 'is-fresh')}>
-              <span className="flex h-[18px] items-center">
-                <StepGlyph status={s.status} />
-              </span>
-              {/* Wrapped, never cut: a step's label and what it found (an error's reason included) are read whole. */}
-              <span className={cx('min-w-0 text-[12px] leading-[18px] [overflow-wrap:anywhere]', s.status === 'running' ? 'text-ff-text' : 'text-ff-text2')}>
-                {s.label}
-                <span className="sr-only">{s.status === 'running' ? ', running' : s.status === 'done' ? ', done' : ', stopped'}</span>
-              </span>
-              <span className={cx('asgm-detail max-w-[150px] text-right font-mono text-[10.5px] leading-[18px] [overflow-wrap:anywhere]', s.status === 'error' ? 'text-ff-muted' : 'text-ff-text2')}>{s.detail ?? ''}</span>
-            </li>
+        {/* A pip a step: what the count says, drawn. */}
+        <span aria-hidden className="flex min-w-0 items-center gap-[3px] overflow-hidden">
+          {steps.map((x) => (
+            <span key={x.id} className={cx('asgm-pip', x.status === 'running' && 'is-running', x.status === 'error' && 'is-error', fresh && 'is-fresh')} />
           ))}
-          {live && !steps.length && (
-            <li className="asgm-step is-running relative grid grid-cols-[12px_minmax(0,1fr)] items-start gap-x-2 overflow-hidden px-2.5 py-[5px]">
-              <span className="flex h-[18px] items-center">
-                <StepGlyph status="running" />
-              </span>
-              <span className="text-[12px] leading-[18px] text-ff-text">Reading the question</span>
-            </li>
-          )}
-        </ol>
-      )}
+        </span>
+        {/* Muted at rest; under the pointer's darker wash it steps up to keep 4.5:1. */}
+        <span className="num ml-auto shrink-0 normal-case tracking-normal text-ff-muted group-enabled:group-hover:text-ff-text2">{live ? clock(elapsed) : took != null ? `${(took / 1000).toFixed(1)}s` : ''}</span>
+      </button>
+      <div className="asgm-fold" data-open={open}>
+        <div>
+          <ol id={id} className="pb-1.5" aria-label="Steps">
+            {steps.map((s) => (
+              <li key={s.id} className={cx('asgm-step relative grid grid-cols-[12px_minmax(0,1fr)_auto] items-start gap-x-2.5 overflow-hidden py-[5px] pl-3 pr-2.5', s.status === 'running' && 'is-running', fresh && 'is-fresh')}>
+                <span className="flex h-[18px] items-center">
+                  <StepGlyph status={s.status} />
+                </span>
+                {/* Wrapped, never cut: a step's label and what it found (an error's reason included) are read whole. */}
+                <span className={cx('min-w-0 text-[12.5px] leading-[18px] [overflow-wrap:anywhere]', s.status === 'running' ? 'text-ff-text' : 'text-ff-text2')}>
+                  {s.label}
+                  <span className="sr-only">{s.status === 'running' ? ', running' : s.status === 'done' ? ', done' : ', stopped'}</span>
+                </span>
+                <span className={cx('asgm-detail max-w-[150px] text-right font-mono text-[10.5px] leading-[18px] [overflow-wrap:anywhere]', s.status === 'error' ? 'text-ff-muted' : 'text-ff-text2')}>{s.detail ?? ''}</span>
+              </li>
+            ))}
+            {live && !steps.length && (
+              <li className="asgm-step is-running relative grid grid-cols-[12px_minmax(0,1fr)] items-start gap-x-2.5 overflow-hidden py-[5px] pl-3 pr-2.5">
+                <span className="flex h-[18px] items-center">
+                  <StepGlyph status="running" />
+                </span>
+                <span className="text-[12.5px] leading-[18px] text-ff-text">Reading the question</span>
+              </li>
+            )}
+          </ol>
+        </div>
+      </div>
     </div>
   )
 }
@@ -209,7 +220,7 @@ const Line = ({ text, index }: { text: string; index: NameIndex | null }) => {
         x.t === 'text' ? (
           <React.Fragment key={i}>{x.s}</React.Fragment>
         ) : x.t === 'bold' ? (
-          <strong key={i} className="font-medium text-ff-text">
+          <strong key={i} className="font-semibold text-ff-text">
             {x.s}
           </strong>
         ) : (
@@ -228,11 +239,12 @@ const Line = ({ text, index }: { text: string; index: NameIndex | null }) => {
   )
 }
 
-/** The answer: the call first, larger, then the reasons; lists as hairline-bulleted lines; a caret while it streams. */
+/** The answer: the call first, larger and bold, then the reasons, quieter; lists as square-bulleted lines; a labelled
+ *  line (Risk:) quieter still; a caret while it streams. */
 const Answer = ({ text, live, index }: { text: string; live: boolean; index: NameIndex | null }) => {
   const bs = useMemo(() => blocks(text), [text])
   const caret = live ? <span aria-hidden className="asgm-caret" /> : null
-  if (!bs.length) return live ? <p className="text-[13.5px]">{caret}</p> : null
+  if (!bs.length) return live ? <p className="text-[16px] leading-snug">{caret}</p> : null
   return (
     <div className="space-y-2 text-[13.5px] leading-[1.55] text-ff-text2">
       {bs.map((b, i) => {
@@ -241,16 +253,23 @@ const Answer = ({ text, live, index }: { text: string; live: boolean; index: Nam
           return (
             <ul key={i} className="space-y-1">
               {b.items.map((it, j) => (
-                <li key={j} className="relative pl-3.5">
-                  <span aria-hidden className="absolute left-0.5 top-[0.62em] h-[5px] w-[5px] border border-ff-text2/70" />
+                <li key={j} className="relative pl-4">
+                  <span aria-hidden className="absolute left-[3px] top-[0.66em] h-[4px] w-[4px] bg-ff-accent/70" />
                   <Line text={it} index={index} />
                   {last && j === b.items.length - 1 && caret}
                 </li>
               ))}
             </ul>
           )
+        const call = i === 0 && !b.label
         return (
-          <p key={i} className={cx(i === 0 && !b.label ? 'text-[15px] font-medium leading-snug tracking-[-0.01em] text-ff-text' : '')}>
+          <p
+            key={i}
+            className={cx(
+              call && 'pb-0.5 text-[16px] font-semibold leading-[1.35] tracking-[-0.012em] text-ff-text [text-wrap:pretty]',
+              b.label && 'text-[12.5px] leading-[1.5]',
+            )}
+          >
             {b.label && (
               <span className={cx('ff-label mr-1.5 align-[1px]', /risk|caveat|watch/i.test(b.label) ? '!text-ff-warn' : '!text-ff-text2')}>
                 {b.label}
@@ -288,7 +307,7 @@ const ErrorNote = ({ m, onRetry }: { m: Gm; onRetry?: () => void }) => {
       <p className="flex items-center gap-2 font-mono text-[11px] text-ff-muted">
         <span>Stopped.</span>
         {onRetry && (
-          <button type="button" onClick={onRetry} className="ff-hit text-ff-text2 underline decoration-ff-line2 underline-offset-2 hover:text-ff-text">
+          <button type="button" onClick={onRetry} className="ff-hit text-ff-text2 underline decoration-ff-muted/60 underline-offset-2 transition-colors hover:text-ff-text">
             Ask again
           </button>
         )}
@@ -309,24 +328,28 @@ const ErrorNote = ({ m, onRetry }: { m: Gm; onRetry?: () => void }) => {
   return (
     // Not an alert: the conversation's one status region (Announcer) says it once, and an answer restored from an earlier
     // visit must not announce itself again.
-    <div className="border border-ff-warn/35 bg-ff-warn/[0.07] px-3 py-2.5">
-      <p className="flex items-center gap-1.5 text-[13px] font-medium text-ff-text">
+    // A wash of the warning with its rule down the left, as the app marks a row that needs you; the mark and the title
+    // say it, not the colour.
+    <div className="bg-ff-warn/[0.08] py-2.5 pl-3.5 pr-3 shadow-[inset_2px_0_0_rgb(var(--ff-warn))]">
+      <p className="flex items-center gap-1.5 text-[13px] font-semibold text-ff-text">
         <span aria-hidden className="font-mono text-ff-warn">!</span>
         {ERROR_TITLE[e.code] ?? ERROR_TITLE.provider}
       </p>
       <p className="mt-0.5 text-[12.5px] leading-snug text-ff-text2">{body}</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {needKey && (
-          <button type="button" onClick={() => s.setSettings(true)} className="transition-colors h-8 border border-ff-line2 bg-ff-panel px-3 text-[12.5px] font-medium text-ff-text hover:bg-ff-raised max-md:h-10">
-            {e.code === 'key' ? 'Check your key' : 'Add your own key'}
-          </button>
-        )}
-        {onRetry && e.code !== 'quota' && e.code !== 'budget' && (
-          <button type="button" onClick={onRetry} className="transition-colors h-8 border border-ff-line bg-ff-panel px-3 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-md:h-10">
-            Ask again
-          </button>
-        )}
-      </div>
+      {(needKey || (onRetry && e.code !== 'quota' && e.code !== 'budget')) && (
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {needKey && (
+            <button type="button" onClick={() => s.setSettings(true)} className="asgm-press h-8 border border-transparent bg-ff-text px-3 text-[12.5px] font-medium text-ff-panel hover:bg-ff-text/85 max-md:h-10">
+              {e.code === 'key' ? 'Check your key' : 'Add your own key'}
+            </button>
+          )}
+          {onRetry && e.code !== 'quota' && e.code !== 'budget' && (
+            <button type="button" onClick={onRetry} className="asgm-press h-8 border border-transparent bg-ff-text/[0.07] px-3 text-[12.5px] font-medium text-ff-text hover:bg-ff-text/[0.12] max-md:h-10">
+              Ask again
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -362,10 +385,10 @@ const Actions = ({ actions, skipDeals, onGoto }: { actions: AsgmAction[]; skipDe
             key={i}
             type="button"
             onClick={() => run(a)}
-            className="transition-colors inline-flex h-7 max-w-full items-center gap-1.5 border border-ff-line bg-ff-panel px-2.5 text-[12px] text-ff-text hover:border-ff-line2 hover:bg-ff-raised max-md:h-10"
+            className="asgm-press asgm-wash inline-flex h-7 max-w-full items-center gap-1.5 border border-transparent pl-2.5 pr-2 text-[12px] font-medium text-ff-text max-md:h-10"
           >
             <span className="truncate">{a.label}</span>
-            <span aria-hidden className="flex text-ff-muted">
+            <span aria-hidden className="flex text-ff-text2">
               {a.kind === 'goto' ? <ChevronIcon dir="right" size={10} /> : <OpenIcon size={11} />}
             </span>
           </button>
@@ -395,11 +418,11 @@ const GmMessageView = ({ m, last, index, onGoto }: { m: Gm; last: boolean; index
     )
   }
   return (
-    <article className="asgm-gm min-w-0 space-y-2.5" aria-label="Assistant GM" aria-busy={live || undefined}>
+    <article className="asgm-gm min-w-0 space-y-3" aria-label="Assistant GM" aria-busy={live || undefined}>
       <WorkLog m={m} live={live} fresh={fresh} />
       {(m.text || (live && m.steps.length > 0 && m.steps.every((x) => x.status !== 'running'))) && <Answer text={m.text} live={live} index={index} />}
       {m.cards.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {m.cards.map((c, i) => (
             <AsgmCardView key={i} card={c} n={i} fresh={fresh} />
           ))}
@@ -408,7 +431,7 @@ const GmMessageView = ({ m, last, index, onGoto }: { m: Gm; last: boolean; index
       {!live && <Actions actions={m.actions} skipDeals={deals} onGoto={onGoto} />}
       {m.error && <ErrorNote m={m} onRetry={retry} />}
       {!live && (m.text || m.error) && (
-        <footer className="-ml-2 flex items-center gap-0.5 text-ff-muted">
+        <footer className={cx('-ml-2 -mt-1 flex items-center gap-0.5 text-ff-muted', fresh && 'asgm-enter')}>
           {m.text && (
             <IconBtn d={copied ? CHECK : COPY} label={copied ? 'Copied' : 'Copy the answer'} onClick={copy} className={cx('!h-7 !w-7 max-md:!h-10 max-md:!w-10', copied && '!text-ff-pos')} />
           )}
@@ -421,51 +444,63 @@ const GmMessageView = ({ m, last, index, onGoto }: { m: Gm; last: boolean; index
   )
 }
 
-const UserMessageView = ({ m }: { m: Extract<AsgmMessage, { role: 'user' }> }) => (
-  <div className="flex flex-col items-end gap-1">
-    <p className="max-w-[88%] whitespace-pre-wrap border border-ff-line2 bg-ff-sunken px-3 py-2 text-[13.5px] leading-[1.45] text-ff-text [overflow-wrap:anywhere]">{m.text}</p>
-    {m.context && (
-      <span className="max-w-[88%] text-right font-mono text-[10px] text-ff-muted [overflow-wrap:anywhere]">
-        <span className="sr-only">Asked about: </span>
-        <span aria-hidden>re: </span>
-        {m.context.label}
-      </span>
-    )}
-  </div>
-)
+/** A question: a wash of the accent at the right, square like everything else here, what it was about under it. */
+const UserMessageView = ({ m }: { m: Extract<AsgmMessage, { role: 'user' }> }) => {
+  const [fresh] = useState(() => m.at >= VISIT && !landed.has(m.id))
+  useEffect(() => void landed.add(m.id), [m.id])
+  return (
+    <div className={cx('flex flex-col items-end gap-1 pl-8', fresh && 'asgm-enter')}>
+      <p className="max-w-full whitespace-pre-wrap bg-ff-accent/[0.1] px-3 py-2 text-[13.5px] leading-[1.45] text-ff-text [overflow-wrap:anywhere]">{m.text}</p>
+      {m.context && (
+        <span className="max-w-full text-right font-mono text-[10px] text-ff-muted [overflow-wrap:anywhere]">
+          <span className="sr-only">Asked about: </span>
+          <span aria-hidden>re: </span>
+          {m.context.label}
+        </span>
+      )}
+    </div>
+  )
+}
 
 // ---- The empty state ----
 
+/** The empty state: who you are asking about, the promise, and questions to start from; it arrives in that order. */
 const Welcome = ({ variant }: { variant: ChatVariant }) => {
   const s = useAsgm()
   const { data, analysis } = useFantasy()
   const me = analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
+  const d = (ms: number) => ({ '--d': `${ms}ms` }) as React.CSSProperties
   return (
     <div className={cx('flex flex-1 flex-col', variant === 'page' ? 'justify-center py-6' : 'justify-end')}>
-      <div className="asgm-hero relative mb-4 overflow-hidden border border-ff-line px-4 pb-4 pt-5">
+      <div className="asgm-hero relative mb-5 overflow-hidden px-4 pb-5 pt-5">
         <span aria-hidden className="asgm-grid absolute inset-0" />
-        <div className="relative flex items-start gap-3">
-          <AsgmBadge size={40} />
+        <span aria-hidden className="asgm-reg asgm-reg-br" />
+        <div className="relative flex items-start gap-3.5">
+          <AsgmBadge size={40} className="asgm-enter" />
           <div className="min-w-0">
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-ff-text2">
+            <p className="asgm-enter font-mono text-[10.5px] uppercase tracking-[0.1em] text-ff-text2">
               {me ? me.name : data.league.name}
               {data.state.season_type === 'regular' ? ` · wk ${data.state.week}` : ''}
             </p>
-            <p className="mt-1 text-[17px] font-medium leading-tight tracking-[-0.01em] text-ff-text">Ask for the call.</p>
-            <p className="mt-1 text-[12.5px] leading-snug text-ff-text2">Lineups, trades, waivers and the playoff race. Every number comes from this app&apos;s own models, run on your league.</p>
+            <p className="asgm-enter mt-1 text-[19px] font-semibold leading-tight tracking-[-0.015em] text-ff-text" style={d(100)}>
+              Ask for the call.
+            </p>
+            <p className="asgm-enter mt-1.5 text-[12.5px] leading-snug text-ff-text2 [text-wrap:pretty]" style={d(200)}>
+              Lineups, trades, waivers and the playoff race. Every number comes from this app&apos;s own models, run on your league.
+            </p>
           </div>
         </div>
       </div>
       {s.suggestions.length > 0 && (
-        <div>
-          <p className="ff-label mb-1.5">Try asking</p>
-          <ul className="border border-ff-line bg-ff-panel">
-            {s.suggestions.map((q, i) => (
-              <li key={q} className={cx(i > 0 && 'border-t border-ff-line')}>
-                <button type="button" onClick={() => s.send(q)} className="transition-colors group flex min-h-10 w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-ff-text hover:bg-ff-raised md:min-h-9">
-                  <ChevronIcon dir="right" size={10} className="text-ff-accent" />
+        <div className="asgm-enter" style={d(300)}>
+          <p className="ff-label mb-2">Try asking</p>
+          <ul className="flex flex-col gap-[3px]">
+            {s.suggestions.map((q) => (
+              <li key={q}>
+                <button type="button" onClick={() => s.send(q)} className="asgm-suggest asgm-press asgm-wash group flex min-h-10 w-full items-center gap-2.5 border border-transparent px-3 py-2 text-left text-[13px] text-ff-text md:min-h-9">
+                  <ChevronIcon dir="right" size={10} className="asgm-chev text-ff-accent" />
                   <span className="min-w-0 flex-1">{q}</span>
-                  <span aria-hidden className="font-mono text-[11px] text-ff-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                  <span aria-hidden className="font-mono text-[11px] text-ff-text2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                     ask ↵
                   </span>
                 </button>
@@ -480,7 +515,10 @@ const Welcome = ({ variant }: { variant: ChatVariant }) => {
 
 // ---- The thread ----
 
-const Thread = ({ variant, onGoto }: { variant: ChatVariant; onGoto?: () => void }) => {
+/** Where the thread sits under the header and the composer: scrolled from its top, and with more below. */
+type Edges = { top: boolean; more: boolean }
+
+const Thread = ({ variant, onGoto, onEdges }: { variant: ChatVariant; onGoto?: () => void; onEdges: (e: Edges) => void }) => {
   const s = useAsgm()
   const { data, analysis } = useFantasy()
   const scroller = useRef<HTMLDivElement>(null)
@@ -511,14 +549,25 @@ const Thread = ({ variant, onGoto }: { variant: ChatVariant; onGoto?: () => void
   // cards it found land under it. The last exchange is at least the view's height, so there is room to do that.
   // Opening onto an earlier conversation starts at its end.
   const [viewH, setViewH] = useState(0)
+  // The header and the composer draw their edges only while the thread runs under them.
+  const edges = useRef(onEdges)
+  edges.current = onEdges
+  const measure = () => {
+    const el = scroller.current
+    if (el) edges.current({ top: el.scrollTop > 2, more: el.scrollTop + el.clientHeight < el.scrollHeight - 2 })
+  }
   useLayoutEffect(() => {
     const el = scroller.current
     if (!el) return
-    const ro = new ResizeObserver(() => setViewH(el.clientHeight))
+    const ro = new ResizeObserver(() => {
+      setViewH(el.clientHeight)
+      measure()
+    })
     ro.observe(el)
+    if (inner.current) ro.observe(inner.current)
     el.scrollTop = el.scrollHeight
     return () => ro.disconnect()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const count = s.messages.length
   const seen = useRef(count)
   useLayoutEffect(() => {
@@ -544,13 +593,14 @@ const Thread = ({ variant, onGoto }: { variant: ChatVariant; onGoto?: () => void
       role="log"
       aria-label="Conversation with Assistant GM"
       aria-live="off"
+      onScroll={measure}
     >
-      <div ref={inner} className={cx('flex min-h-full flex-col gap-5 px-3 py-3', variant === 'page' && 'mx-auto max-w-[760px] md:px-5 md:py-5')}>
+      <div ref={inner} className={cx('flex min-h-full flex-col gap-7 px-3 pb-4 pt-2', variant === 'page' && 'mx-auto max-w-[760px] md:px-5 md:pb-5 md:pt-4')}>
         {count === 0 ? (
           <Welcome variant={variant} />
         ) : (
           turns.map((t, i) => (
-            <div key={t[0].id} className="flex flex-col gap-3" style={i === turns.length - 1 && viewH ? { minHeight: viewH - 24 } : undefined}>
+            <div key={t[0].id} className="flex flex-col gap-3.5" style={i === turns.length - 1 && viewH ? { minHeight: viewH - 24 } : undefined}>
               {t.map((m) => (m.role === 'user' ? <UserMessageView key={m.id} m={m} /> : <GmMessageView key={m.id} m={m} last={m.id === lastGm} index={indexFor(m)} onGoto={onGoto} />))}
             </div>
           ))
@@ -562,7 +612,7 @@ const Thread = ({ variant, onGoto }: { variant: ChatVariant; onGoto?: () => void
 
 // ---- The composer ----
 
-const Composer = ({ variant, autoFocus }: { variant: ChatVariant; autoFocus: boolean }) => {
+const Composer = ({ variant, autoFocus, over }: { variant: ChatVariant; autoFocus: boolean; /** The thread runs on under it: draw its edge. */ over: boolean }) => {
   const s = useAsgm()
   const box = useRef<HTMLTextAreaElement>(null)
   const hintId = useId()
@@ -590,7 +640,7 @@ const Composer = ({ variant, autoFocus }: { variant: ChatVariant; autoFocus: boo
   const ctx = s.context
   return (
     <form
-      className={cx('shrink-0 border-t border-ff-line bg-ff-panel px-3 pb-2.5 pt-2', variant === 'sheet' && 'pb-[max(10px,env(safe-area-inset-bottom))]', variant === 'page' && 'md:px-5')}
+      className={cx('asgm-composer shrink-0 bg-ff-panel px-3 pb-2.5 pt-2.5', over && 'is-over', variant === 'sheet' && 'pb-[max(10px,env(safe-area-inset-bottom))]', variant === 'page' && 'md:px-5')}
       onSubmit={(e) => {
         e.preventDefault()
         submit()
@@ -598,10 +648,11 @@ const Composer = ({ variant, autoFocus }: { variant: ChatVariant; autoFocus: boo
     >
       <div className={cx(variant === 'page' && 'mx-auto max-w-[760px]')}>
         {ctx && (
-          <div className="mb-1.5 flex min-w-0 items-center gap-1.5">
-            {/* The label wraps rather than being cut: it is what the question will be about, read whole. */}
-            <span className="asgm-chip inline-flex min-h-6 min-w-0 max-w-full items-stretch border border-ff-line bg-ff-sunken font-mono text-[10.5px] text-ff-text2">
-              <span className="flex min-w-0 items-center gap-1.5 py-[3px] pl-2 pr-1.5 leading-[16px]">
+          <div className="mb-2 flex min-w-0 items-center gap-1.5">
+            {/* The label wraps rather than being cut: it is what the question will be about, read whole. A wash of the
+                accent with its square, no frame; transparent edges for forced colours. */}
+            <span className="asgm-chip inline-flex min-h-6 min-w-0 max-w-full items-stretch border border-transparent bg-ff-accent/[0.09] font-mono text-[10.5px] text-ff-text2">
+              <span className="flex min-w-0 items-center gap-1.5 py-[3px] pl-2 pr-1 leading-[16px]">
                 <span aria-hidden className="h-1.5 w-1.5 shrink-0 bg-ff-accent" />
                 <span className="sr-only">Asking about: </span>
                 <span className="min-w-0 [overflow-wrap:anywhere]">{ctx.label}</span>
@@ -615,14 +666,15 @@ const Composer = ({ variant, autoFocus }: { variant: ChatVariant; autoFocus: boo
                 }}
                 aria-label={`Don't send ${ctx.label} as context`}
                 title="Ask without this context"
-                className="ff-hit flex min-h-6 w-6 shrink-0 items-center justify-center border-l border-ff-line text-ff-muted hover:bg-ff-raised hover:text-ff-text"
+                className="ff-hit asgm-press flex min-h-6 w-6 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-accent/[0.12] hover:text-ff-text"
               >
                 <Glyph d={CLOSE} size={10} />
               </button>
             </span>
           </div>
         )}
-        <div className="asgm-input flex items-end border border-ff-line2 bg-ff-panel focus-within:border-ff-accent/70 focus-within:shadow-[0_0_0_3px_rgb(var(--ff-accent)/0.12)]">
+        {/* A field keeps its edge (it is a control); it sits on the wash until it has the cursor. */}
+        <div className="asgm-input flex items-end border border-ff-line2 bg-[var(--asgm-wash)] transition-[border-color,background-color,box-shadow] duration-ff-quick focus-within:border-ff-accent/70 focus-within:bg-ff-panel focus-within:shadow-[0_0_0_3px_rgb(var(--ff-accent)/0.14)]">
           <textarea
             ref={box}
             rows={1}
@@ -641,7 +693,7 @@ const Composer = ({ variant, autoFocus }: { variant: ChatVariant; autoFocus: boo
             className="ff-scroll min-h-[38px] flex-1 resize-none bg-transparent px-2.5 py-[9px] text-[13.5px] leading-[20px] text-ff-text placeholder:text-ff-muted focus:outline-none"
           />
           {s.running ? (
-            <button type="button" onClick={s.stop} aria-label="Stop the answer" title="Stop" className="transition-colors m-1 flex h-[30px] w-[30px] shrink-0 items-center justify-center border border-ff-line2 bg-ff-raised text-ff-text hover:border-ff-text2 max-md:h-9 max-md:w-9">
+            <button type="button" onClick={s.stop} aria-label="Stop the answer" title="Stop" className="asgm-press m-1 flex h-[30px] w-[30px] shrink-0 items-center justify-center border border-transparent bg-ff-text/[0.08] text-ff-text hover:bg-ff-text/[0.14] max-md:h-9 max-md:w-9">
               <svg aria-hidden width="12" height="12" viewBox="0 0 14 14">
                 <path d={STOP} fill="currentColor" />
               </svg>
@@ -653,7 +705,7 @@ const Composer = ({ variant, autoFocus }: { variant: ChatVariant; autoFocus: boo
               aria-disabled={empty || !s.ready || undefined}
               aria-label="Send"
               title="Send (Enter)"
-              className="transition-colors m-1 flex h-[30px] w-[30px] shrink-0 items-center justify-center bg-ff-accent text-white aria-disabled:bg-ff-sunken aria-disabled:text-ff-muted max-md:h-9 max-md:w-9"
+              className="asgm-press m-1 flex h-[30px] w-[30px] shrink-0 items-center justify-center border border-transparent bg-ff-accent text-white hover:bg-[rgb(var(--ff-accent-deep))] aria-disabled:bg-ff-text/[0.07] aria-disabled:text-ff-muted max-md:h-9 max-md:w-9"
             >
               <Glyph d={SEND} size={13} />
             </button>
@@ -711,22 +763,27 @@ export const AsgmChat = ({
   onGoto?: () => void
 }) => {
   const s = useAsgm()
+  const [edges, setEdges] = useState<Edges>({ top: false, more: false })
+  const onEdges = (e: Edges) => setEdges((x) => (x.top === e.top && x.more === e.more ? x : e))
   return (
     <div className="flex h-full min-h-0 flex-col" data-asgm="">
-      <Header variant={variant} titleId={titleId} onClose={onClose} onDock={onDock} onExpand={onExpand} />
-      {s.mock && (
-        <p className="shrink-0 border-b border-ff-line bg-ff-warn/[0.07] px-3 py-1 font-mono text-[10px] text-ff-text2">
-          <span className="font-semibold text-ff-warn">MOCK</span> · canned answers<span className="max-sm:hidden">, your league&apos;s real players</span>
-        </p>
-      )}
+      {/* The header (and the mock's note under it) draw their bottom edge only while the thread is scrolled under them. */}
+      <div className={cx('asgm-head shrink-0 bg-ff-panel', edges.top && !s.settings && 'is-stuck')}>
+        <Header variant={variant} titleId={titleId} onClose={onClose} onDock={onDock} onExpand={onExpand} />
+        {s.mock && (
+          <p className="bg-ff-warn/[0.08] px-3 py-1 font-mono text-[10px] text-ff-text2">
+            <span className="font-semibold text-ff-warn">MOCK</span> · canned answers<span className="max-sm:hidden">, your league&apos;s real players</span>
+          </p>
+        )}
+      </div>
       {s.settings ? (
         <div className="ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <AsgmSettings onDone={() => s.setSettings(false)} />
         </div>
       ) : (
         <>
-          <Thread variant={variant} onGoto={onGoto} />
-          <Composer variant={variant} autoFocus={variant !== 'sheet'} />
+          <Thread variant={variant} onGoto={onGoto} onEdges={onEdges} />
+          <Composer variant={variant} autoFocus={variant !== 'sheet'} over={edges.more} />
         </>
       )}
       <Announcer />

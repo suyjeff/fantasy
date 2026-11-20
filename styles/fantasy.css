@@ -1983,14 +1983,22 @@ html[data-ff-density="comfortable"] .ff .gap-3:not([class*=":gap-"]) { gap: 16px
 
 /* ---------- Assistant GM (components/assistant) ----------
  * The GM at work should feel like work: steps tick and settle, a scan crosses whatever is running, cards land with
- * their registration marks closing in and their frame settling from the accent to a hairline, figures count to where
- * they land, and the answer streams behind a caret. Every state is also said in words or glyphs (a check, a cross,
+ * their registration marks closing in and a ring settling from the accent to nothing, figures count to where they
+ * land, and the answer streams behind a caret. Every state is also said in words or glyphs (a check, a cross,
  * "Working"), never by motion alone, and under reduced motion every one of these is a plain fade or nothing.
  * Timing is the app's (see "Motion" at the top): the window arrives as a dialog does (panel), the dock as a drawer
  * (travel, drawer curve), steps and cards as small reveals; opened from the keyboard (G) either appears at once
  * ([data-instant]). Two kinds keep their own lengths on the app's curves, as the motion notes allow: the working
  * loops (tick, scan, the log's rule, the mark's twinkle), and a card's landing, one staged sequence of corners,
- * frame and figures counting up (--asgm-count). */
+ * ring and figures counting up (--asgm-count).
+ *
+ * Surfaces. The conversation groups by space and tone, not by boxes: a card, the work log, a suggestion and a
+ * setting sit on a wash of the theme's ink (--asgm-wash, a step off the panel in light and dark alike), the question
+ * on a wash of the accent, an error on a wash of the warning with its rule down the left. Hairlines stay where they
+ * are structure: rows in a table, the columns of a trade, a field's edge. The window and the dock float on layered
+ * shadows with a one-pixel ring (white in dark mode, where a shadow alone vanishes) over a transparent border, which
+ * is what forced-colours mode draws. The header and the composer draw their edge only while the thread runs under
+ * them (.is-stuck, .is-over). */
 
 /* Docked at the right from 1440px: the page makes room rather than being covered. The trade dock's minimized cards
    and the page's sticky header move over with it. */
@@ -1998,9 +2006,17 @@ html[data-asgm-dock] {
   --asgm-w: 400px;
 }
 .ff {
-  /* A card's landing: its figures count and its bars fill over this (AsgmCards useTicker), its corners and frame
+  /* A card's landing: its figures count and its bars fill over this (AsgmCards useTicker), its corners and ring
      settle over a little longer. */
   --asgm-count: 800ms;
+  /* The content surfaces' washes, at rest and under a pointer: the ink over the panel, so every theme gets a step
+     the same distance off its own panel (darker in light mode, lighter in dark). Text on them keeps 4.5:1. */
+  --asgm-wash: rgb(var(--ff-text) / 0.035);
+  --asgm-wash-hover: rgb(var(--ff-text) / 0.07);
+  /* Elevation: the ring that outlines a floating surface, and the shadow under it. */
+  --asgm-ring: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1));
+  --asgm-drop: light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.42));
+  --asgm-drop-deep: light-dark(rgb(0 0 0 / 0.16), rgb(0 0 0 / 0.6));
 }
 @media (min-width: 1800px) {
   html[data-asgm-dock] {
@@ -2020,11 +2036,56 @@ html[data-asgm-dock] {
   }
 }
 
+/* Elevation. The window: a ring, a contact shadow and two ambient layers. The dock: its ring down the left edge and a
+   long soft shadow over the page. The phone's sheet: a ring along the top and a shadow cast up. */
+.ff .asgm-float {
+  border: 1px solid transparent;
+  box-shadow:
+    0 0 0 1px var(--asgm-ring),
+    0 1px 2px -1px var(--asgm-drop),
+    0 4px 8px -2px var(--asgm-drop),
+    0 16px 32px -12px var(--asgm-drop-deep),
+    0 40px 80px -24px var(--asgm-drop-deep);
+}
+.ff .asgm-dock {
+  border-left: 1px solid transparent;
+  box-shadow:
+    -1px 0 0 var(--asgm-ring),
+    -8px 0 24px -12px var(--asgm-drop),
+    -24px 0 64px -32px var(--asgm-drop-deep);
+}
+.ff .asgm-sheet {
+  border-top: 1px solid transparent;
+  box-shadow:
+    0 -1px 0 var(--asgm-ring),
+    0 -12px 40px -8px var(--asgm-drop-deep);
+}
+
+/* The header and the composer: no rule while the thread is at rest; a hairline and a soft shadow while it scrolls
+   under them, so the edge is drawn only when there is something to separate. */
+.ff .asgm-head,
+.ff .asgm-composer {
+  position: relative;
+  z-index: 2;
+  transition: box-shadow var(--ff-dur-quick) ease;
+}
+.ff .asgm-head.is-stuck {
+  box-shadow:
+    0 1px 0 rgb(var(--ff-line)),
+    0 8px 16px -12px var(--asgm-drop-deep);
+}
+.ff .asgm-composer.is-over {
+  box-shadow:
+    0 -1px 0 rgb(var(--ff-line)),
+    0 -8px 16px -12px var(--asgm-drop-deep);
+}
+
 /* The window rises out of its corner; the dock slides in from the edge. */
 @keyframes asgm-float-in {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.97);
+    transform: translateY(12px) scale(0.96);
+    filter: blur(4px);
   }
 }
 @keyframes asgm-dock-in {
@@ -2043,7 +2104,47 @@ html[data-asgm-dock] {
   animation: none;
 }
 
-/* Registration marks on the window's and the page's frame, as the reveal draws them. */
+/* Something arriving in the conversation once (the welcome's parts, a question as it is sent, a reply's footer): it
+   fades up out of a soft blur, its parts --d apart. Reduced motion: the fade alone. The hidden state lives only in the
+   keyframe, so anything whose animation never runs is simply there. */
+.ff .asgm-enter {
+  animation: ff-fade-in var(--ff-dur-travel) var(--ff-ease-out) var(--d, 0ms) both;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ff .asgm-enter {
+    animation-name: asgm-enter;
+  }
+}
+@keyframes asgm-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(4px);
+  }
+}
+
+/* Press: the GM's own controls give to 0.96 on the app's press timing; disabled ones never do. Hover is a change of
+   wash or ink, only where a pointer hovers (Tailwind's hover: is gated the same way, tailwind.config.js). */
+.ff .asgm-press {
+  transition-property: scale, background-color, color, box-shadow;
+  transition-duration: var(--ff-dur-press), var(--ff-dur-quick), var(--ff-dur-quick), var(--ff-dur-quick);
+  transition-timing-function: var(--ff-ease-out), ease, ease, ease;
+}
+.ff .asgm-press:not(:disabled):not([aria-disabled='true']):active {
+  scale: 0.96;
+}
+/* A wash control: a chip or a row on the ink's wash, a step darker under the pointer. */
+.ff .asgm-wash {
+  background-color: var(--asgm-wash);
+}
+@media (hover: hover) and (pointer: fine) {
+  .ff .asgm-wash:is(button, a):hover,
+  .ff .asgm-wash-btn:hover {
+    background-color: var(--asgm-wash-hover);
+  }
+}
+
+/* Registration marks on the page's frame and the welcome, as the reveal draws them. */
 .ff .asgm-reg {
   position: absolute;
   z-index: 1;
@@ -2067,15 +2168,16 @@ html[data-asgm-dock] {
   border-bottom-width: 1px;
 }
 
-/* The engineering-sheet ground behind the welcome. */
+/* The engineering-sheet ground behind the welcome: a dot grid fading in from the left, under a wash of the accent
+   that fades down, with the accent rule at its top-left. No frame. */
 .ff .asgm-grid {
-  background-image: radial-gradient(rgb(var(--ff-text) / 0.1) 1px, transparent 1.3px);
+  background-image: radial-gradient(rgb(var(--ff-text) / 0.12) 1px, transparent 1.3px);
   background-size: 12px 12px;
   background-position: -6px -6px;
-  mask-image: linear-gradient(115deg, transparent 20%, black 85%);
+  mask-image: linear-gradient(115deg, transparent 25%, black 90%);
 }
 .ff .asgm-hero {
-  background: linear-gradient(180deg, rgb(var(--ff-accent) / 0.05), transparent 70%), rgb(var(--ff-panel));
+  background: linear-gradient(180deg, rgb(var(--ff-accent) / 0.07), rgb(var(--ff-accent) / 0.015) 85%);
 }
 .ff .asgm-hero::before {
   content: '';
@@ -2086,16 +2188,31 @@ html[data-asgm-dock] {
   background: rgb(var(--ff-accent));
 }
 
+.ff .asgm-hero .asgm-reg-br {
+  right: 0;
+  bottom: 0;
+}
+
+/* The suggestions: rows on the wash, a pixel apart; the chevron steps toward the question under the pointer. */
+.ff .asgm-suggest .asgm-chev {
+  transition: translate var(--ff-dur-quick) var(--ff-ease-out);
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .ff .asgm-suggest:hover .asgm-chev {
+    translate: 2px 0;
+  }
+}
+
 /* A name in an answer: a link, marked by a dotted rule (not by colour alone), lit like the app's names on hover. */
 .ff .asgm-link {
   display: inline;
   padding: 0;
   font: inherit;
-  color: rgb(var(--ff-text));
+  color: inherit;
   text-align: inherit;
   text-decoration-line: underline;
   text-decoration-style: dotted;
-  text-decoration-color: rgb(var(--ff-accent) / 0.55);
+  text-decoration-color: rgb(var(--ff-accent) / 0.6);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   transition: color var(--ff-dur-quick) ease;
@@ -2137,6 +2254,56 @@ html[data-asgm-dock] {
   75% { content: '...'; }
 }
 
+/* The work log: a slim strip on the wash. Live, it takes the accent's wash and its rule down the left, a scan runs
+   along its top edge and across the running step; settled, it folds to one line. Its pips count the steps: a square
+   each, the running one ticking in the accent, done ones in the positive ink, a stopped one hollow. */
+.ff .asgm-log {
+  position: relative;
+  background-color: var(--asgm-wash);
+  transition: background-color var(--ff-dur-reveal) ease, box-shadow var(--ff-dur-reveal) ease;
+}
+.ff .asgm-log.is-live {
+  background-color: rgb(var(--ff-accent) / 0.06);
+  box-shadow: inset 2px 0 0 rgb(var(--ff-accent));
+}
+.ff .asgm-pip {
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  background: rgb(var(--ff-pos));
+}
+.ff .asgm-pip.is-running {
+  background: rgb(var(--ff-accent));
+}
+.ff .asgm-pip.is-error {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgb(var(--ff-muted));
+}
+/* A new pip fades in; with motion allowed it also scales in, and the running one pulses. Gated by the query rather
+   than overridden under reduced motion, so no selector's weight can let the motion through. */
+.ff .asgm-pip.is-fresh {
+  animation: ff-fade-in var(--ff-dur-quick) var(--ff-ease-out) both;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ff .asgm-pip.is-fresh {
+    animation: asgm-pip-in var(--ff-dur-reveal) var(--ff-ease-out) both;
+  }
+  .ff .asgm-pip.is-running {
+    animation: ff-pulse 1s steps(2, jump-none) infinite;
+  }
+  .ff .asgm-pip.is-running.is-fresh {
+    animation:
+      asgm-pip-in var(--ff-dur-reveal) var(--ff-ease-out) both,
+      ff-pulse 1s steps(2, jump-none) var(--ff-dur-reveal) infinite;
+  }
+}
+@keyframes asgm-pip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.25);
+  }
+}
+
 /* A step running: its square turns a quarter at a time, and a scan crosses the row. Done, its detail fades up. */
 .ff .asgm-tick {
   animation: asgm-tick 800ms steps(4) infinite;
@@ -2151,7 +2318,7 @@ html[data-asgm-dock] {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgb(var(--ff-accent) / 0.1) 45%, rgb(var(--ff-accent) / 0.16) 50%, transparent 58%);
+  background: linear-gradient(90deg, transparent, rgb(var(--ff-accent) / 0.08) 45%, rgb(var(--ff-accent) / 0.14) 50%, transparent 58%);
   background-size: 220% 100%;
   animation: asgm-scan 1.3s linear infinite;
 }
@@ -2170,21 +2337,19 @@ html[data-asgm-dock] {
   from {
     opacity: 0;
     transform: translateY(4px);
+    filter: blur(2px);
   }
 }
 .ff .asgm-step .asgm-detail:not(:empty) {
   animation: ff-fade-in var(--ff-dur-quick) var(--ff-ease-out);
 }
 /* The live log's top edge carries a thin scan of its own. */
-.ff .asgm-log {
-  position: relative;
-}
 .ff .asgm-log.is-live::before {
   content: '';
   position: absolute;
-  left: -1px;
-  right: -1px;
-  top: -1px;
+  left: 0;
+  right: 0;
+  top: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, rgb(var(--ff-accent)) 50%, transparent);
   background-size: 40% 100%;
@@ -2199,11 +2364,29 @@ html[data-asgm-dock] {
     background-position: 140% 0;
   }
 }
+/* The steps open and fold on a reveal: the rows' height eases to and from nothing (grid rows, so no height is
+   measured). Folded, they are hidden too, from the keyboard and screen readers, once the fold has closed. */
+.ff .asgm-fold {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--ff-dur-reveal) var(--ff-ease-out), visibility 0s;
+}
+.ff .asgm-fold[data-open='false'] {
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition: grid-template-rows var(--ff-dur-reveal) var(--ff-ease-out), visibility 0s var(--ff-dur-reveal);
+}
+.ff .asgm-fold > * {
+  min-height: 0;
+  overflow: hidden;
+}
 
-/* A card lays out by its own width. Narrow (a phone, a 320px window), an odds row gives its team the whole first
-   line and draws the bar under it, so a name is never cut to two letters to make room for the bar. */
+/* A card: content on the wash, no frame; its rows keep their hairlines, which are the table's structure. It lays out
+   by its own width. Narrow (a phone, a 320px window), an odds row gives its team the whole first line and draws the
+   bar under it, so a name is never cut to two letters to make room for the bar. */
 .ff .asgm-card {
   container-type: inline-size;
+  background-color: var(--asgm-wash);
 }
 @container (max-width: 380px) {
   .ff .asgm-odds {
@@ -2222,7 +2405,8 @@ html[data-asgm-dock] {
   }
 }
 
-/* A card landing: it rises in, its corners close in from outside, and its frame settles from the accent. */
+/* A card landing: it rises in out of a soft blur, its corners close in from outside, and a ring settles from the
+   accent to nothing. */
 .ff .asgm-card.is-fresh {
   animation:
     asgm-card-in var(--ff-dur-travel) var(--ff-ease-out) var(--d, 0ms) both,
@@ -2231,12 +2415,16 @@ html[data-asgm-dock] {
 @keyframes asgm-card-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(12px);
+    filter: blur(4px);
   }
 }
 @keyframes asgm-card-settle {
   from {
-    border-color: rgb(var(--ff-accent) / 0.8);
+    box-shadow: inset 0 0 0 1px rgb(var(--ff-accent) / 0.7);
+  }
+  to {
+    box-shadow: inset 0 0 0 1px rgb(var(--ff-accent) / 0);
   }
 }
 .ff .asgm-corner {
@@ -2250,10 +2438,10 @@ html[data-asgm-dock] {
   border-width: 0;
   opacity: 0;
 }
-.ff .asgm-corner-tl { left: -1px; top: -1px; border-left-width: 1px; border-top-width: 1px; --cx: -6px; --cy: -6px; }
-.ff .asgm-corner-tr { right: -1px; top: -1px; border-right-width: 1px; border-top-width: 1px; --cx: 6px; --cy: -6px; }
-.ff .asgm-corner-bl { left: -1px; bottom: -1px; border-left-width: 1px; border-bottom-width: 1px; --cx: -6px; --cy: 6px; }
-.ff .asgm-corner-br { right: -1px; bottom: -1px; border-right-width: 1px; border-bottom-width: 1px; --cx: 6px; --cy: 6px; }
+.ff .asgm-corner-tl { left: 0; top: 0; border-left-width: 1px; border-top-width: 1px; --cx: -6px; --cy: -6px; }
+.ff .asgm-corner-tr { right: 0; top: 0; border-right-width: 1px; border-top-width: 1px; --cx: 6px; --cy: -6px; }
+.ff .asgm-corner-bl { left: 0; bottom: 0; border-left-width: 1px; border-bottom-width: 1px; --cx: -6px; --cy: 6px; }
+.ff .asgm-corner-br { right: 0; bottom: 0; border-right-width: 1px; border-bottom-width: 1px; --cx: 6px; --cy: 6px; }
 .ff .asgm-card.is-fresh .asgm-corner {
   animation: asgm-corner calc(var(--asgm-count) + 300ms) var(--ff-ease-out) var(--d, 0ms) both;
 }
@@ -2341,5 +2529,16 @@ html[data-asgm-dock] {
   .ff .asgm-log.is-live::before,
   .ff .asgm-corner {
     display: none;
+  }
+  .ff :is(.asgm-press, .asgm-suggest .asgm-chev) {
+    transition-property: background-color, color, box-shadow;
+  }
+  .ff .asgm-suggest .asgm-chev,
+  .ff .asgm-fold,
+  .ff .asgm-fold[data-open='false'] {
+    transition: none;
+  }
+  .ff .asgm-press:not(:disabled):not([aria-disabled='true']):active {
+    scale: none;
   }
 }

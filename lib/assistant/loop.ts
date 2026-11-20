@@ -4,7 +4,8 @@
 import { ASGM_LIMITS, ASGM_MAX_STEPS, ASGM_SYSTEM } from '../../workers/grades/src/asgmShared'
 import { keys } from './keys'
 import type { AsgmLeague } from './league'
-import { leagueBrief, packText, planPreRuns, preLabel, readQuestion, runPre } from './pack'
+import { leagueBrief, packText, planPreRuns, preLabel, readQuestion, runPre, type Reading } from './pack'
+import { quickAnswer } from './quick'
 import { AsgmError, complete, newId, toOpenAiMessages, type Msg, type ToolCall, type ToolSpec } from './providers'
 import { runTool, toolLabel, TOOL_BY_NAME, TOOLS } from './tools'
 import type { AsgmAction, AsgmCard, AsgmContext, AsgmEvent, AsgmMessage, AsgmProvider, StoredKey } from './types'
@@ -19,7 +20,41 @@ export const trimHistory = (history: AsgmMessage[], max = 6): Msg[] => {
   return kept.map((m) => (m.role === 'user' ? { role: 'user' as const, content: m.text.slice(0, 600) } : { role: 'assistant' as const, content: m.text.length > 900 ? `${m.text.slice(0, 900)}…` : m.text }))
 }
 
-export const toolSpecs = (): ToolSpec[] => TOOLS.map((t) => ({ name: t.name, description: t.description, params: t.params }))
+/** Tools every question is offered: the lookups any follow-up might need. */
+const CORE = ['player', 'team', 'lineup', 'matchup', 'standings', 'rankings', 'start_sit', 'playoff_odds']
+/** The rest, by what the question is about. */
+const BY_INTENT: Partial<Record<Reading['intents'][number], string[]>> = {
+  trade: ['evaluate_trade', 'find_trades', 'trade_values'],
+  values: ['trade_values', 'find_trades', 'evaluate_trade'],
+  waivers: ['waivers', 'faab_bid'],
+  faab: ['faab_bid', 'waivers'],
+  compare: ['compare_players'],
+  news: ['news'],
+  needs: ['league_needs', 'find_trades', 'waivers'],
+  moves: ['transactions'],
+  schedule: ['schedule', 'compare_players'],
+  opponent: ['schedule'],
+  owner: ['transactions'],
+  leaders: [],
+  lineup: ['waivers'],
+  matchup: ['schedule'],
+  standings: ['schedule'],
+  rankings: ['waivers'],
+  playoffs: ['schedule'],
+  roster: ['league_needs'],
+  team: ['league_needs', 'schedule', 'find_trades', 'waivers'],
+}
+
+/**
+ * The tools offered for a question: all of them when it is open-ended, else the core lookups plus the ones its intent
+ * needs. Every tool definition is prompt on every round trip, so fewer is faster and cheaper.
+ */
+export const toolSpecs = (reading?: Reading): ToolSpec[] => {
+  const all = TOOLS.map((t) => ({ name: t.name, description: t.description, params: t.params }))
+  if (!reading || reading.intents.some((i) => !(i in BY_INTENT))) return all
+  const want = new Set([...CORE, ...reading.intents.flatMap((i) => BY_INTENT[i] ?? [])])
+  return all.filter((t) => want.has(t.name))
+}
 
 /** Output tokens a round trip may use (reasoning models count their thinking here too). The house worker clamps its own. */
 const OUT_TOKENS: Partial<Record<AsgmProvider, number>> = { house: 900 }
@@ -39,7 +74,7 @@ export const firstPayload = async (args: TurnInput, signal: AbortSignal = new Ab
   }
   const pack = packText(leagueBrief(lg, args.context), pre)
   const messages: Msg[] = [...trimHistory(args.history), { role: 'user', content: `${pack}\n\nQUESTION: ${text.trim().slice(0, 1200)}` }]
-  return { reading, plan, pre, system: ASGM_SYSTEM, messages, tools: toolSpecs() }
+  return { reading, plan, pre, system: ASGM_SYSTEM, messages, tools: toolSpecs(reading), quick: quickAnswer(lg, text, args.context) }
 }
 
 /** The model's tool calls that can be run and relayed: known tools, arguments within the relay's limit, the first few. */
@@ -95,8 +130,21 @@ export const runModelTurn = async (args: TurnInput, onEvent: (e: AsgmEvent) => v
   }
   const abortErr = () => onEvent({ type: 'error', code: 'aborted', message: 'Stopped.' })
 
+  // ---- A plain lookup ("who has Puka", "Fourth & Long's record"): answered from the app's data, no model ----
+  const quick = quickAnswer(lg, text, args.context)
+  if (quick) {
+    const id = newId('s')
+    onEvent({ type: 'step', id, tool: 'lookup', label: quick.label, status: 'running' })
+    onEvent({ type: 'step', id, tool: 'lookup', label: quick.label, status: 'done', detail: 'no model needed' })
+    emit(quick)
+    onEvent({ type: 'text', delta: quick.text })
+    onEvent({ type: 'done', provider: 'app', model: 'instant lookup' })
+    return
+  }
+
   // ---- The pack: the league, the roster, and the tools this question plainly needs ----
-  const plan = planPreRuns(lg, text, args.context, readQuestion(lg, text, args.context))
+  const reading = readQuestion(lg, text, args.context)
+  const plan = planPreRuns(lg, text, args.context, reading)
   const pre: { label: string; tool: string; text: string }[] = []
   // Calls that already succeeded this turn, and where their result is, so a repeat is pointed at it. Failed calls are
   // not kept: the model may retry them.
@@ -115,15 +163,18 @@ export const runModelTurn = async (args: TurnInput, onEvent: (e: AsgmEvent) => v
   const pack = packText(leagueBrief(lg, args.context), pre)
   const history = trimHistory(args.history)
   const turnMsgs: Msg[] = [{ role: 'user', content: `${pack}\n\nQUESTION: ${text.trim().slice(0, 1200)}` }]
-  const tools = toolSpecs()
+  const tools = toolSpecs(reading)
 
   let answer = ''
+  /** The free relay failed on a step that offered tools: the next step answers from what is here, with none. */
+  let forced = false
   let model = ''
   let served: string = provider
   let remaining: number | undefined
   for (let step = 0; step < ASGM_MAX_STEPS; step++) {
-    const last = step === ASGM_MAX_STEPS - 1
-    if (last) turnMsgs.push({ role: 'user', content: 'That is the whole tool budget for this question. Answer now from what you have, and say plainly what the app could not tell you.' })
+    const last = step === ASGM_MAX_STEPS - 1 || forced
+    if (forced) turnMsgs.push({ role: 'user', content: 'No more tools for this question. Answer now from CONTEXT and any tool results above, and say plainly what the app could not tell you.' })
+    else if (last) turnMsgs.push({ role: 'user', content: 'That is the whole tool budget for this question. Answer now from what you have, and say plainly what the app could not tell you.' })
     const messages = fitMessages(history, turnMsgs, last ? [] : tools)
     // Only a step that answers is the answer: one that goes on to call tools may open with a line of preamble. So the
     // start of each step's text is held back until there is enough of it to be an answer, and if the step then calls
@@ -153,6 +204,13 @@ export const runModelTurn = async (args: TurnInput, onEvent: (e: AsgmEvent) => v
       })
     } catch (e) {
       if (signal.aborted) return abortErr()
+      // The free relay's model can fail on a step that offers tools (a reply it could not read). Once per question,
+      // answer from the context instead of failing: the pack usually holds what is needed.
+      if (provider === 'house' && !last && !forced && e instanceof AsgmError && e.code === 'provider') {
+        if (live) onEvent({ type: 'text', delta: '', reset: true })
+        forced = true
+        continue
+      }
       const err = e instanceof AsgmError ? e : new AsgmError('provider', `The model call failed: ${(e as Error)?.message ?? e}. Try again.`)
       onEvent({ type: 'error', code: err.code, message: err.message })
       return

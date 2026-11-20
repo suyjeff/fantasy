@@ -108,9 +108,19 @@ const MY = (lg: AsgmLeague) => (lg.myRosterId != null ? lg.myRosterId : fail('th
 const noHorizon = (lg: AsgmLeague) => (!lg.data.horizon.length ? fail('the app has no projections for the weeks ahead right now (season over or the feed is down)') : null)
 
 /** Projection used for lineup calls in a week: Sleeper's, else the model's expectation when Sleeper has none. */
-const weekPts = (lg: AsgmLeague, week: number) => {
+export const weekPts = (lg: AsgmLeague, week: number) => {
   const hasSleeper = (lg.data.projectionWeek === week && !!lg.data.projections) || !!lg.data.projectionsByWeek[week]
   return (id: string) => (hasSleeper ? projOf(lg, id, week) : (expOf(lg, id, week) ?? 0))
+}
+
+/** The standings order: wins, then ties, then points for. */
+export const standingRows = (lg: AsgmLeague) => [...lg.analysis.seasons].sort((x, y) => y.wins + 0.5 * y.ties - (x.wins + 0.5 * x.ties) || y.pf - x.pf)
+/** A team's place in the standings, 1 = first. */
+export const standingOf = (lg: AsgmLeague, rid: number) => standingRows(lg).findIndex((s) => s.rosterId === rid) + 1
+export const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
+const recordOf = (lg: AsgmLeague, rid: number) => {
+  const s = lg.analysis.seasonById[rid]
+  return s ? `${s.wins}-${s.losses}${s.ties ? `-${s.ties}` : ''}` : '–'
 }
 
 /** One player's line for a week: projection, range, expectation when it differs, matchup, status. */
@@ -228,6 +238,7 @@ const lineupTool: ToolDef = {
     const out: string[] = []
     const opp = opponentIn(lg, rid, week)
     out.push(`${teamName(lg, rid)}, week ${week}${opp != null ? ` vs ${teamName(lg, opp)}` : ''}. As set: ${r1(setTotal)} projected. Best: ${r1(best.total)} (${signed(best.total - setTotal)}).`)
+    out.push(`Set lineup (who starts now): ${set.map((id, i) => `${slotName(slots[i]?.name ?? '?')} ${id ? `${lname(lg, id)} ${r1(pts(id))}` : 'EMPTY'}`).join(', ')}.`)
     out.push('Best lineup:')
     best.assignments.forEach((p, i) => out.push(`- ${slotName(slots[i].name)}: ${p ? playerWeekLine(lg, p.id, week, { label: labels[p.id] ? `[${labels[p.id]}]` : '' }) : 'EMPTY (nobody eligible)'}`))
     const bench = team.players.filter((id) => !bestIds.has(id) && lg.data.players[id]).sort((a, b) => pts(b) - pts(a))
@@ -236,7 +247,7 @@ const lineupTool: ToolDef = {
     const changes = plan.swaps.map((s) => ({ out: s.out ?? '', in: s.in, slot: slotName(slots[s.slot].name), gain: r1(pts(s.in) - (s.out ? pts(s.out) : 0)) }))
     if (changes.length) out.push(`Changes: ${changes.map((c) => `start ${lname(lg, c.in)} over ${c.out ? lname(lg, c.out) : 'the empty slot'} at ${c.slot} (${signed(c.gain)})`).join('; ')}.`)
     else if (plan.unplaced.length) out.push(`Changes: move players between slots so ${plan.unplaced.map((u) => lname(lg, u.id)).join(', ')} start.`)
-    else out.push('Changes: none, the lineup as set is the best one.')
+    else out.push(`Changes: none, the lineup as set is the best one. Call for ${teamName(lg, rid)}${rid === lg.myRosterId ? ' (you)' : ''}: lineup is set, no changes; give the closest call, do not list every starter.`)
     // Close calls: each starting slot's best eligible bench player, smallest margin first.
     const calls: { s: string; b: string; margin: number; p: number }[] = []
     best.assignments.forEach((p, i) => {
@@ -255,6 +266,10 @@ const lineupTool: ToolDef = {
     const dead = best.assignments.filter((p) => p && !(p.pts > 0)).map((p) => lname(lg, p!.id))
     if (dead.length) out.push(`Holes: ${dead.join(', ')} project 0 (bye or out) and nobody on the bench can fill in; see waivers.`)
     if (week !== currentWeek(lg)) out.push(`Note: week ${week} is ahead; "as set" is today's lineup and projections can still move.`)
+    // The decision lines go right under the header, before the lists: what to change, then the closest calls.
+    const lead = out.filter((l) => /^(Changes|Close calls|Holes):/.test(l))
+    const rest = out.filter((l) => !/^(Changes|Close calls|Holes):/.test(l))
+    out.splice(0, out.length, ...rest.slice(0, 2), ...lead, ...rest.slice(2))
     const card: AsgmCard = { kind: 'lineup', title: `Week ${week} lineup`, rosterId: rid, week, changes: changes.filter((c) => c.out), total: { before: r1(setTotal), after: r1(best.total) } }
     return { text: out.join('\n'), cards: [card], detail: changes.length ? `${changes.length} change${changes.length === 1 ? '' : 's'}` : 'lineup is set' }
   },
@@ -444,7 +459,8 @@ const compareTool: ToolDef = {
       const bits = [
         `${pl.name} (${tagOf(lg, r.id)})`,
         `${r1(r.avg)} exp/wk, ${r1(r.total)} total`,
-        r.soft != null ? `schedule: avg defense rank #${r1(r.avgRank)} vs ${pl.pos}, ${r.soft >= 1.05 ? 'soft' : r.soft <= 0.95 ? 'tough' : 'average'} (${signed((r.soft - 1) * 100, 0)}% pts allowed vs avg)` : 'schedule: no defense data',
+        // The word first: an average rank "#21" reads as good to a model unless it is told #1 is the softest.
+        r.soft != null ? `schedule ${r.soft >= 1.03 ? 'softer than average' : r.soft <= 0.97 ? 'tougher than average' : 'about average'} (${signed((r.soft - 1) * 100, 0)}% pts allowed vs avg; avg defense rank #${r1(r.avgRank)} vs ${pl.pos}, #1 = softest)` : 'schedule: no defense data',
         r.byes.length ? `bye week ${r.byes.join(', ')}` : '',
         `value ${signed(lg.analysis.market[r.id] ?? 0)}/wk`,
         ecr?.posRank != null ? `ECR ${pl.pos}${Math.round(ecr.posRank)}` : '',
@@ -578,6 +594,18 @@ const priceDeal = async (lg: AsgmLeague, me: number, partner: number, give: stri
       `Playoff odds: ${teamName(lg, me)} ${pct(lev.after.me.playoffs - lev.me.playoffs)}→${pct(lev.after.me.playoffs)} (${pr(lev.me.playoffs)}), title ${pct(lev.after.me.title - lev.me.title)}→${pct(lev.after.me.title)}; ${teamName(lg, partner)} ${pct(lev.after.partner.playoffs - lev.partner.playoffs)}→${pct(lev.after.partner.playoffs)} (${pr(lev.partner.playoffs)}).`,
     )
   } else out.push('Playoff odds: no season simulation available (no projections ahead).')
+  // The call for the asking side, from the same numbers: lineup points first, then the odds, then whether they bite.
+  const odds = lev ? ` and ${signed(lev.me.playoffs * 100, 0)} pts of playoff odds` : ''
+  const call =
+    mine.lineup < -0.3
+      ? `don't make this trade. It costs ${teamName(lg, me)} ${signed(mine.lineup)} pts/wk${odds}${acc && acc.index >= 50 ? `; ${teamName(lg, partner)} would take it (${acc.index}/100), which is the problem` : ''}.`
+      : mine.lineup > 0.3
+        ? acc && acc.index < 35
+          ? `worth offering (${signed(mine.lineup)} pts/wk${odds}), but they are unlikely to accept (${acc.index}/100).`
+          : `do it: ${signed(mine.lineup)} pts/wk${odds}${acc ? `, ${acc.index}/100 they accept` : ''}.`
+        : `a wash on lineup points (${signed(mine.lineup)} pts/wk${odds}): decide on value and need.`
+  // First, so it is read first: the verdict for the side asking, whatever the question's wording ("would they take").
+  out.unshift(`Call for ${teamName(lg, me)}${me === lg.myRosterId ? ' (you)' : ''}: ${call}`)
   const deadline = Number(data.league.settings?.trade_deadline ?? 0)
   if (deadline && currentWeek(lg) > deadline) out.push(`Warning: the league's trade deadline (week ${deadline}) has passed.`)
   if (!read.valid) out.push(`Problems: ${read.sides.flatMap((s) => s.problems).join('; ')}.`)
@@ -884,6 +912,26 @@ const oddsTool: ToolDef = {
   },
 }
 
+/** A team's fantasy game in a week: the opponent, both best lineups, and the win chance the app shows. Throws a ToolError when there is none. */
+export const matchupOf = (lg: AsgmLeague, rid: number, week: number) => {
+  const opp = opponentIn(lg, rid, week) ?? fail(`${teamName(lg, rid)} has no matchup in week ${week}${lg.data.playoffWeeks.includes(week) ? ' yet (playoff pairings are set by the bracket)' : ''}`)
+  const pts = weekPts(lg, week)
+  const side = (r: number) => {
+    const team = lg.analysis.teamById[r]
+    const best = optimalLineup(lg.analysis.slots, lp(lg, team.players, pts))
+    const ids = best.assignments.filter(Boolean).map((p) => p!.id)
+    const sd = Math.sqrt(sum(ids.map((id) => rangeOf(lg, id, pts(id)).sd ** 2)))
+    return { r, total: best.total, ids, sd }
+  }
+  const A = side(rid)
+  const B = side(opp)
+  if (!(A.total > 0) && !(B.total > 0)) fail(`no projections for week ${week} yet`)
+  const f = lg.models.forecast
+  const nw = f?.nextWeek.find((g) => g.week === week && (g.a === rid || g.b === rid))
+  const pWin = nw ? (nw.a === rid ? nw.pA : 1 - nw.pA) : f ? phi((f.mean(rid, week) - f.mean(opp, week)) / (f.sigma * Math.SQRT2)) : phi((A.total - B.total) / Math.max(1, Math.sqrt(A.sd ** 2 + B.sd ** 2)))
+  return { opp, A, B, pWin, model: !!(nw || f) }
+}
+
 const matchupTool: ToolDef = {
   name: 'matchup',
   description: 'A fantasy matchup for a week: both projected lineups, win probability, biggest swings, injuries, byes.',
@@ -892,23 +940,11 @@ const matchupTool: ToolDef = {
   run: (a, lg) => {
     const rid = must(resolveTeam(lg, a.team))
     const week = weekArg(lg, a.week)
-    const opp = opponentIn(lg, rid, week) ?? fail(`${teamName(lg, rid)} has no matchup in week ${week}${lg.data.playoffWeeks.includes(week) ? ' yet (playoff pairings are set by the bracket)' : ''}`)
+    const m = matchupOf(lg, rid, week)
+    const { opp, A, B, pWin, model } = m
     const pts = weekPts(lg, week)
-    const side = (r: number) => {
-      const team = lg.analysis.teamById[r]
-      const best = optimalLineup(lg.analysis.slots, lp(lg, team.players, pts))
-      const ids = best.assignments.filter(Boolean).map((p) => p!.id)
-      const sd = Math.sqrt(sum(ids.map((id) => rangeOf(lg, id, pts(id)).sd ** 2)))
-      return { r, total: best.total, ids, sd }
-    }
-    const A = side(rid)
-    const B = side(opp)
-    if (!(A.total > 0) && !(B.total > 0)) fail(`no projections for week ${week} yet`)
-    const f = lg.models.forecast
-    const nw = f?.nextWeek.find((g) => g.week === week && (g.a === rid || g.b === rid))
-    const pWin = nw ? (nw.a === rid ? nw.pA : 1 - nw.pA) : f ? phi((f.mean(rid, week) - f.mean(opp, week)) / (f.sigma * Math.SQRT2)) : phi((A.total - B.total) / Math.max(1, Math.sqrt(A.sd ** 2 + B.sd ** 2)))
     const out: string[] = []
-    out.push(`Week ${week}: ${teamName(lg, rid)} ${r1(A.total)} vs ${teamName(lg, opp)} ${r1(B.total)} (best lineups, Sleeper projections). ${teamName(lg, rid)} wins ${pct(pWin)}${nw || f ? ' (season model, incl. lineup habits)' : ''}.`)
+    out.push(`Week ${week}: ${teamName(lg, rid)} ${r1(A.total)} vs ${teamName(lg, opp)} ${r1(B.total)} (best lineups, Sleeper projections). ${teamName(lg, rid)} wins ${pct(pWin)}${model ? ' (season model, incl. lineup habits)' : ''}.`)
     for (const s of [A, B]) {
       out.push(`${teamName(lg, s.r)} starters:`)
       for (const id of s.ids) out.push(`- ${playerWeekLine(lg, id, week)}`)
@@ -931,7 +967,7 @@ const standingsTool: ToolDef = {
   run: (_a, lg) => {
     const { analysis, models } = lg
     const sim = models.forecast?.sim
-    const rows = [...analysis.seasons].sort((x, y) => y.wins - x.wins || y.pf - x.pf)
+    const rows = standingRows(lg)
     const out = ['Rank | team | W-L | PF | PA | power rank (score) | Elo | playoffs | streak | luck (wins) | remaining SOS (avg opp power score)']
     rows.forEach((s, i) => {
       const p = analysis.powerById[s.rosterId]
@@ -945,7 +981,7 @@ const standingsTool: ToolDef = {
 
 const teamTool: ToolDef = {
   name: 'team',
-  description: 'One team: record, power, odds, FAAB, lineup by slot vs league average, biggest need, strengths/weaknesses, bench, byes ahead, remaining opponents, trading habits and mood.',
+  description: 'Any team: record, standing, power, odds, FAAB, roster (starters by slot vs league average, bench), biggest need, strengths/weaknesses, byes ahead, remaining opponents, trading habits and mood.',
   params: obj({ team: TEAM_ARG }),
   label: (a) => `Scouting ${a.team ? String(a.team) : 'your team'}`,
   run: (a, lg) => {
@@ -956,7 +992,7 @@ const teamTool: ToolDef = {
     const p = analysis.powerById[rid]
     const out: string[] = []
     const sim = models.forecast?.sim[rid]
-    out.push(`${t.name}${rid === lg.myRosterId ? ' (you)' : ''}: ${s ? `${s.wins}-${s.losses}${s.ties ? `-${s.ties}` : ''}, PF ${r1(s.pf)}, PA ${r1(s.pa)}` : ''}; power #${p?.rank ?? '–'}; ${sim ? `playoffs ${pct(sim.playoffs)}, title ${pct(sim.title)}` : 'no odds'}${models.faab ? `; FAAB $${models.faab.remaining[rid] ?? 0}` : ''}.`)
+    out.push(`${t.name}${rid === lg.myRosterId ? ' (you)' : ''}: ${s ? `${s.wins}-${s.losses}${s.ties ? `-${s.ties}` : ''} (${ordinal(standingOf(lg, rid))} of ${analysis.teams.length}), PF ${r1(s.pf)}, PA ${r1(s.pa)}` : ''}; power #${p?.rank ?? '–'}; ${sim ? `playoffs ${pct(sim.playoffs)}, title ${pct(sim.title)}` : 'no odds'}${models.faab ? `; FAAB $${models.faab.remaining[rid] ?? 0}` : ''}; manager ${t.owner}.`)
     const need = analysis.needs[rid]
     if (need) {
       out.push(`Lineup ahead: ${r1(need.lineup)} pts/wk. Slots (starter, pts/wk vs league avg):`)
@@ -1051,10 +1087,10 @@ const tradeValuesTool: ToolDef = {
 
 const rankingsTool: ToolDef = {
   name: 'rankings',
-  description: "Rank a position by this week's projection or rest of season, among free agents, rostered or all.",
+  description: "Rank a position by this week's projection, rest of season, or points scored this season (league leaders), among free agents, rostered or all, with owners.",
   params: obj({
     position: S('QB, RB, WR, TE, K, DEF, or FLEX.'),
-    basis: { type: 'string', enum: ['week', 'ros'], description: 'Default week.' },
+    basis: { type: 'string', enum: ['week', 'ros', 'season'], description: 'week (default), ros, or season (points scored so far: league leaders).' },
     week: WEEK_ARG,
     pool: { type: 'string', enum: ['available', 'rostered', 'all'], description: 'Default all.' },
     limit: N('How many, default 10, at most 20.'),
@@ -1065,19 +1101,131 @@ const rankingsTool: ToolDef = {
     const raw = String(a.position ?? '').toUpperCase().replace('DST', 'DEF')
     const flex = analysis.slots.find((s) => s.name === 'FLEX')?.eligible ?? ['RB', 'WR', 'TE']
     const ok = raw === 'FLEX' ? (p: string) => flex.includes(p) : (p: string) => p === raw
-    const basis = a.basis === 'ros' ? 'ros' : 'week'
+    const basis = a.basis === 'ros' ? 'ros' : a.basis === 'season' ? 'season' : 'week'
     const week = weekArg(lg, a.week)
     const pool = ['available', 'rostered'].includes(String(a.pool)) ? String(a.pool) : 'all'
     const limit = Math.min(20, Math.max(1, num(a.limit) ?? 10))
-    const score = (id: string) => (basis === 'ros' ? (analysis.horizon.perWeek[id] ?? 0) : weekPts(lg, week)(id))
+    const seasonPts = (id: string) => (analysis.values[id]?.games ? analysis.values[id].ppg * analysis.values[id].games : 0)
+    const score = (id: string) => (basis === 'ros' ? (analysis.horizon.perWeek[id] ?? 0) : basis === 'season' ? seasonPts(id) : weekPts(lg, week)(id))
     const ids = Object.keys(data.players)
       .filter((id) => ok(data.players[id].pos) && (pool === 'all' || (pool === 'available') === (analysis.rosteredBy[id] == null)) && score(id) > 0)
       .sort((x, y) => score(y) - score(x))
       .slice(0, limit)
     if (!ids.length) fail(`no ${raw} with a projection there`)
-    const out = [`${raw} by ${basis === 'ros' ? 'rest-of-season expectation (pts/wk)' : `week ${week} projection`}, ${pool}:`]
-    ids.forEach((id, i) => out.push(`${i + 1}. ${lname(lg, id)} (${tagOf(lg, id)}) ${r1(score(id))}${basis === 'week' ? ` ${matchupText(lg, id, week)}` : ''}${statusText(lg, id) ? ` · ${statusText(lg, id)}` : ''}`))
-    return { text: out.join('\n'), cards: [{ kind: 'players', title: `${raw} ${basis === 'ros' ? 'rest of season' : `week ${week}`}`, rows: ids.slice(0, 8).map((id) => ({ id, value: r1(score(id)).toFixed(1) })) }] }
+    const what = basis === 'ros' ? 'rest-of-season expectation (pts/wk)' : basis === 'season' ? 'points scored this season (league scoring)' : `week ${week} projection`
+    const out = [`${raw} by ${what}, ${pool}:`]
+    ids.forEach((id, i) =>
+      out.push(
+        `${i + 1}. ${lname(lg, id)} (${tagOf(lg, id)}) ${r1(score(id))}${basis === 'season' ? ` (${r1(analysis.values[id]?.ppg)} ppg, ${analysis.values[id]?.games ?? 0} games)` : ''}${basis === 'week' ? ` ${matchupText(lg, id, week)}` : ''}${statusText(lg, id) ? ` · ${statusText(lg, id)}` : ''}`,
+      ),
+    )
+    const title = basis === 'ros' ? 'rest of season' : basis === 'season' ? 'season leaders' : `week ${week}`
+    return { text: out.join('\n'), cards: [{ kind: 'players', title: `${raw} ${title}`, rows: ids.slice(0, 8).map((id) => ({ id, value: r1(score(id)).toFixed(1) })) }] }
+  },
+}
+
+const leagueNeedsTool: ToolDef = {
+  name: 'league_needs',
+  description: "Every team's needs: pts/wk a league-average starter at a position would add to each lineup. Who needs a QB/RB/WR/TE most.",
+  params: obj({ position: S('QB, RB, WR or TE. Default: all.') }),
+  label: (a) => `Reading every team's needs${a.position ? ` at ${String(a.position).toUpperCase()}` : ''}`,
+  run: (a, lg) => {
+    noHorizon(lg)
+    const { analysis } = lg
+    const pos = a.position ? String(a.position).toUpperCase() : null
+    if (pos && !['QB', 'RB', 'WR', 'TE'].includes(pos)) fail('position must be QB, RB, WR or TE')
+    const teams = analysis.teams.filter((t) => analysis.needs[t.rosterId])
+    if (!teams.length) fail('no lineup projections to read needs from')
+    const you = (rid: number) => (rid === lg.myRosterId ? ' (you)' : '')
+    const out: string[] = []
+    if (pos) {
+      const rows = teams.map((t) => ({ rid: t.rosterId, gain: analysis.needs[t.rosterId].byPos[pos] ?? 0 })).sort((x, y) => y.gain - x.gain)
+      out.push(`Who needs a ${pos} most (pts/wk a league-average ${pos} starter adds; 0 = no gain):`)
+      rows.forEach((r, i) => {
+        const starters = analysis.needs[r.rid].slots.filter((x) => x.starter && posOf(lg, x.starter) === pos).map((x) => `${lname(lg, x.starter!)} ${r1(x.pts)}/wk`)
+        out.push(`${i + 1}. ${teamName(lg, r.rid)}${you(r.rid)} ${signed(r.gain)} · ${pos} starters: ${starters.join(', ') || 'none'} · biggest need ${analysis.needs[r.rid].worstPos ?? '–'}`)
+      })
+    } else {
+      out.push("Each team's biggest need (pts/wk a league-average starter adds there), then the other positions:")
+      for (const t of teams) {
+        const n = analysis.needs[t.rosterId]
+        const others = Object.entries(n.byPos).filter(([p]) => ['QB', 'RB', 'WR', 'TE'].includes(p)).sort((x, y) => y[1] - x[1]).map(([p, g]) => `${p} ${signed(g)}`)
+        out.push(`- ${t.name}${you(t.rosterId)}: ${n.worstPos ?? 'no clear need'} · ${others.join(', ')}`)
+      }
+    }
+    return { text: out.join('\n'), detail: pos ? `${pos} needs` : 'needs by team' }
+  },
+}
+
+const scheduleTool: ToolDef = {
+  name: 'schedule',
+  description: "A team's season week by week: results and scores so far, opponents left (power rank), and head-to-head with another team this season and last.",
+  params: obj({ team: TEAM_ARG, vs: S('Optional: another team, for head-to-head.') }),
+  label: (a, lg) => `Reading ${a.team ? String(a.team) : 'your'} schedule${a.vs ? ` vs ${String(a.vs)}` : ''}`,
+  run: (a, lg) => {
+    const rid = must(resolveTeam(lg, a.team))
+    const vs = a.vs != null && a.vs !== '' ? must(resolveTeam(lg, a.vs)) : null
+    const { data, analysis } = lg
+    const game = (ms: { roster_id: number; matchup_id: number | null; points?: number | null }[] | undefined, r: number) => {
+      const m = ms?.find((x) => x.roster_id === r)
+      if (!m || m.matchup_id == null) return null
+      const o = ms!.find((x) => x.matchup_id === m.matchup_id && x.roster_id !== r)
+      return o ? { opp: o.roster_id, pf: m.points ?? 0, pa: o.points ?? 0 } : null
+    }
+    const out = [`${teamName(lg, rid)}${rid === lg.myRosterId ? ' (you)' : ''}: ${recordOf(lg, rid)}, ${ordinal(standingOf(lg, rid))} in the standings.`]
+    const played = data.regularWeeks.map((w) => ({ w, g: game(data.matchupsByWeek[w], rid) })).filter((x) => x.g)
+    const res = (g: { pf: number; pa: number }) => (g.pf > g.pa ? 'W' : g.pf < g.pa ? 'L' : 'T')
+    if (played.length) out.push(`Results: ${played.map(({ w, g }) => `w${w} ${res(g!)} ${r1(g!.pf)}–${r1(g!.pa)} vs ${teamName(lg, g!.opp)}`).join('; ')}.`)
+    const left = data.futureWeeks.map((w) => ({ w, o: opponentIn(lg, rid, w) })).filter((x) => x.o != null)
+    if (left.length) out.push(`Left: ${left.map((x) => `w${x.w} ${teamName(lg, x.o)} (${recordOf(lg, x.o!)}, power #${analysis.powerById[x.o!]?.rank ?? '–'})`).join('; ')}.`)
+    if (data.playoffWeeks.length) out.push(`Fantasy playoffs: weeks ${weeksText(data.playoffWeeks)}, ${data.league.settings?.playoff_teams ?? '?'} teams.`)
+    if (vs != null) {
+      const now = played.filter(({ g }) => g!.opp === vs)
+      const h = data.history
+      const back: Record<number, number> = {}
+      for (const [old, cur] of Object.entries(h?.rosterMap ?? {})) back[cur] = Number(old)
+      const then = h && back[rid] != null && back[vs] != null ? h.weeks.map((w) => ({ w, g: game(h.matchupsByWeek[w], back[rid]) })).filter((x) => x.g && x.g.opp === back[vs]) : []
+      const line = (xs: typeof now) => xs.map(({ w, g }) => `w${w} ${res(g!)} ${r1(g!.pf)}–${r1(g!.pa)}`).join(', ')
+      const wl = (xs: typeof now) => `${xs.filter(({ g }) => g!.pf > g!.pa).length}-${xs.filter(({ g }) => g!.pf < g!.pa).length}`
+      out.push(`Head-to-head with ${teamName(lg, vs)}: this season ${now.length ? `${wl(now)} (${line(now)})` : 'not played yet'}${left.some((x) => x.o === vs) ? `; they meet again week ${left.filter((x) => x.o === vs).map((x) => x.w).join(', ')}` : ''}${h ? `; ${h.season}: ${then.length ? `${wl(then)} (${line(then)})` : 'did not meet'}` : ''}.`)
+    }
+    return { text: out.join('\n'), actions: [{ kind: 'openTeam', rosterId: rid, label: `Open ${teamName(lg, rid)}` }] }
+  },
+}
+
+const transactionsTool: ToolDef = {
+  name: 'transactions',
+  description: 'Recent league moves, newest first: trades (players, FAAB), waiver claims with bids, free-agent adds and drops. For the league or one team.',
+  params: obj({ team: S('A team, or leave out for the whole league.'), type: { type: 'string', enum: ['trade', 'waiver', 'all'], description: 'Default all.' }, limit: N('How many, default 12, at most 25.') }),
+  label: (a) => `Reading ${a.type === 'trade' ? 'trades' : 'transactions'}${a.team ? ` for ${String(a.team)}` : ''}`,
+  run: (a, lg) => {
+    const rid = a.team != null && a.team !== '' && !/^(league|all|everyone)$/i.test(String(a.team).trim()) ? must(resolveTeam(lg, a.team)) : null
+    const type = a.type === 'trade' ? 'trade' : a.type === 'waiver' ? 'waiver' : 'all'
+    const limit = Math.min(25, Math.max(1, num(a.limit) ?? 12))
+    const txs = lg.data.transactions
+      .filter((t) => t.status === 'complete' && (rid == null || t.roster_ids.includes(rid)) && (type === 'all' || (type === 'trade' ? t.type === 'trade' : t.type === 'waiver')))
+      .sort((x, y) => (y.processed ?? y.created) - (x.processed ?? x.created))
+    if (!txs.length) return { text: `No ${type === 'all' ? 'transactions' : `${type}s`} ${rid != null ? `for ${teamName(lg, rid)} ` : ''}this season in the app's data.` }
+    const names = (ids: string[]) => ids.map((id) => lname(lg, id)).join(', ')
+    const out = [`${type === 'trade' ? 'Trades' : 'Transactions'}${rid != null ? ` involving ${teamName(lg, rid)}` : ''}, newest first (${txs.length} this season):`]
+    for (const t of txs.slice(0, limit)) {
+      const adds = Object.entries(t.adds ?? {})
+      const drops = Object.entries(t.drops ?? {})
+      if (t.type === 'trade') {
+        const sides = t.roster_ids.map((r) => {
+          const got = adds.filter(([, to]) => to === r).map(([id]) => id)
+          const cash = (t.faab ?? []).filter((f) => f.receiver === r).reduce((s, f) => s + f.amount, 0)
+          return `${teamName(lg, r)} gets ${got.length ? names(got) : 'no players'}${cash ? ` + $${cash} FAAB` : ''}`
+        })
+        out.push(`- w${t.leg} trade: ${sides.join('; ')}${t.picks ? ` (+${t.picks} draft pick${t.picks === 1 ? '' : 's'})` : ''}.`)
+      } else {
+        const r = t.roster_ids[0]
+        const add = adds.map(([id]) => id)
+        const drop = drops.map(([id]) => id)
+        out.push(`- w${t.leg} ${t.type === 'waiver' ? 'waiver claim' : t.type === 'free_agent' ? 'free-agent move' : t.type}: ${teamName(lg, r)}${add.length ? ` adds ${names(add)}${t.bid ? ` ($${t.bid})` : ''}` : ''}${drop.length ? `${add.length ? ',' : ''} drops ${names(drop)}` : ''}.`)
+      }
+    }
+    return { text: out.join('\n'), detail: `${Math.min(limit, txs.length)} of ${txs.length}` }
   },
 }
 
@@ -1097,6 +1245,9 @@ export const TOOLS: ToolDef[] = [
   teamTool,
   tradeValuesTool,
   rankingsTool,
+  leagueNeedsTool,
+  scheduleTool,
+  transactionsTool,
 ]
 export const TOOL_BY_NAME: Record<string, ToolDef> = Object.fromEntries(TOOLS.map((t) => [t.name, t]))
 
@@ -1123,4 +1274,4 @@ export const toolLabel = (name: string, args: Args, lg: AsgmLeague) => {
   }
 }
 
-export { priceDeal, streakText }
+export { priceDeal, streakText, ToolError, recordOf }

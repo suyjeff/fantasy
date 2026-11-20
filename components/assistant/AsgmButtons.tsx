@@ -12,11 +12,11 @@ export const AsgmName = ({ className, live }: { className?: string; live?: boole
   </span>
 )
 
-/** The ball in a hairline box with registration ticks at two corners, as the reveal frames its crown. */
+/** The ball on a wash of the accent with registration ticks at two corners, as the reveal frames its crown. */
 export const AsgmBadge = ({ size = 28, live, className }: { size?: number; live?: boolean; className?: string }) => (
-  <span aria-hidden className={cx('asgm-badge relative flex shrink-0 items-center justify-center border border-ff-accent/45 bg-ff-panel text-ff-accent', live && 'is-live', className)} style={{ width: size, height: size }}>
-    <span className="absolute -left-px -top-px h-1.5 w-1.5 border-l border-t border-ff-accent" />
-    <span className="absolute -bottom-px -right-px h-1.5 w-1.5 border-b border-r border-ff-accent" />
+  <span aria-hidden className={cx('asgm-badge relative flex shrink-0 items-center justify-center bg-ff-accent/[0.12] text-ff-accent', live && 'is-live', className)} style={{ width: size, height: size }}>
+    <span className="absolute left-0 top-0 h-1.5 w-1.5 border-l border-t border-ff-accent" />
+    <span className="absolute bottom-0 right-0 h-1.5 w-1.5 border-b border-r border-ff-accent" />
     <FootballIcon size={Math.round(size * 0.52)} />
   </span>
 )

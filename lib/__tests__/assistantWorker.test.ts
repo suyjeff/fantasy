@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import worker from '../../workers/grades/src/index'
-import { ASGM, checkBody, neuronsFor, parseToolCall, plainMessages, replyText, resetWaiShape, worstNeurons, type ChatBody } from '../../workers/grades/src/assistant'
+import { ASGM, checkBody, neuronsFor, parseToolCall, plainMessages, replyCalls, replyText, resetWaiShape, worstNeurons, type ChatBody } from '../../workers/grades/src/assistant'
 import { ASGM_LIMITS, ASGM_SYSTEM } from '../../workers/grades/src/asgmShared'
 import { AsgmMeter, dayOf, netKey, type SqlLike } from '../../workers/grades/src/meter'
 
@@ -162,6 +162,39 @@ describe('assistant relay: models', () => {
     expect(String(ai.runs[0].input.instructions)).toContain('TOOL_CALL {"name": "<tool>"')
     expect(m.read('g')).toMatchObject({ q: 1, wai: 1, r: 1 })
     expect(m.read('g').n).toBeCloseTo(neuronsFor(4000, 500), 1)
+  })
+
+  it('takes the native tool call gpt-oss makes on Workers AI, which comes back with no text at all', async () => {
+    // What the live relay got for "what team has Puka": a function_call item and no message, read as an empty answer.
+    const m = fakeMeter()
+    const ai = fakeAI({ output: [{ type: 'reasoning', content: [{ type: 'reasoning_text', text: 'Need player tool.' }] }, { type: 'function_call', call_id: 'c1', name: 'functions.player', arguments: '{"player":"Puka"}' }], usage: { input_tokens: 3000, output_tokens: 60 } })
+    const res = await chat({ ASGM_METER: m.ns, AI: ai }, {}, { client: 'nativeclient01' })
+    expect(res.status).toBe(200)
+    const j = await res.json()
+    expect(j.message.tool_calls).toEqual([{ id: expect.any(String), name: 'player', arguments: '{"player":"Puka"}' }])
+    expect(replyCalls({ choices: [{ message: { content: null, tool_calls: [{ function: { name: 'team', arguments: '{}' } }, { function: { name: 'rm_rf', arguments: '{}' } }] } }] })).toEqual([{ name: 'team', arguments: '{}' }])
+    // An empty reply says what came back, so a failure can be read from the browser.
+    const empty = await chat({ ASGM_METER: fakeMeter().ns, AI: fakeAI({ output: [{ type: 'reasoning', content: [] }], incomplete_details: { reason: 'max_output_tokens' } }) }, {}, { client: 'nativeclient02' })
+    expect(empty.status).toBe(502)
+    expect((await empty.json()).why).toMatch(/no text \(output\[reasoning\] incomplete:max_output_tokens\)/)
+  })
+
+  it('logs a Workers AI failure in the worker and tells the caller only its coarse shape', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const secret = 'InferenceUpstreamError: account 1234abcd at upstream host x.internal'
+    const boom = fakeAI(() => {
+      throw new Error(secret)
+    })
+    const res = await chat({ ASGM_METER: fakeMeter().ns, AI: boom }, { tools: [] }, { client: 'whyclient0001' })
+    expect(res.status).toBe(502)
+    const raw = await res.text()
+    expect(raw).not.toContain('1234abcd')
+    expect(JSON.parse(raw).why).toMatch(/^(responses|chat): threw$/)
+    expect(log).toHaveBeenCalledWith(expect.stringContaining(secret))
+    // Model text never reaches the label either: unknown item types read as "other".
+    const odd = await chat({ ASGM_METER: fakeMeter().ns, AI: fakeAI({ output: [{ type: 'leak: hello' }] }) }, {}, { client: 'whyclient0002' })
+    expect((await odd.json()).why).toBe('responses: no text (output[other])')
+    log.mockRestore()
   })
 
   it('charges the worst case when Workers AI reports no usage', async () => {
