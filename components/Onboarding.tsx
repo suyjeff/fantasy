@@ -6,6 +6,7 @@ import { Brand, FantasyHead } from './Shell'
 import { DIAGRAMS } from './TourDiagrams'
 import { sharingOn } from '../lib/sharedGrades'
 import { Avatar, Button, Segmented, cx } from './ui'
+import { ChevronIcon } from './icons'
 
 export type OnboardResult = { provider: 'sleeper'; username: string } | { provider: 'espn'; leagueId: string; teamId: number }
 
@@ -274,9 +275,10 @@ const Onboarding = ({ initial, onDone, onCancel, cancelLabel, hint }: { initial:
                   setFound(null)
                   setState({ kind: 'idle' })
                 }}
-                className="w-full py-1 font-mono text-[11px] text-ff-muted hover:text-ff-text"
+                className="flex w-full items-center justify-center gap-1 py-1 font-mono text-[11px] text-ff-muted hover:text-ff-text"
               >
-                ‹ a different league
+                <ChevronIcon dir="left" />
+                a different league
               </button>
             ) : (
               onCancel && (

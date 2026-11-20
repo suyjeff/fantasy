@@ -173,7 +173,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
               <th className="h-7 border-b border-ff-line pl-2 pr-3 text-right font-normal">title</th>
             </tr>
           </thead>
-          <tbody className={cx('transition-opacity duration-150', pending && 'opacity-70')}>
+          <tbody className={cx('transition-opacity', pending && 'opacity-70')}>
             {rows.map((id, i) => {
               const s = scenario[id]
               const b = baseline[id]
@@ -190,7 +190,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
                         <span
                           key={k}
                           title={`${odds(p)} to finish ${k + 1}`}
-                          className={cx('h-3.5 w-2.5 transition-colors duration-300', k + 1 === nPlayoff && 'mr-[3px]')}
+                          className={cx('h-3.5 w-2.5 transition-colors', k + 1 === nPlayoff && 'mr-[3px]')}
                           style={{ background: probShade(p) ?? 'rgb(var(--ff-line) / 0.5)' }}
                         />
                       ))}
@@ -288,7 +288,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
                   aria-selected={w === week}
                   onClick={() => setWeek(w)}
                   className={cx(
-                    'ff-press relative h-7 min-w-[44px] shrink-0 border px-2 font-mono text-[11px]',
+                    'transition-colors relative h-7 min-w-[44px] shrink-0 border px-2 font-mono text-[11px]',
                     w === week ? 'border-ff-text bg-ff-text text-ff-panel' : 'border-ff-line text-ff-text2 hover:border-ff-line2',
                   )}
                 >
@@ -322,7 +322,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
                     aria-pressed={on}
                     onClick={() => pick(g, id)}
                     className={cx(
-                      'ff-press flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border px-2 py-1.5 text-left',
+                      'transition-colors flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border px-2 py-1.5 text-left',
                       align === 'right' && 'flex-row-reverse text-right',
                       on
                         ? 'border-ff-accent bg-ff-accent/10'
@@ -366,7 +366,7 @@ const PlayoffsView = ({ sub, onSub }: { sub: string | null; onSub: PageChange })
   const season = (
     <Panel title="Play a season" pad={false} actions={trace ? <span className="num">season #{trace.t.seed.toString(36).toUpperCase()}</span> : <span>one draw of many</span>}>
       <div className="flex flex-wrap items-center gap-3 border-b border-ff-line px-3 py-2.5">
-        <Button variant="primary" onClick={play} className="ff-press">
+        <Button variant="primary" onClick={play} className="transition-colors">
           {trace ? 'Play another season' : 'Play a season'}
         </Button>
         <span className="min-w-0 flex-1 text-[12px] text-ff-muted">

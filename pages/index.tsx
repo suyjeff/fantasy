@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FantasyProvider } from '../components/FantasyContext'
 import SheetHost, { sheetKey, type SheetRef } from '../components/SheetHost'
 import { TradeDockProvider } from '../components/TradeDock'
-import Shell, { SECTION_KEYS, SECTIONS, type SectionKey } from '../components/Shell'
-import { Label, Segmented, Select, cx, simOdds } from '../components/ui'
+import Shell, { SECTION_KEYS, sectionLabel, type SectionKey } from '../components/Shell'
+import { byKeyboard, cx, motionMs, motionToken, reducedMotion } from '../components/ui'
 import DashboardView from '../components/views/DashboardView'
 import Onboarding, { type OnboardResult } from '../components/Onboarding'
 import MeView from '../components/views/MeView'
@@ -38,8 +38,8 @@ import {
 import { useRoute } from '../lib/useRoute'
 import { DEFAULT_MODEL, type ModelConfig } from '../lib/war'
 import { DEFAULT_THEME, themeById, type Scheme } from '../lib/themes'
-import UserMenu from '../components/UserMenu'
-import DisplayMenu, { type Density } from '../components/ThemePicker'
+import { type Density } from '../components/ThemePicker'
+import Settings, { isSettingsTab, type SettingsTab } from '../components/Settings'
 import CommandPalette from '../components/CommandPalette'
 import { useTheme } from '../lib/useTheme'
 import { RevealHost } from '../components/PowerReveal'
@@ -79,17 +79,28 @@ export type Prefs = {
   density: Density
   /** The desktop sidebar: shown, or folded away behind a show-sidebar button. */
   sidebar: boolean
-  /** The sidebar's settings box, opened or folded to a one-line summary. */
-  settingsOpen: boolean
 }
 
 const TOUR_KEY = 'ff:tour:v1'
-
-const HORIZON_LONG: Record<HorizonMode, string> = {
-  next6: 'The next six regular-season weeks',
-  regular: 'Everything left before the fantasy playoffs',
-  playoffs: 'Everything left, fantasy playoffs included',
+/** Per league and season, the latest power-rank week whose sidebar card was put away. */
+const CARD_KEY = (league: string) => `ff:revealcard:${league}`
+const readCardWeek = (league: string | null) => {
+  // -1: never put away, so even a card for the season's first week (no reveal yet, one on its way) shows.
+  if (!league) return -1
+  try {
+    const v = window.localStorage.getItem(CARD_KEY(league))
+    return v == null ? -1 : Number(v) || 0
+  } catch {
+    return -1
+  }
 }
+/** Palette commands that leave an open Settings dialog where it is: appearance, reload, and Settings itself. */
+const KEEPS_SETTINGS = /^(?:(?:theme|scheme|density|settings):.+|reload|go:settings)$/
+/** Palette commands that open another modal (the tour, a player sheet, the trade builder or a trade, the reveal). */
+const OPENS_MODAL = /^(?:tour|reveal|build|player:.+|trade:.+)$/
+
+/** `#settings` or `#settings/appearance`: a link that opens the settings dialog. */
+const SETTINGS_HASH = /^#\/?settings(?:\/([a-z]+))?$/
 
 const loadPrefs = (): Prefs => {
   const base: Prefs = {
@@ -108,7 +119,6 @@ const loadPrefs = (): Prefs => {
     scheme: 'system',
     density: 'compact',
     sidebar: true,
-    settingsOpen: false,
   }
   try {
     const raw = window.localStorage.getItem(PREFS_KEY)
@@ -148,6 +158,37 @@ const FantasyPage = () => {
     // Playoffs moved out of Power into its own page; your matchup moved into Gameday, the league's into Matchups.
     if (route.section === 'power' && route.sub === 'odds') route.go('playoffs', null, { replace: true })
   }, [route.section, route.sub]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Settings is a dialog over the page, not a page. `#settings` (an old bookmark, or a link) opens it over whatever
+  // was showing and puts that page's address back, so Back never lands on a settings route.
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null)
+  const lastRoute = useRef(route)
+  if (!SETTINGS_HASH.test(typeof window !== 'undefined' ? window.location.hash : '')) lastRoute.current = route
+  useEffect(() => {
+    const read = () => {
+      const m = SETTINGS_HASH.exec(window.location.hash)
+      if (!m) return
+      setSettingsTab(isSettingsTab(m[1]) ? m[1] : 'account')
+      setSettingsAsk((n) => n + 1)
+      const r = lastRoute.current
+      route.go(r.section, r.sub, { replace: true, page: r.page })
+    }
+    read()
+    window.addEventListener('hashchange', read)
+    return () => window.removeEventListener('hashchange', read)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Reopened, it comes back to the category it was left on.
+  const lastTab = useRef<SettingsTab>('account')
+  if (settingsTab) lastTab.current = settingsTab
+  const [settingsAsk, setSettingsAsk] = useState(0)
+  const openSettings = useCallback((tab?: SettingsTab) => {
+    setSettingsTab(tab ?? lastTab.current)
+    setSettingsAsk((n) => n + 1)
+  }, [])
+  const closeSettings = useCallback(() => setSettingsTab(null), [])
+  // Asks an open Settings to go the way it always does (its leave), for something that needs the page behind it.
+  const [settingsLeave, setSettingsLeave] = useState(0)
+  const leaveSettings = useCallback(() => setSettingsLeave((n) => n + 1), [])
 
   useEffect(() => {
     purgeStaleCache()
@@ -301,6 +342,19 @@ const FantasyPage = () => {
   const tradeLink = deepLink.sharedTrade
   // While a link is still finding its league, the reveal that opens by itself waits.
   const reveal = useReveal({ data, analysis, models, prefs: revealPrefs, blocked: !appUp || tour || tourDue || tradeLink || (!!deepLink.link && !deepLink.ready), quiet: toured, deep })
+  // The sidebar's power-rank card can be put away until the next week drops. The reveal stays a tap away on the
+  // Power Rank page and in the command palette.
+  const cardLeague = data ? `${data.league.league_id}:${data.league.season}` : null
+  const [cardHidden, setCardHidden] = useState<{ league: string | null; week: number }>({ league: null, week: -1 })
+  const hiddenWeek = cardHidden.league === cardLeague ? cardHidden.week : readCardWeek(cardLeague)
+  const latestWeek = reveal.source?.recap.week ?? 0
+  const showCard = !!(reveal.source || reveal.pending) && latestWeek > hiddenWeek
+  const hideCard = useCallback(() => {
+    if (!cardLeague) return
+    writeStored(CARD_KEY(cardLeague), String(latestWeek))
+    setCardHidden({ league: cardLeague, week: latestWeek })
+  }, [cardLeague, latestWeek])
+  const paletteReveal = useMemo(() => (latestWeek ? { week: latestWeek, open: reveal.show } : null), [latestWeek, reveal.show])
   const endTour = useCallback(() => {
     setTour(false)
     writeStored(TOUR_KEY, '1')
@@ -317,15 +371,18 @@ const FantasyPage = () => {
   }, [])
   useEffect(() => setSheets([]), [leagueKey])
 
-  // A new section fades its content in (the header stays put), so switching never flashes. Tabs within a page
-  // switch instantly: they are flipped back and forth far too often to wait on.
+  // A new section fades its content in (the header stays put), so switching by pointer never flashes. From the
+  // keyboard (the number keys, the palette) it swaps at once, and tabs within a page always do: both are used far
+  // too often to wait on.
   const view = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const root = view.current
-    if (!root || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    for (const el of root.children) if (!el.classList.contains('ff-pagehead')) el.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: 'ease-out' })
+    if (!root || reducedMotion() || byKeyboard()) return
+    const fade = { duration: motionMs('quick'), easing: motionToken('ease-out') }
+    for (const el of root.children) if (!el.classList.contains('ff-pagehead')) el.animate?.([{ opacity: 0 }, { opacity: 1 }], fade)
   }, [route.section])
 
+  // When the league last arrived, for Settings › Data.
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   useEffect(() => {
     if (loaded) setLoadedAt(new Date())
@@ -341,109 +398,18 @@ const FantasyPage = () => {
 
   const myTeam = analysis && analysis.myRosterId != null ? analysis.teamById[analysis.myRosterId] : null
   const mySeason = myTeam ? analysis!.seasonById[myTeam.rosterId] : null
-  const myPower = myTeam ? analysis!.powerById[myTeam.rosterId] : null
-  const mySim = myTeam && models?.forecast ? models.forecast.sim[myTeam.rosterId] : null
   const horizonWeeks = data?.horizon.map((h) => h.week) ?? []
-
-  // Sidebar settings: one row per setting, label on the left, control filling the rest, all on the same 28px rhythm.
-  const row = 'flex h-7 items-center gap-2'
-  const key = 'ff-label w-[52px] shrink-0'
-  const controls = prefs && (
-    <>
-      <div className="space-y-1.5">
-        <div className="flex items-baseline justify-between gap-2">
-          <Label>Pricing horizon</Label>
-          {horizonWeeks.length > 0 && (
-            <span className="num text-[10.5px] text-ff-muted" title={HORIZON_LONG[prefs.horizon]}>
-              wk {horizonWeeks[0]}–{horizonWeeks[horizonWeeks.length - 1]}
-            </span>
-          )}
-        </div>
-        <Segmented<HorizonMode>
-          size="sm"
-          block
-          label="Pricing horizon"
-          value={prefs.horizon}
-          onChange={(h) => update({ horizon: h })}
-          options={[
-            { key: 'next6', label: '6 wks', title: HORIZON_LONG.next6 },
-            { key: 'regular', label: 'Season', title: HORIZON_LONG.regular },
-            { key: 'playoffs', label: '+ Playoffs', title: HORIZON_LONG.playoffs },
-          ]}
-        />
-        {prefs.horizon === 'playoffs' && (data?.playoffWeeks.length ?? 0) > 0 && (
-          <div className={row} title={`How much the fantasy playoff weeks (${data!.playoffWeeks.join(', ')}) count against a regular week`}>
-            <span className={key}>Weight</span>
-            <span className="flex h-full flex-1 items-center border border-ff-line bg-ff-panel">
-              {(
-                [
-                  ['−', -0.5],
-                  ['+', 0.5],
-                ] as const
-              ).map(([label, step], i) => (
-                <React.Fragment key={label}>
-                  {i === 1 && <span className="num flex-1 text-center text-[12px] text-ff-text">{prefs.playoffWeight}×</span>}
-                  <button
-                    className={cx('h-full w-7 text-ff-muted hover:bg-ff-raised hover:text-ff-text', i === 0 ? 'border-r border-ff-line' : 'border-l border-ff-line')}
-                    aria-label={step < 0 ? 'Count playoff weeks less' : 'Count playoff weeks more'}
-                    onClick={() => update({ playoffWeight: Math.max(0, Math.min(3, prefs.playoffWeight + step)) })}
-                  >
-                    {label}
-                  </button>
-                </React.Fragment>
-              ))}
-            </span>
-          </div>
-        )}
-      </div>
-      <div className="space-y-1.5">
-        <div className={row}>
-          <span className={key}>User</span>
-          <UserMenu
-            provider={prefs.provider}
-            username={prefs.provider === 'espn' ? `ESPN ${prefs.espnLeagueId ?? ''}` : prefs.username}
-            onSwitch={() => update({ onboarded: false })}
-            onTour={() => setTour(true)}
-          />
-        </div>
-        <div className={row}>
-          <span className={key}>Season</span>
-          <Select
-            label="Season"
-            value={prefs.season ?? seasonOptions[0]}
-            onChange={(v) => update({ season: v === seasonOptions[0] ? null : v, leagueId: null })}
-            className="flex-1 font-mono text-[11.5px] [&>button]:h-7"
-          >
-            {seasonOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className={row}>
-          <span className={key}>Display</span>
-          <DisplayMenu
-            theme={prefs.theme}
-            onTheme={(t) => update({ theme: t })}
-            scheme={prefs.scheme}
-            onScheme={(m) => update({ scheme: m })}
-            density={prefs.density}
-            onDensity={(d) => update({ density: d })}
-          />
-        </div>
-      </div>
-    </>
-  )
+  const leagueList = useMemo(() => (data?.leagues ?? []).map((l) => ({ id: l.league_id, name: l.name })), [data?.leagues])
 
   const section = route.section as SectionKey
-  const title = data ? `${SECTIONS.find((s) => s.key === route.section)?.label ?? 'Fantasy'} · ${data.league.name}` : 'Fantasy'
-  const status = [
-    data?.state.season_type === 'regular' ? { label: 'WEEK', value: String(data.state.week), title: 'NFL week, from Sleeper\'s calendar' } : null,
-    models?.forecast ? { label: 'SIMS', value: models.forecast.sims.toLocaleString(), title: 'Seasons simulated for the playoff odds' } : null,
-    models?.forecast ? { label: 'σ', value: models.forecast.sigma.toFixed(1), title: 'Weekly score noise: how far a team-week strays from its projection' } : null,
-    { label: 'ECR', value: data?.consensus ? 'on' : 'off', title: data?.consensus ? 'FantasyPros consensus ranks loaded' : 'FantasyPros consensus ranks unavailable' },
-  ].filter((x): x is { label: string; value: string; title: string } => !!x)
+  const title = data ? `${sectionLabel(section) ?? 'Fantasy'} · ${data.league.name}` : 'Fantasy'
+  // What the engine is running on, for Settings › Data.
+  const readouts = [
+    { label: 'NFL week', hint: `From ${providerName(data?.provider ?? prefs?.provider ?? 'sleeper')}'s calendar.`, value: data?.state.season_type === 'regular' ? String(data.state.week) : '—' },
+    { label: 'Seasons simulated', hint: 'Run for the playoff odds.', value: models?.forecast ? models.forecast.sims.toLocaleString() : '—' },
+    { label: 'Score noise (σ)', hint: 'How far a team-week strays from its projection, in points.', value: models?.forecast ? models.forecast.sigma.toFixed(1) : '—' },
+    { label: 'Consensus ranks', hint: 'FantasyPros expert consensus (ECR).', value: !data ? '—' : data.consensus ? 'Loaded' : 'Off' },
+  ]
 
   // Until prefs are read (first client render), draw nothing rather than flash the wrong screen.
   if (!prefs) return <div className="ff min-h-dvh bg-ff-bg" />
@@ -476,29 +442,28 @@ const FantasyPage = () => {
       section={section}
       onNavigate={(s) => route.go(s)}
       title={title}
-      leagues={(data?.leagues ?? []).map((l) => ({ id: l.league_id, name: l.name }))}
+      leagues={leagueList}
       leagueId={data?.league.league_id ?? null}
       onLeague={(id) => update({ leagueId: id })}
       leagueMeta={data ? `${data.league.season} · ${data.league.total_rosters} teams${data.state.season_type === 'regular' && data.league.season === data.state.season ? ` · wk ${data.state.week}` : ''}` : undefined}
-      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: `${mySeason ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : ''}${mySim ? ` · ${simOdds(mySim, 'playoffs')} playoffs` : myPower ? ` · power rank #${myPower.rank} of ${analysis!.teams.length}` : ''}`, onOpen: () => route.go('teams', String(myTeam.rosterId)) } : null}
-      controls={controls}
-      controlsOpen={prefs.settingsOpen}
-      onControls={(open) => update({ settingsOpen: open })}
+      // Your team and its record; the playoff odds live on its page.
+      me={myTeam ? { name: myTeam.name, avatar: myTeam.avatar, line: mySeason && mySeason.wins + mySeason.losses + mySeason.ties > 0 ? `${mySeason.wins}-${mySeason.losses}${mySeason.ties ? `-${mySeason.ties}` : ''}` : myTeam.owner && myTeam.owner !== 'Unowned' ? myTeam.owner : '', onOpen: () => route.go('teams', String(myTeam.rosterId)) } : null}
+      account={prefs.provider === 'espn' ? `ESPN ${prefs.espnLeagueId}` : `@${prefs.username}`}
+      onSettings={openSettings}
       loading={loading}
       progress={progress}
       onRefresh={reload}
       source={providerName(data?.provider ?? prefs.provider)}
-      loadedAt={loadedAt}
-      status={status}
       onSearch={data ? () => setPalette(true) : undefined}
       sidebar={prefs.sidebar}
       onSidebar={(open) => update({ sidebar: open })}
       tour={tour && appUp}
       onTourEnd={endTour}
       navFooter={
-        (reveal.source || reveal.pending) && analysis
+        showCard && analysis
           ? (closeDrawer) => (
               <NavBanner
+                key={cardLeague}
                 recap={reveal.source?.recap ?? null}
                 pending={reveal.pending}
                 analysis={analysis}
@@ -506,6 +471,7 @@ const FantasyPage = () => {
                   closeDrawer?.()
                   reveal.show()
                 }}
+                onDismiss={hideCard}
               />
             )
           : undefined
@@ -524,11 +490,35 @@ const FantasyPage = () => {
         </div>
       )}
 
+      {/* Settings open over any page, whether or not a league has loaded (or failed to), so a wrong season or user can
+          always be put right. Rendered here once, so a league change or data arriving never remounts them. */}
+      {settingsTab && (
+        <Settings
+          tab={settingsTab}
+          onTab={setSettingsTab}
+          onClose={closeSettings}
+          reopen={settingsAsk}
+          leave={settingsLeave}
+          prefs={prefs}
+          update={update}
+          leagues={leagueList}
+          leagueId={data?.league.league_id ?? null}
+          seasons={seasonOptions}
+          horizonWeeks={horizonWeeks}
+          playoffWeeks={data?.playoffWeeks ?? []}
+          onTour={() => {
+            // Closed in the same commit, so the tour's focus-return is the control that opened Settings, not this dialog.
+            closeSettings()
+            setTour(true)
+          }}
+          sync={{ loading, progress, loadedAt, source: providerName(data?.provider ?? prefs.provider), onReload: reload, readouts }}
+        />
+      )}
       {data && analysis && models && prefs ? (
         <FantasyProvider value={{ data, analysis, models, adjust, grades, go: (s, sub) => route.go(s, sub ?? undefined), ...sheetApi }}>
         {/* The trade builder's one deal, kept here so it outlives the page that opened it. */}
         <TradeDockProvider>
-        <div key={data.league.league_id} ref={view} className={cx(loading && 'opacity-60 transition-opacity')}>
+        <div key={data.league.league_id} ref={view} className={cx('transition-opacity', loading && 'opacity-60')}>
           {section === 'dash' && <DashboardView />}
           {section === 'trades' && <TradesView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
           {section === 'waivers' && <WaiversView data={data} analysis={analysis} sub={route.sub} onSub={route.setSub} />}
@@ -579,8 +569,17 @@ const FantasyPage = () => {
           onReload={reload}
           source={providerName(data.provider)}
           onTour={() => setTour(true)}
-          leagues={(data.leagues ?? []).map((l) => ({ id: l.league_id, name: l.name }))}
+          leagues={leagueList}
           onLeague={(id) => update({ leagueId: id })}
+          onSettings={openSettings}
+          // A command that changes what is behind Settings, or needs the page (a section, a player, a team, a trade,
+          // the tour, another league, the weekly reveal), sends the dialog off first. Appearance and reload leave it
+          // open, so the change shows in place, the same as setting it from inside.
+          onRun={(id) => {
+            if (OPENS_MODAL.test(id)) closeSettings()
+            else if (!KEEPS_SETTINGS.test(id)) leaveSettings()
+          }}
+          reveal={paletteReveal}
         />
         </TradeDockProvider>
         </FantasyProvider>
@@ -594,7 +593,7 @@ const FantasyPage = () => {
             </div>
             <div className="mt-4 grid gap-px border border-ff-line bg-ff-line lg:grid-cols-2">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-56 animate-pulse bg-ff-panel" />
+                <div key={i} className="ff-breathe h-56 bg-ff-panel" />
               ))}
             </div>
           </div>

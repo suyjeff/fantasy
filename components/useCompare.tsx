@@ -135,10 +135,12 @@ export const CompareProvider = ({ children }: { children: ReactNode }) => {
 const NONE: CompareSet = []
 
 const CHECK = 'M3.5 7.2l2.4 2.4 4.6-5'
-const CROSS = 'M3.5 3.5l7 7M10.5 3.5l-7 7'
-const Check = ({ size = 12, d = CHECK }: { size?: number; d?: string }) => (
-  <svg aria-hidden width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" className="block shrink-0">
-    <path d={d} />
+const CROSS_IN = 'M5 5l4 4M9 5l-4 4'
+/** The add mark's box (`AddIcon`, 12px), holding a tick or a cross; filled, it marks the deal as in the comparison. */
+const Boxed = ({ d, fill, className }: { d: string; fill?: string; className?: string }) => (
+  <svg aria-hidden width={12} height={12} viewBox="0 0 14 14" fill="none" strokeLinecap="square" shapeRendering="crispEdges" className={cx('block shrink-0', className)}>
+    <rect x="1.5" y="1.5" width="11" height="11" fill={fill ?? 'none'} stroke={fill ?? 'currentColor'} strokeWidth="1" />
+    <path d={d} stroke={fill ? 'rgb(var(--ff-panel))' : 'currentColor'} strokeWidth={fill ? 1.5 : 1} shapeRendering="geometricPrecision" />
   </svg>
 )
 
@@ -150,9 +152,8 @@ export const SlotKey = ({ slot, className }: { slot: number; className?: string 
 /**
  * Add a deal to the comparison, or see that it is in (and take it out). Where the deal came from the comparison and
  * has changed since (`tradeId` links it), it offers to update that column, or add the change as a column of its own.
- * `size`: 'sm' on a trade card, 'md' in the builder.
  */
-export const CompareToggle = ({ deal, tradeId, size = 'md', className }: { deal: Deal; tradeId?: string; size?: 'sm' | 'md'; className?: string }) => {
+export const CompareToggle = ({ deal, tradeId, className }: { deal: Deal; tradeId?: string; className?: string }) => {
   const c = useCompare()
   const item = c?.find(deal) ?? null
   useEffect(() => {
@@ -162,27 +163,23 @@ export const CompareToggle = ({ deal, tradeId, size = 'md', className }: { deal:
   const ready = dealActive(deal) && deal.teams.length > 1
   // An empty trade has nothing to put in a column's place.
   const linked = !item && tradeId && ready ? c.linkOf(tradeId) : null
-  const h = size === 'sm' ? 'h-7 px-2 text-[11.5px] max-md:h-10 max-[359px]:min-w-10' : 'h-10 px-3 text-[12.5px] md:h-8'
-  const base = cx('ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border', h, className)
+  const base = cx('transition-colors inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border h-10 px-3 text-[12.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40 md:h-8', className)
   if (item)
     return (
       <button
         type="button"
         aria-pressed
+        aria-label={`Comparing as trade ${cmp.slotLetter(item.slot)}`}
         onClick={() => c.remove(item.id)}
         title={`In compare as trade ${cmp.slotLetter(item.slot)}. Press to take it out.`}
         className={cx(base, 'group border-ff-pos/40 bg-ff-pos/[0.08] text-ff-text hover:border-ff-neg/40 hover:bg-ff-neg/[0.06]')}
       >
-        <SlotKey slot={item.slot} />
-        {/* On a narrow card the tick says it; the words stay for screen readers. */}
-        <span className={cx(size === 'sm' && 'max-[359px]:sr-only')}>In compare</span>
-        {/* The tick turns to a cross under the pointer, the same size, so nothing shifts. */}
-        <span className="text-ff-pos group-hover:hidden">
-          <Check />
-        </span>
-        <span className="hidden text-ff-neg group-hover:inline">
-          <Check d={CROSS} />
-        </span>
+        {/* The same word as the button that put it in, and its box in the same place: filled in the colour of its
+            column and ticked, so toggling moves nothing. Under the pointer it is an empty box with a cross, to take
+            it out. */}
+        <Boxed d={CHECK} fill={`rgb(var(--ff-k${item.slot + 1}))`} className="group-hover:hidden" />
+        <Boxed d={CROSS_IN} className="hidden text-ff-neg group-hover:block" />
+        Compare
       </button>
     )
   if (linked)
@@ -221,11 +218,12 @@ export const CompareToggle = ({ deal, tradeId, size = 'md', className }: { deal:
       type="button"
       disabled={!ready}
       onClick={() => c.add(deal)}
+      aria-label="Add to compare"
       title={ready ? 'Add to the comparison on the Trades page' : 'Put players in the trade to compare it'}
       className={cx(base, 'border-ff-line2 bg-ff-panel text-ff-text hover:bg-ff-raised disabled:text-ff-muted disabled:hover:bg-ff-panel')}
     >
-      <AddIcon size={size === 'sm' ? 11 : 12} />
-      <span className={cx(size === 'sm' && 'max-[359px]:sr-only')}>{size === 'sm' ? 'Compare' : 'Add to compare'}</span>
+      <AddIcon size={12} />
+      Compare
     </button>
   )
 }

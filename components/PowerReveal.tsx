@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { MONKE } from './brand'
 import { useRevealOdds } from './revealOdds'
 import { useFantasy } from './FantasyContext'
@@ -8,7 +8,8 @@ import { Crown } from './RevealBanner'
 import { ShareButton } from './RevealShare'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { lockScroll } from './scrollLock'
-import { cx, reducedMotion, usePhone } from './ui'
+import { byKeyboard, cx, motionMs, reducedMotion, usePhone } from './ui'
+import { ChevronIcon } from './icons'
 import type { RevealApi, RevealSource } from './useReveal'
 
 // The weekly power-rank reveal: two acts (RevealActs.tsx), then the recap.
@@ -71,7 +72,7 @@ const Pipeline = ({ step, running, run }: { step: number; running: boolean; run:
         <>
           <span className="flex shrink-0 gap-[3px]" aria-hidden>
             {STEPS.map((s, i) => (
-              <span key={s} className={cx('h-1.5 w-4 transition-colors duration-200', i < step ? 'bg-ff-text2/60' : i === step ? 'bg-ff-accent' : 'bg-ff-line2')} />
+              <span key={s} className={cx('h-1.5 w-4 transition-colors', i < step ? 'bg-ff-text2/60' : i === step ? 'bg-ff-accent' : 'bg-ff-line2')} />
             ))}
           </span>
           <span className="min-w-0 truncate font-mono text-[10.5px] uppercase tracking-[0.1em] text-ff-text2">
@@ -82,10 +83,10 @@ const Pipeline = ({ step, running, run }: { step: number; running: boolean; run:
         <ol className="flex items-center">
           {STEPS.map((s, i) => (
             <li key={s} className="flex items-center">
-              {i > 0 && <span aria-hidden className={cx('h-px w-6 transition-colors duration-300', i <= step ? 'bg-ff-accent' : 'bg-ff-line2')} />}
+              {i > 0 && <span aria-hidden className={cx('h-px w-6 transition-colors', i <= step ? 'bg-ff-accent' : 'bg-ff-line2')} />}
               <span
                 className={cx(
-                  'border px-1.5 font-mono text-[10px] uppercase leading-[18px] tracking-[0.1em] transition-colors duration-200',
+                  'border px-1.5 font-mono text-[10px] uppercase leading-[18px] tracking-[0.1em] transition-colors',
                   i === step ? 'border-ff-accent bg-ff-accent/10 text-ff-accent' : i < step ? 'border-ff-line2 text-ff-text2' : 'border-ff-line text-ff-muted/70',
                 )}
               >
@@ -209,9 +210,25 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
   const close = useCallback(() => {
     if (closing.current) return
     if (phone) return swipe.current ? swipe.current.dismiss() : done.current()
+    // From the keyboard (Escape) it goes at once, like every panel; otherwise it waits out its exit (styles, ff-rv-root).
+    if (byKeyboard()) return done.current()
     closing.current = true
+    root.current?.removeAttribute('data-open')
     root.current?.setAttribute('data-closing', '')
-    window.setTimeout(() => done.current(), reducedMotion() ? 160 : 180)
+    window.setTimeout(() => done.current(), motionMs(reducedMotion() ? 'reveal' : 'panel'))
+  }, [phone])
+
+  // In like the other panels: from the hidden state the first paint commits, at once when opened from the keyboard.
+  useLayoutEffect(() => {
+    const el = root.current
+    if (phone || !el) return
+    const instant = byKeyboard()
+    if (instant) el.setAttribute('data-instant', '')
+    void el.offsetWidth
+    el.setAttribute('data-open', '')
+    if (!instant) return
+    void el.offsetWidth
+    el.removeAttribute('data-instant')
   }, [phone])
 
   // Keys: Escape closes, Space or Enter skips the intro, Tab stays inside.
@@ -289,7 +306,10 @@ export const PowerReveal = ({ source, run, onClose }: { source: RevealSource; ru
       <span className="flex-1" />
       {intro ? (
         <button type="button" onClick={skip} className="h-8 shrink-0 whitespace-nowrap px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-md:h-10">
-          Skip ›
+          <span className="inline-flex items-center gap-1">
+            Skip
+            <ChevronIcon dir="right" />
+          </span>
         </button>
       ) : (
         <>

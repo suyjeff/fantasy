@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { KEY_PROVIDERS, PROVIDER_LABEL, PROVIDERS, listModels, testKey, type StoredKey } from '../../lib/assistant'
+import { ChevronIcon } from '../icons'
 import { Dropdown, cx } from '../ui'
 import type { AsgmState } from './AsgmProvider'
 import { useAsgm } from './AsgmProvider'
@@ -154,7 +155,7 @@ const KeyForm = () => {
             onClick={() => setShow(!show)}
             aria-pressed={show}
             aria-label={show ? 'Hide the key' : 'Show the key'}
-            className="ff-press h-9 shrink-0 border border-l-0 border-ff-line2 px-2.5 font-mono text-[10.5px] uppercase tracking-[0.06em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-md:h-11"
+            className="transition-colors h-9 shrink-0 border border-l-0 border-ff-line2 px-2.5 font-mono text-[10.5px] uppercase tracking-[0.06em] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-md:h-11"
           >
             {show ? 'Hide' : 'Show'}
           </button>
@@ -162,22 +163,22 @@ const KeyForm = () => {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {dirty ? (
-          <button type="button" onClick={save} className="ff-press h-8 bg-ff-text px-3 text-[12.5px] font-medium text-ff-panel hover:bg-ff-text/85 max-md:h-10">
+          <button type="button" onClick={save} className="transition-colors h-8 bg-ff-text px-3 text-[12.5px] font-medium text-ff-panel hover:bg-ff-text/85 max-md:h-10">
             Save and test
           </button>
         ) : (
-          <button type="button" onClick={test} className="ff-press h-8 border border-ff-line2 bg-ff-panel px-3 text-[12.5px] text-ff-text hover:bg-ff-raised max-md:h-10">
+          <button type="button" onClick={test} className="transition-colors h-8 border border-ff-line2 bg-ff-panel px-3 text-[12.5px] text-ff-text hover:bg-ff-raised max-md:h-10">
             Test key
           </button>
         )}
         {saved && (
-          <button type="button" onClick={remove} className="ff-press h-8 px-2.5 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-neg max-md:h-10">
+          <button type="button" onClick={remove} className="transition-colors h-8 px-2.5 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-neg max-md:h-10">
             Remove key
           </button>
         )}
         {/* Removing acts at once; Undo puts the key back, since nothing else in the app keeps a copy. */}
         {!saved && removed && (
-          <button type="button" onClick={undo} className="ff-press h-8 border border-ff-line2 bg-ff-panel px-3 text-[12.5px] font-medium text-ff-text hover:bg-ff-raised max-md:h-10">
+          <button type="button" onClick={undo} className="transition-colors h-8 border border-ff-line2 bg-ff-panel px-3 text-[12.5px] font-medium text-ff-text hover:bg-ff-raised max-md:h-10">
             Undo
           </button>
         )}
@@ -224,8 +225,9 @@ const AsgmSettings = ({ onDone, inline }: { onDone?: () => void; inline?: boolea
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="ff-label">Who answers</h3>
           {onDone && (
-            <button type="button" onClick={onDone} className="ff-hit font-mono text-[11px] text-ff-text2 hover:text-ff-text">
-              <span aria-hidden>← </span>back<span className="sr-only"> to the conversation</span>
+            <button type="button" onClick={onDone} className="ff-hit inline-flex items-center gap-1 font-mono text-[11px] text-ff-text2 transition-colors hover:text-ff-text">
+              <ChevronIcon dir="left" size={10} />
+              back<span className="sr-only"> to the conversation</span>
             </button>
           )}
         </div>

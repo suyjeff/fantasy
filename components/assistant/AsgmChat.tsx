@@ -4,7 +4,7 @@ import { useFantasy } from '../FantasyContext'
 import { SECTION_KEYS, type SectionKey } from '../Shell'
 import { CLOSE, Glyph } from '../TradeBuilder'
 import { useTradeDock } from '../TradeDock'
-import { AddIcon, BuildIcon, OpenIcon } from '../icons'
+import { AddIcon, BuildIcon, ChevronIcon, GearIcon, OpenIcon } from '../icons'
 import { cx, reducedMotion } from '../ui'
 import { AsgmBadge, AsgmName } from './AsgmButtons'
 import { AsgmCardView } from './AsgmCards'
@@ -29,7 +29,6 @@ const landed = new Set<string>()
 const DOCK = 'M2.5 2.5h9v9h-9zM8.5 2.5v9'
 const FLOAT = 'M2.5 2.5h9v9h-9zM6.5 7.5h5v4'
 const EXPAND = 'M8.5 2.5h3v3M11.5 2.5 8 6M5.5 11.5h-3v-3M2.5 11.5 6 8'
-const SETTINGS = 'M2.5 4.5h9M2.5 9.5h9M5.5 3v3M8.5 8v3'
 const COPY = 'M4.5 4.5h7v7h-7zM2.5 9.5v-7h7'
 const RETRY = 'M11 5.5A4.5 4.5 0 1 0 11.5 8M11.5 2.5v3h-3'
 const STOP = 'M4.5 4.5h5v5h-5z'
@@ -45,7 +44,7 @@ const IconBtn = ({ d, label, title, onClick, pressed, className, children }: { d
     aria-pressed={pressed}
     title={title ?? label}
     className={cx(
-      'ff-press flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent md:h-8 md:w-8',
+      'transition-colors flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:bg-ff-raised hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent md:h-8 md:w-8',
       pressed && 'bg-ff-raised text-ff-text',
       className,
     )}
@@ -83,7 +82,9 @@ const Header = ({ variant, titleId, onClose, onDock, onExpand }: { variant: Chat
           </IconBtn>
         )}
         {/* One name whatever its state: aria-pressed says whether the settings are showing. */}
-        <IconBtn d={SETTINGS} label="Settings" title={s.settings ? 'Settings (showing): press to go back to the conversation' : 'Settings: model and key'} pressed={s.settings} onClick={() => s.setSettings(!s.settings)} />
+        <IconBtn label="Settings" title={s.settings ? 'Settings (showing): press to go back to the conversation' : 'Settings: model and key'} pressed={s.settings} onClick={() => s.setSettings(!s.settings)}>
+          <GearIcon size={14} />
+        </IconBtn>
         {onDock && <IconBtn d={variant === 'dock' ? FLOAT : DOCK} label={variant === 'dock' ? 'Float the window' : 'Dock to the right'} onClick={onDock} />}
         {onExpand && <IconBtn d={EXPAND} label="Open as a page" onClick={onExpand} />}
         {onClose && <IconBtn d={CLOSE} label="Close Assistant GM" title="Close (Esc)" onClick={onClose} className="hover:!text-ff-text" />}
@@ -162,9 +163,7 @@ const WorkLog = ({ m, live, fresh }: { m: Gm; live: boolean; fresh: boolean }) =
           </>
         ) : (
           <>
-            <span aria-hidden className={cx('text-[9px] motion-safe:transition-transform motion-safe:duration-150', open && 'rotate-90')}>
-              ▸
-            </span>
+            <ChevronIcon dir="right" size={9} open={open} />
             <span>
               {m.error && m.error.code !== 'aborted' ? 'Stopped at' : 'Worked'} {done} step{done === 1 ? '' : 's'}
             </span>
@@ -318,12 +317,12 @@ const ErrorNote = ({ m, onRetry }: { m: Gm; onRetry?: () => void }) => {
       <p className="mt-0.5 text-[12.5px] leading-snug text-ff-text2">{body}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {needKey && (
-          <button type="button" onClick={() => s.setSettings(true)} className="ff-press h-8 border border-ff-line2 bg-ff-panel px-3 text-[12.5px] font-medium text-ff-text hover:bg-ff-raised max-md:h-10">
+          <button type="button" onClick={() => s.setSettings(true)} className="transition-colors h-8 border border-ff-line2 bg-ff-panel px-3 text-[12.5px] font-medium text-ff-text hover:bg-ff-raised max-md:h-10">
             {e.code === 'key' ? 'Check your key' : 'Add your own key'}
           </button>
         )}
         {onRetry && e.code !== 'quota' && e.code !== 'budget' && (
-          <button type="button" onClick={onRetry} className="ff-press h-8 border border-ff-line bg-ff-panel px-3 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-md:h-10">
+          <button type="button" onClick={onRetry} className="transition-colors h-8 border border-ff-line bg-ff-panel px-3 text-[12.5px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text max-md:h-10">
             Ask again
           </button>
         )}
@@ -363,11 +362,11 @@ const Actions = ({ actions, skipDeals, onGoto }: { actions: AsgmAction[]; skipDe
             key={i}
             type="button"
             onClick={() => run(a)}
-            className="ff-press inline-flex h-7 max-w-full items-center gap-1.5 border border-ff-line bg-ff-panel px-2.5 text-[12px] text-ff-text hover:border-ff-line2 hover:bg-ff-raised max-md:h-10"
+            className="transition-colors inline-flex h-7 max-w-full items-center gap-1.5 border border-ff-line bg-ff-panel px-2.5 text-[12px] text-ff-text hover:border-ff-line2 hover:bg-ff-raised max-md:h-10"
           >
             <span className="truncate">{a.label}</span>
-            <span aria-hidden className="text-ff-muted">
-              {a.kind === 'goto' ? '→' : <OpenIcon size={11} />}
+            <span aria-hidden className="flex text-ff-muted">
+              {a.kind === 'goto' ? <ChevronIcon dir="right" size={10} /> : <OpenIcon size={11} />}
             </span>
           </button>
         ),
@@ -463,10 +462,8 @@ const Welcome = ({ variant }: { variant: ChatVariant }) => {
           <ul className="border border-ff-line bg-ff-panel">
             {s.suggestions.map((q, i) => (
               <li key={q} className={cx(i > 0 && 'border-t border-ff-line')}>
-                <button type="button" onClick={() => s.send(q)} className="ff-press group flex min-h-10 w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-ff-text hover:bg-ff-raised md:min-h-9">
-                  <span aria-hidden className="font-mono text-ff-accent">
-                    ›
-                  </span>
+                <button type="button" onClick={() => s.send(q)} className="transition-colors group flex min-h-10 w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-ff-text hover:bg-ff-raised md:min-h-9">
+                  <ChevronIcon dir="right" size={10} className="text-ff-accent" />
                   <span className="min-w-0 flex-1">{q}</span>
                   <span aria-hidden className="font-mono text-[11px] text-ff-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                     ask ↵
@@ -644,7 +641,7 @@ const Composer = ({ variant, autoFocus }: { variant: ChatVariant; autoFocus: boo
             className="ff-scroll min-h-[38px] flex-1 resize-none bg-transparent px-2.5 py-[9px] text-[13.5px] leading-[20px] text-ff-text placeholder:text-ff-muted focus:outline-none"
           />
           {s.running ? (
-            <button type="button" onClick={s.stop} aria-label="Stop the answer" title="Stop" className="ff-press m-1 flex h-[30px] w-[30px] shrink-0 items-center justify-center border border-ff-line2 bg-ff-raised text-ff-text hover:border-ff-text2 max-md:h-9 max-md:w-9">
+            <button type="button" onClick={s.stop} aria-label="Stop the answer" title="Stop" className="transition-colors m-1 flex h-[30px] w-[30px] shrink-0 items-center justify-center border border-ff-line2 bg-ff-raised text-ff-text hover:border-ff-text2 max-md:h-9 max-md:w-9">
               <svg aria-hidden width="12" height="12" viewBox="0 0 14 14">
                 <path d={STOP} fill="currentColor" />
               </svg>
@@ -656,7 +653,7 @@ const Composer = ({ variant, autoFocus }: { variant: ChatVariant; autoFocus: boo
               aria-disabled={empty || !s.ready || undefined}
               aria-label="Send"
               title="Send (Enter)"
-              className="ff-press m-1 flex h-[30px] w-[30px] shrink-0 items-center justify-center bg-ff-accent text-white aria-disabled:bg-ff-sunken aria-disabled:text-ff-muted max-md:h-9 max-md:w-9"
+              className="transition-colors m-1 flex h-[30px] w-[30px] shrink-0 items-center justify-center bg-ff-accent text-white aria-disabled:bg-ff-sunken aria-disabled:text-ff-muted max-md:h-9 max-md:w-9"
             >
               <Glyph d={SEND} size={13} />
             </button>

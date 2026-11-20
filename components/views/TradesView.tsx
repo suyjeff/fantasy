@@ -11,7 +11,7 @@ import TradeCard from '../TradeCard'
 import { useTradeDock } from '../TradeDock'
 import CompareView from '../TradeCompare'
 import { useCompare } from '../useCompare'
-import { TradeIcon } from '../icons'
+import { ChevronIcon, TradeIcon } from '../icons'
 import { Callout } from '../Callout'
 import { ShowMore } from './ShowMore'
 import { Disclosure } from '../Disclosure'
@@ -423,16 +423,14 @@ const TradesView = ({
                 <Button size="md" variant={moreOpen ? 'primary' : 'outline'} onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}>
                   Filters
                   {activeFilters > 0 && <span className="num text-ff-warn">{activeFilters}</span>}
-                  <span aria-hidden className={cx('text-[10px] motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-ff-out', moreOpen && 'rotate-180')}>
-                    ▾
-                  </span>
+                  <ChevronIcon open={moreOpen} />
                 </Button>
               )}
             </div>
             {/* Always mounted so it can slide: the row grows from 0 to its height, and closed it leaves the tab order. */}
             {phone && (
-              <div className={cx('-mt-[var(--ff-gl)] grid transition-[grid-template-rows] duration-[220ms] ease-ff-drawer motion-reduce:transition-none', moreOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
-                <div className="min-h-0 overflow-hidden" inert={!moreOpen}>
+              <div className={cx('ff-reveal-y -mt-[var(--ff-gl)]', moreOpen && 'is-open')}>
+                <div inert={!moreOpen}>
                   <div className="pt-[var(--ff-gl)]">
                     <Panel title="Filters">
                       <div className="space-y-3">

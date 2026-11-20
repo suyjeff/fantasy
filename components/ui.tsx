@@ -3,6 +3,7 @@ import { clearsLabel, type Availability } from '../lib/availability'
 import type { TrimmedPlayer } from '../lib/types'
 import { chance, share } from '../lib/format'
 import { ShowMore } from './views/ShowMore'
+import { ChevronIcon } from './icons'
 
 // ---------- Formatting ----------
 
@@ -103,7 +104,7 @@ export const Panel = ({
 }) => (
   <section id={id} className={cx('min-w-0 border border-ff-line bg-ff-panel', className)}>
     {(title || actions) && (
-      <header className="flex h-8 items-center justify-between gap-3 border-b border-ff-line px-3">
+      <header className="flex h-8 items-center justify-between gap-3 border-b border-ff-line px-3 max-md:h-auto max-md:min-h-8">
         <span className="flex min-w-0 items-baseline gap-2">
           {index != null && <span className="num text-[10px] text-ff-muted">{String(index).padStart(2, '0')}</span>}
           {title ? <Label className="truncate text-ff-text2">{title}</Label> : null}
@@ -200,7 +201,7 @@ export const PageHeader = ({
       <div className={cx('ff-pagehead ff-bleed z-20 md:sticky md:top-0', glass, !tabs && 'sticky top-[var(--ff-top)]', actions || meta || mobileTitle ? '' : 'hidden md:block')}>
         <div
           className={cx(
-            'ff-gutter items-center justify-between gap-3 md:flex md:h-11 md:border-b md:border-ff-line md:group-data-[sidebar=closed]/shell:pl-12 motion-safe:md:transition-[padding] motion-safe:md:duration-[170ms] motion-safe:md:ease-ff-drawer',
+            'ff-gutter items-center justify-between gap-3 md:flex md:h-11 md:border-b md:border-ff-line md:group-data-[sidebar=closed]/shell:pl-12 ff-fold-x motion-safe:md:transition-[padding] motion-safe:md:duration-ff-panel motion-safe:md:ease-ff-drawer',
             actions || meta || mobileTitle ? 'flex py-2 md:py-0' : 'hidden',
           )}
         >
@@ -417,6 +418,7 @@ export const Segmented = <K extends string>({
   label,
   block,
   manual,
+  disabled,
 }: {
   options: SegOption<NoInfer<K>>[]
   value: K
@@ -427,8 +429,10 @@ export const Segmented = <K extends string>({
   block?: boolean
   /** Arrows move focus only; Enter or Space picks. For choices that save something (a grade), not a view switch. */
   manual?: boolean
+  /** Shown, with the option in effect still marked, but locked. */
+  disabled?: boolean
 }) => (
-  <FadeStrip role="radiogroup" aria-label={label} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex')}>
+  <FadeStrip role="radiogroup" aria-label={label} aria-disabled={disabled || undefined} className={cx('no-scrollbar max-w-full shrink-0 overflow-x-auto border border-ff-line bg-ff-panel', block ? 'flex w-full [&>button]:flex-1' : 'inline-flex', disabled && 'pointer-events-none opacity-50 [&>button]:cursor-default')}>
     {options.map((o, i) => {
       const active = o.key === value
       return (
@@ -436,6 +440,7 @@ export const Segmented = <K extends string>({
           key={o.key}
           role="radio"
           aria-checked={active}
+          disabled={disabled}
           tabIndex={active || (i === 0 && !options.some((x) => x.key === value)) ? 0 : -1}
           title={o.title}
           onClick={() => onChange(o.key)}
@@ -512,63 +517,154 @@ export const usePhone = () => useMedia('(max-width: 767px)')
 /** Whether motion should be kept to a minimum, read at the moment it is asked. */
 export const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+// Mirrors the tokens at the top of the `.ff` block in styles/fantasy.css, for when they do not resolve (stylesheet not
+// applied yet, no `.ff` ancestor, jsdom): `el.animate({ easing: '' })` throws and a 0ms leave timer cuts the exit short.
+const MOTION_FALLBACK: Record<string, string> = {
+  'dur-press': '100ms',
+  'dur-quick': '120ms',
+  'dur-reveal': '160ms',
+  'dur-panel': '200ms',
+  'dur-travel': '240ms',
+  'ease-out': 'cubic-bezier(0.23, 1, 0.32, 1)',
+  'ease-in-out': 'cubic-bezier(0.77, 0, 0.175, 1)',
+  'ease-drawer': 'cubic-bezier(0.32, 0.72, 0, 1)',
+}
+/** A motion token from styles/fantasy.css ("Motion"), for motion driven from script (WAAPI, leave timers). */
+export const motionToken = (name: string) => {
+  const fallback = MOTION_FALLBACK[name] ?? ''
+  if (typeof document === 'undefined') return fallback
+  return getComputedStyle(document.querySelector('.ff') ?? document.documentElement).getPropertyValue(`--ff-${name}`).trim() || fallback
+}
+/** A duration token in ms: `motionMs('panel')`. */
+export const motionMs = (name: 'press' | 'quick' | 'reveal' | 'panel' | 'travel') => parseFloat(motionToken(`dur-${name}`)) || parseFloat(MOTION_FALLBACK[`dur-${name}`])
+
+// How the last action came in. A panel opened or closed from the keyboard (a shortcut, Enter on a focused control,
+// Escape) appears and goes at once: keys are pressed far more often than panels are clicked, and motion after a key
+// press only reads as lag. A modifier alone does not count; the next pointer press switches back.
+// Only a recent key counts: a panel that opens long after the last key (the weekly reveal, a `#settings` link, back/forward)
+// was not opened by it.
+const KEY_RECENT_MS = 400
+let lastInput: 'key' | 'pointer' = 'pointer'
+let lastKeyAt = 0
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => !['Shift', 'Control', 'Alt', 'Meta'].includes(e.key) && ((lastInput = 'key'), (lastKeyAt = performance.now())), true)
+  window.addEventListener('pointerdown', () => (lastInput = 'pointer'), true)
+}
+/** Whether the action being handled came from the keyboard (the last input was a key, pressed just now). */
+export const byKeyboard = () => lastInput === 'key' && performance.now() - lastKeyAt < KEY_RECENT_MS
+
+const PRESSABLE = 'button, a[href], [role="button"], input, select, textarea, summary'
+/**
+ * Phone hit areas for small controls set inside text (a player's name in a sentence, "+Player" in a line of moves):
+ * each `.ff-hit-spread` under `root` reaches out toward 44x44 (its ::before, styles/fantasy.css) without changing a
+ * pixel of the layout, as far as it can go before it would meet another control's target. Where two of them face
+ * each other (names on consecutive lines), they split the space between them, so the one above reaches up and the
+ * one below reaches down. Measured after layout and again whenever the box resizes, its contents change or something inside it scrolls; wide screens keep the control's
+ * own size.
+ */
+export const useHitSpread = (root: React.RefObject<HTMLElement | null>) => {
+  const phone = usePhone()
+  // Marks the root (in a layout effect, so every instance is marked before any passive effect looks for a marked
+  // ancestor): a list inside a grid that already spreads its targets leaves the work to the grid.
+  useIsoLayoutEffect(() => {
+    const box = root.current
+    if (!phone || !box || box.parentElement?.closest('[data-hit-root]')) return
+    box.setAttribute('data-hit-root', '')
+    return () => box.removeAttribute('data-hit-root')
+  }, [phone]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const box = root.current
+    if (!phone || !box || box.parentElement?.closest('[data-hit-root]')) return
+    let raf = 0
+    const measure = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const targets = [...box.querySelectorAll<HTMLElement>('.ff-hit-spread')]
+        const near = box.getBoundingClientRect()
+        // Every pressable thing in the box near its targets, the targets included.
+        const others = [...box.querySelectorAll<HTMLElement>(PRESSABLE)]
+          .map((el) => ({ el, r: el.getBoundingClientRect(), spread: el.classList.contains('ff-hit-spread') }))
+          .filter(({ r }) => r.width && r.bottom > near.top - 60 && r.top < near.bottom + 60)
+        for (const el of targets) {
+          const r = el.getBoundingClientRect()
+          // First the room on each side (up to the whole shortfall), then the shortfall shared out: half each way
+          // where both sides have room, the rest from the side that has it where one does not.
+          const tall = Math.max(0, 44 - r.height)
+          const wide = Math.max(0, 44 - r.width)
+          let up = tall
+          let down = tall
+          let left = wide
+          let right = wide
+          for (const o of others) {
+            if (o.el === el || el.contains(o.el) || o.el.contains(el)) continue
+            const q = o.r
+            const share = o.spread ? 0.5 : 1
+            // Only what the reach would actually meet: a box overlapping the reached-out rectangle (another spreading
+            // control counted at its own full reach, since it reaches toward this one as this one reaches toward it).
+            const qy = o.spread ? Math.max(0, 44 - q.height) : 0
+            const qx = o.spread ? Math.max(0, 44 - q.width) : 0
+            if (q.right + qx <= r.left - left || q.left - qx >= r.right + right || q.bottom + qy <= r.top - up || q.top - qy >= r.bottom + down) continue
+            const sameColumn = q.right > r.left && q.left < r.right
+            const sameLine = q.bottom > r.top && q.top < r.bottom
+            const above = q.top + q.bottom < r.top + r.bottom
+            const before = q.left + q.right < r.left + r.right
+            // In the same column, or diagonal: give way vertically (where the shortfall is). On the same line: sideways.
+            if (sameColumn || !sameLine) {
+              if (above) up = Math.min(up, Math.max(0, r.top - q.bottom) * share)
+              else down = Math.min(down, Math.max(0, q.top - r.bottom) * share)
+            } else if (before) left = Math.min(left, Math.max(0, r.left - q.right) * share)
+            else right = Math.min(right, Math.max(0, q.left - r.right) * share)
+          }
+          const share = (need: number, a: number, b: number) => {
+            const x = Math.min(a, Math.max(need / 2, need - b))
+            return [x, Math.min(b, need - x)]
+          }
+          ;[up, down] = share(tall, up, down)
+          ;[left, right] = share(wide, left, right)
+          el.style.setProperty('--hit-t', `${Math.floor(up)}px`)
+          el.style.setProperty('--hit-b', `${Math.floor(down)}px`)
+          el.style.setProperty('--hit-l', `${Math.floor(left)}px`)
+          el.style.setProperty('--hit-r', `${Math.floor(right)}px`)
+        }
+      })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(box)
+    // Rows that re-render, and a widget body that scrolls without the box resizing, move the neighbours too.
+    const mo = new MutationObserver(measure)
+    mo.observe(box, { childList: true, subtree: true })
+    box.addEventListener('scroll', measure, { capture: true, passive: true })
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+      mo.disconnect()
+      box.removeEventListener('scroll', measure, { capture: true })
+    }
+  }, [phone]) // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 // Server render has no layout; the effect only matters in the browser.
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
 /**
- * Content that changes with a picker. The new content fades in over 120ms and
- * the box eases from the old height to the new one over 160ms, so switching
- * views never snaps the page around. Reduced motion skips both.
+ * Content that changes with a picker: the new content fades in over a quick beat, so a switch never flashes. The box
+ * takes its new height at once: a picker is flipped back and forth far too often for the page to ease around after
+ * it, and easing a height lays the page out on every frame. From the keyboard (arrows along the picker) and under
+ * reduced motion it swaps with no fade at all.
  */
 export const Swap = ({ k, children, className }: { k: string; children: ReactNode; className?: string }) => {
-  const box = useRef<HTMLDivElement>(null)
   const inner = useRef<HTMLDivElement>(null)
-  const height = useRef<number | null>(null)
   const prev = useRef(k)
-  const timer = useRef<number>()
-  useEffect(() => {
-    const el = box.current
-    if (!el) return
-    height.current = el.offsetHeight
-    // Track the settled height; while a transition holds an inline height, it is not the content's.
-    const ro = new ResizeObserver(() => {
-      if (!el.style.height) height.current = el.offsetHeight
-    })
-    ro.observe(el)
-    return () => {
-      ro.disconnect()
-      window.clearTimeout(timer.current)
-    }
-  }, [])
   useIsoLayoutEffect(() => {
-    const el = box.current
-    if (!el || prev.current === k) return
+    if (prev.current === k) return
     prev.current = k
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (reducedMotion() || byKeyboard()) return
     // Children stay mounted (their sort and paging survive); the fade is replayed on the same node.
-    inner.current?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: 'ease-out' })
-    // Mid-transition from a quick earlier switch: start from where the box is now, and measure the content free of the pin.
-    const from = el.style.height ? el.getBoundingClientRect().height : height.current
-    window.clearTimeout(timer.current)
-    el.style.transition = ''
-    el.style.height = ''
-    el.style.overflow = ''
-    const to = el.offsetHeight
-    if (from == null || Math.abs(from - to) < 2) return
-    el.style.height = `${from}px`
-    el.style.overflow = 'hidden'
-    void el.offsetHeight
-    el.style.transition = 'height 160ms var(--ff-ease-out)'
-    el.style.height = `${to}px`
-    timer.current = window.setTimeout(() => {
-      el.style.height = ''
-      el.style.overflow = ''
-      el.style.transition = ''
-      height.current = el.offsetHeight
-    }, 200)
+    inner.current?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: motionMs('quick'), easing: motionToken('ease-out') })
   }, [k])
   return (
-    <div ref={box} className={className}>
+    <div className={className}>
       <div ref={inner}>{children}</div>
     </div>
   )
@@ -607,6 +703,8 @@ export const Dropdown = ({
   const [active, setActive] = useState(0)
   // Whether the active row was last moved by the keyboard. Then it is always lit; a pointer-set one is lit only where hover exists.
   const [kbd, setKbd] = useState(false)
+  // Opened from the keyboard, the menu appears at once; by pointer it grows out of the trigger.
+  const [instant, setInstant] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const list = useRef<HTMLDivElement>(null)
@@ -619,6 +717,16 @@ export const Dropdown = ({
     window.addEventListener('pointerdown', onDown)
     return () => window.removeEventListener('pointerdown', onDown)
   }, [open])
+  // The menu grows from its trigger: the trigger's centre, at the edge the menu hangs from. Set before the first paint,
+  // so the entrance starts there (a menu wider than its button, or aligned to its right edge, still points back at it).
+  useIsoLayoutEffect(() => {
+    const menu = list.current
+    const r = root.current?.getBoundingClientRect()
+    if (!open || !menu || !r) return
+    const m = menu.getBoundingClientRect()
+    const x = Math.max(0, Math.min(m.width, r.left + r.width / 2 - m.left))
+    menu.style.transformOrigin = `${Math.round(x)}px ${up ? '100%' : '0'}`
+  }, [open, up])
   // Keep the highlighted option in view as the arrows move it.
   useEffect(() => {
     if (open) list.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest' })
@@ -626,6 +734,7 @@ export const Dropdown = ({
 
   const show = (byKey = false) => {
     setKbd(byKey)
+    setInstant(byKey)
     const r = root.current?.getBoundingClientRect()
     if (r) setUp(window.innerHeight - r.bottom < 260 && r.top > window.innerHeight - r.bottom)
     setActive(Math.max(0, options.findIndex((o) => o.value === value)))
@@ -708,8 +817,8 @@ export const Dropdown = ({
         ) : (
           <>
             <span className="min-w-0 flex-1 truncate pl-2.5 pr-2">{current?.face ?? current?.label ?? '—'}</span>
-            <span aria-hidden className="flex h-full w-7 shrink-0 items-center justify-center border-l border-ff-line font-mono text-[10px] text-ff-muted">
-              {open ? '▴' : '▾'}
+            <span aria-hidden className="flex h-full w-7 shrink-0 items-center justify-center border-l border-ff-line text-ff-muted">
+              <ChevronIcon open={open} />
             </span>
           </>
         )}
@@ -720,6 +829,7 @@ export const Dropdown = ({
           id={`${id}-list`}
           role="listbox"
           aria-label={label}
+          data-instant={instant || undefined}
           className={cx(
             'ff-pop ff-scroll absolute left-0 z-50 max-h-[260px] min-w-full overflow-y-auto overscroll-contain border border-ff-line2 bg-ff-panel py-1 shadow-[0_10px_28px_rgba(0,0,0,0.22)]',
             up ? 'ff-pop-up bottom-full mb-1' : 'top-full mt-1',
@@ -745,19 +855,19 @@ export const Dropdown = ({
                 // Touch has no hover: a finger resting on a row would light it up, and the tick already marks the current page.
                 onPointerEnter={() => {
                   setKbd(false)
-                  if (window.matchMedia('(hover: hover)').matches) setActive(i)
+                  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) setActive(i)
                 }}
                 onClick={() => pick(i)}
                 className={cx(
                   'flex min-h-8 cursor-pointer items-center gap-2 py-1 pl-2 pr-3 text-[12.5px]',
-                  i === active && (kbd ? 'bg-ff-raised' : '[@media(hover:hover)]:bg-ff-raised'),
+                  i === active && (kbd ? 'bg-ff-raised' : '[@media(hover:hover)_and_(pointer:fine)]:bg-ff-raised'),
                   o.disabled ? 'cursor-default text-ff-muted' : selected ? 'text-ff-text' : 'text-ff-text2',
                 )}
               >
                 <span aria-hidden className={cx('w-3 shrink-0 font-mono text-[11px] text-ff-accent', !selected && 'invisible')}>
                   ✓
                 </span>
-                <span className="min-w-0 leading-tight">
+                <span className="min-w-0 flex-1 leading-tight">
                   <span className={cx('block whitespace-nowrap', selected && 'font-medium')}>{o.label}</span>
                   {o.sub && <span className="block whitespace-nowrap font-mono text-[10.5px] text-ff-muted">{o.sub}</span>}
                 </span>
@@ -807,8 +917,9 @@ export const Button = ({
 }: {
   children: ReactNode
   onClick?: () => void
-  /** aqua: the one action a view exists for (build a trade); primary: a confirming action. */
-  variant?: 'outline' | 'ghost' | 'primary' | 'aqua'
+  /** aqua: the one action a view exists for (build a trade); primary: a confirming action; soft: an accent action
+   *  repeated down a list (Open in builder), tinted so the aqua one stays the loudest on the page. */
+  variant?: 'outline' | 'ghost' | 'primary' | 'aqua' | 'soft'
   size?: 'sm' | 'md'
   className?: string
   title?: string
@@ -822,11 +933,14 @@ export const Button = ({
     disabled={disabled}
     onClick={onClick}
     className={cx(
-      'ff-press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40',
+      'transition-colors inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent/40',
       // Phone targets are 40px; the desktop sizes are for a pointer.
       size === 'sm' ? 'h-7 px-2 text-[11.5px] max-md:h-10' : 'h-8 px-3 text-[12.5px] max-md:h-10',
       variant === 'primary' && 'bg-ff-text text-ff-panel hover:bg-ff-text/85',
       variant === 'aqua' && 'ff-aqua',
+      // The label is the accent taken a fifth of the way to the text colour: at least 5:1 on its tint, hover included,
+      // in every theme (an editor theme's bright accent alone sits near the 4.5:1 floor there).
+      variant === 'soft' && 'border border-ff-accent/40 bg-ff-accent/[0.09] font-medium text-[color-mix(in_srgb,rgb(var(--ff-accent))_80%,rgb(var(--ff-text)))] hover:border-ff-accent/60 hover:bg-ff-accent/[0.15]',
       variant === 'outline' && 'border border-ff-line bg-ff-panel text-ff-text hover:border-ff-line2 hover:bg-ff-raised',
       variant === 'ghost' && 'text-ff-muted hover:bg-ff-raised hover:text-ff-text',
       className,
@@ -858,9 +972,10 @@ export const Fab = ({ children, onClick, hidden, label }: { children: ReactNode;
     className={cx(
       'pointer-events-none fixed right-[max(12px,env(safe-area-inset-right))] z-30 md:hidden',
       'bottom-[calc(48px+env(safe-area-inset-bottom)+14px)]',
-      // In over 200ms, out over 120ms: the state being entered sets the duration.
-      'motion-safe:transition-[opacity,transform] motion-safe:ease-ff-out',
-      hidden ? 'translate-y-2 opacity-0 motion-safe:duration-[120ms]' : 'translate-y-0 opacity-100 motion-safe:duration-200',
+      // In over a panel's 200ms, out over a quick 120ms: the state being entered sets the duration. Reduced motion
+      // keeps the fade and drops the 8px travel.
+      'transition-[opacity,transform] ease-ff-out',
+      hidden ? 'opacity-0 duration-ff-quick motion-safe:translate-y-2' : 'opacity-100 duration-ff-panel',
     )}
   >
     <button type="button" onClick={onClick} aria-label={label} tabIndex={hidden ? -1 : undefined} aria-hidden={hidden || undefined} className={cx('ff-aqua ff-aqua-fab', !hidden && 'pointer-events-auto')}>
@@ -1261,7 +1376,7 @@ export const Meter = ({
   >
     {/* Scaled, not resized, so a change animates without reflowing the row. */}
     <span
-      className={cx('block h-full origin-left transition-transform duration-[240ms] ease-ff-out', tone === 'accent' ? 'bg-ff-accent' : tone === 'neg' ? 'bg-ff-neg' : 'bg-ff-pos')}
+      className={cx('block h-full origin-left motion-safe:transition-transform motion-safe:duration-ff-reveal motion-safe:ease-ff-out', tone === 'accent' ? 'bg-ff-accent' : tone === 'neg' ? 'bg-ff-neg' : 'bg-ff-pos')}
       style={{ transform: `scaleX(${Math.max(0, Math.min(1, max ? value / max : 0))})` }}
     />
   </span>
@@ -1689,9 +1804,9 @@ export function Table<T>({
                       onClick={() => setOpen(allOpen ? new Set() : new Set(expandable))}
                       aria-label={allOpen ? 'Collapse all rows' : 'Expand all rows'}
                       title={allOpen ? 'Collapse all' : 'Expand all'}
-                      className="flex h-8 w-7 items-center justify-center font-mono text-[10px] text-ff-muted hover:text-ff-text max-md:w-10"
+                      className="flex h-8 w-7 items-center justify-center font-mono text-ff-muted hover:text-ff-text max-md:w-10"
                     >
-                      <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', allOpen && 'rotate-90')}>›</span>
+                      <ChevronIcon dir="right" size={10} open={allOpen} />
                     </button>
                   )}
                 </th>
@@ -1717,7 +1832,7 @@ export function Table<T>({
                       className="-mx-1 inline-flex h-8 select-none items-center whitespace-nowrap px-1 uppercase hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
                     >
                       {c.label}
-                      {sortKey === c.key && <span aria-hidden className="ml-0.5 text-ff-text">{desc ? '▾' : '▴'}</span>}
+                      {sortKey === c.key && <span aria-hidden className="ml-0.5 text-ff-text"><ChevronIcon dir={desc ? 'down' : 'up'} size={10} className="align-[-1px]" /></span>}
                     </button>
                   ) : (
                     c.label
@@ -1756,7 +1871,7 @@ export function Table<T>({
                 className={cx(
                   // The rule is an inset shadow on the cells, not a border on the row: a collapsed border disappears under pinned cells.
                   'group',
-                  !isOpen && '[&>td]:shadow-[inset_0_-1px_0_rgb(var(--ff-line)/0.6)] last:[&>td]:shadow-none',
+                  !isOpen && '[&>td]:shadow-[inset_0_-1px_0_rgb(var(--ff-line)/0.6)] [&:last-child>td]:shadow-none',
                   onRowClick && 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent',
                   'hover:bg-ff-raised',
                   // An open row keeps the panel's surface and drops its rule, so the band beneath it reads as part of it.
@@ -1776,9 +1891,9 @@ export function Table<T>({
                         aria-expanded={isOpen}
                         aria-controls={`${id}-${k}`}
                         aria-label={isOpen ? 'Hide details' : 'Show details'}
-                        className="flex h-[38px] w-7 items-center justify-center font-mono text-[11px] text-ff-muted hover:text-ff-text max-md:h-11 max-md:w-10"
+                        className="flex h-[38px] w-7 items-center justify-center text-ff-muted hover:text-ff-text max-md:h-11 max-md:w-10"
                       >
-                        <span className={cx('inline-block motion-safe:transition-transform motion-safe:duration-150', isOpen && 'rotate-90 text-ff-accent')}>›</span>
+                        <ChevronIcon dir="right" size={12} open={isOpen} className={cx(isOpen && 'text-ff-accent')} />
                       </button>
                     )}
                   </td>

@@ -2,10 +2,10 @@ import React, { useEffect, useLayoutEffect, useRef, useState, type ReactNode } f
 import Head from 'next/head'
 import { MONKE } from './brand'
 import Tour, { TOUR } from './Tour'
-import { FootballIcon, PanelIcon, Sparkle } from './icons'
+import { ChevronIcon, FootballIcon, GearIcon, PanelIcon, Sparkle } from './icons'
 import SwipeSheet, { type SwipeSheetHandle } from './SwipeSheet'
 import { lockScroll } from './scrollLock'
-import { Avatar, Dropdown, PhoneBarContext, cx, shortcutLabel, usePhone, type PhoneBarSlot } from './ui'
+import { Avatar, Dropdown, PhoneBarContext, byKeyboard, cx, motionMs, motionToken, reducedMotion, shortcutLabel, usePhone, type PhoneBarSlot } from './ui'
 
 export const SECTION_KEYS = ['dash', 'slate', 'trades', 'me', 'waivers', 'matchups', 'power', 'playoffs', 'teams', 'players', 'monke', 'model', 'gm'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
@@ -32,6 +32,9 @@ export const SECTIONS: Section[] = [
 ]
 const GROUPS: Group[] = ['Overview', 'Your team', 'League', 'Engine']
 
+/** A section's name. */
+export const sectionLabel = (key: SectionKey) => SECTIONS.find((s) => s.key === key)?.label
+
 export { MONKE }
 
 /** The two-digit register number shown beside a section, which is also its keyboard shortcut (Assistant GM's is G). */
@@ -49,29 +52,27 @@ export type ShellProps = {
   leagueId: string | null
   onLeague: (id: string) => void
   leagueMeta?: string
-  /** `onOpen` makes the row a button to your team's page. */
+  /** Your team, at the sidebar's foot; `onOpen` makes the row a button to its page. */
   me?: { name: string; avatar: string | null; line: string; onOpen?: () => void } | null
-  controls?: ReactNode
-  /** The settings box, folded to one line or open. */
-  controlsOpen?: boolean
-  onControls?: (open: boolean) => void
+  /** Who is signed in (@user, or the ESPN league), for the foot row before a team is known. */
+  account: string
+  /** Opens the settings dialog: the gear beside your team, and the comma key. */
+  onSettings: () => void
   loading: boolean
+  /** What a load is doing, while it runs (the sidebar's sync mark carries it as a tooltip). */
   progress: string
   onRefresh: () => void
   /** Where the league loads from (Sleeper or ESPN), for the reload button's label. */
   source?: string
-  loadedAt: Date | null
   /** Opens the command palette; without it there is no search entry. */
   onSearch?: () => void
-  /** The engine's readouts for the footer: label, value, and what it means. */
-  status?: { label: string; value: string; title?: string }[]
   /** The first-visit tour, over the page; the sidebar stays clear and lights the section being explained. */
   tour?: boolean
   onTourEnd?: () => void
   /** The desktop sidebar shown (the default) or folded away; folding needs `onSidebar`. */
   sidebar?: boolean
   onSidebar?: (open: boolean) => void
-  /** A banner at the foot of the sections, above the settings (the weekly power-rank reveal). Given the drawer's close on phones. */
+  /** A card at the foot of the sections, above your team (the weekly power-rank reveal). Given the drawer's close on phones. */
   navFooter?: (close?: () => void) => ReactNode
   /** Assistant GM's button for the phone's top bar, beside Find. */
   assistant?: ReactNode
@@ -122,8 +123,6 @@ export const FantasyHead = ({ title }: { title: string }) => (
   </Head>
 )
 
-const clock = (d: Date | null) => (d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '--:--:--')
-
 const SidebarBody = ({
   section,
   onNavigate,
@@ -132,25 +131,27 @@ const SidebarBody = ({
   onLeague,
   leagueMeta,
   me,
-  controls,
+  account,
+  onSettings,
   loading,
   progress,
-  onRefresh,
-  source = 'Sleeper',
-  loadedAt,
-  status,
   onClose,
   onSearch,
   tourKey,
   clearToggle,
-  controlsOpen,
-  onControls,
   navFooter,
 }: Omit<ShellProps, 'children' | 'title'> & { onClose?: () => void; tourKey?: string | null; /** Leave room at the left of the header for the fixed sidebar toggle. */ clearToggle?: boolean }) => (
-  <div className="flex h-full flex-col">
+  <div className="flex h-full flex-col" data-sidebar-body="">
     <div className={cx('flex h-11 shrink-0 items-center justify-between border-b border-ff-line pr-2', clearToggle ? 'pl-11' : 'pl-3')}>
       <Brand />
       <span className="flex items-center gap-1">
+        {/* A reload in flight shows here; at rest the header stays clear (the last sync is in Settings › Data). */}
+        {loading && (
+          <span role="status" title={progress} className="flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ff-muted">
+            <span aria-hidden className="ff-pulse h-1.5 w-1.5 bg-ff-warn" />
+            Syncing
+          </span>
+        )}
         {onClose && (
           <button onClick={onClose} className="h-10 px-3 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-text md:h-8 md:px-2" aria-label="Close menu">
             ESC
@@ -160,7 +161,7 @@ const SidebarBody = ({
     </div>
 
     {/* On phones the league, search and sections scroll together, so taller rows never push sections out of reach; on desktop this wrapper adds no box. */}
-    <div className="ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain md:contents">
+    <div className="ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain md:contents">
     <div className="shrink-0 border-b border-ff-line">
       <Dropdown
         label="League"
@@ -176,42 +177,10 @@ const SidebarBody = ({
               <span className="mt-0.5 block truncate text-[13px] font-medium text-ff-text">{cur?.label ?? '—'}</span>
               {leagueMeta && <span className="block truncate font-mono text-[10.5px] text-ff-muted">{leagueMeta}</span>}
             </span>
-            <span aria-hidden className="shrink-0 font-mono text-[10px] text-ff-muted">
-              {open ? '▴' : '▾'}
-            </span>
+            <ChevronIcon open={open} size={10} className="text-ff-muted" />
           </span>
         )}
       />
-      {me && (() => {
-        const who = (
-          <>
-            <Avatar src={me.avatar} name={me.name} size={22} />
-            <span className="min-w-0 flex-1 leading-tight">
-              <span className="block truncate text-[12.5px] text-ff-text">{me.name}</span>
-              <span className="block truncate font-mono text-[10.5px] text-ff-muted">{me.line}</span>
-            </span>
-          </>
-        )
-        return me.onOpen ? (
-          <button
-            type="button"
-            onClick={() => {
-              onClose?.()
-              me.onOpen?.()
-              window.scrollTo({ top: 0 })
-            }}
-            title="Open your team's page"
-            className="group/me flex min-h-11 w-full items-center gap-2 border-t border-ff-line px-3 py-2 text-left transition-colors hover:bg-ff-raised focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent md:min-h-0"
-          >
-            {who}
-            <span aria-hidden className="shrink-0 font-mono text-[12px] text-ff-muted group-hover/me:text-ff-text2">
-              ›
-            </span>
-          </button>
-        ) : (
-          <div className="flex items-center gap-2 border-t border-ff-line px-3 py-2">{who}</div>
-        )
-      })()}
     </div>
 
     {onSearch && (
@@ -229,9 +198,7 @@ const SidebarBody = ({
           )}
           aria-keyshortcuts="Meta+K Control+K"
         >
-          <span aria-hidden className="font-mono text-ff-accent">
-            ›
-          </span>
+          <ChevronIcon dir="right" size={10} className="text-ff-accent" />
           <span className="flex-1">Jump to…</span>
           <kbd className="font-mono text-[10px] max-md:hidden">{shortcutLabel()}</kbd>
         </button>
@@ -290,51 +257,52 @@ const SidebarBody = ({
 
     {navFooter?.(onClose)}
 
-    {controls && (
-      <div className="shrink-0 border-t border-ff-line">
-        {/* Settings fold to one line, opened when needed. */}
+    {/* The foot: your team (to its page) and the gear (to Settings), one row, as an account sits in an app's sidebar. */}
+    <div data-sidebar-foot="" className="flex h-14 shrink-0 items-stretch border-t border-ff-line md:h-12">
+      {me?.onOpen ? (
         <button
           type="button"
-          aria-expanded={!!controlsOpen}
-          aria-controls="ff-settings"
-          onClick={() => onControls?.(!controlsOpen)}
-          className="flex h-11 w-full items-center gap-2 px-3 text-left hover:bg-ff-raised md:h-9"
+          onClick={() => {
+            onClose?.()
+            me.onOpen?.()
+            window.scrollTo({ top: 0 })
+          }}
+          title="Open your team's page"
+          className="group/me flex min-w-0 flex-1 items-center gap-2.5 pl-3 pr-2 text-left transition-colors hover:bg-ff-raised focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent"
         >
-          <span className="ff-label min-w-0 flex-1">Settings</span>
-          <span aria-hidden className={cx('font-mono text-[10px] text-ff-muted motion-safe:transition-transform motion-safe:duration-150', controlsOpen && 'rotate-180')}>
-            ▴
-          </span>
+          <FootWho me={me} />
         </button>
-        {controlsOpen && (
-          <div id="ff-settings" className="space-y-3 px-3 pb-3">
-            {controls}
-          </div>
-        )}
-      </div>
-    )}
-
-    <div className="shrink-0 border-t border-ff-line px-3 pb-2.5 pt-2 font-mono text-[10.5px] text-ff-muted">
-      <div className="flex h-10 items-center justify-between gap-2 md:h-6">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className={cx('h-1.5 w-1.5 shrink-0', loading ? 'ff-pulse bg-ff-warn' : 'bg-ff-pos')} aria-hidden />
-          <span className="min-w-0 truncate">{loading ? progress.toLowerCase() : `synced ${clock(loadedAt)}`}</span>
-        </span>
-        <button onClick={onRefresh} disabled={loading} className="-mr-3 h-10 shrink-0 px-3 text-ff-text2 md:-mr-1.5 md:h-6 md:px-1.5 hover:bg-ff-raised hover:text-ff-text disabled:opacity-50" title={`Reload from ${source} (R)`}>
-          reload
-        </button>
-      </div>
-      {status && status.length > 0 && (
-        <dl className="mt-1 grid grid-cols-2 gap-px border border-ff-line bg-ff-line">
-          {status.map((s) => (
-            <div key={s.label} className="flex items-baseline justify-between gap-2 bg-ff-panel px-2 py-1" title={s.title}>
-              <dt className="text-[9.5px] tracking-[0.08em]">{s.label}</dt>
-              <dd className="num truncate text-ff-text2">{s.value}</dd>
-            </div>
-          ))}
-        </dl>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 pl-3 pr-2">
+          {me ? <FootWho me={me} /> : <span className="min-w-0 truncate font-mono text-[11px] text-ff-muted">{account}</span>}
+        </div>
       )}
+      <button
+        type="button"
+        onClick={() => {
+          onClose?.()
+          onSettings()
+        }}
+        aria-label="Settings"
+        aria-keyshortcuts=","
+        title="Settings (,)"
+        className="flex w-14 shrink-0 items-center justify-center text-ff-text2 transition-colors hover:bg-ff-raised hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent md:w-12"
+      >
+        <GearIcon size={16} />
+      </button>
     </div>
   </div>
+)
+
+/** Your team in the foot row: avatar, name, record. */
+const FootWho = ({ me }: { me: NonNullable<ShellProps['me']> }) => (
+  <>
+    <Avatar src={me.avatar} name={me.name} size={24} />
+    <span className="min-w-0 flex-1 leading-tight">
+      <span className="block truncate text-[13px] font-medium text-ff-text">{me.name}</span>
+      {me.line && <span className="num block truncate font-mono text-[10.5px] text-ff-muted">{me.line}</span>}
+    </span>
+  </>
 )
 
 const typing = (e: KeyboardEvent) => {
@@ -389,12 +357,16 @@ const Shell = (props: ShellProps) => {
         e.preventDefault()
         onNavigate(SECTIONS[n - 1].key)
         window.scrollTo({ top: 0 })
+      } else if (e.key === ',') {
+        e.preventDefault()
+        if (drawer) closeDrawer()
+        props.onSettings()
       } else if (e.key === 'r' || e.key === 'R') onRefresh()
       else if (e.key === '[' && onSidebar && !phone) onSidebar(!sidebarOpen)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onNavigate, onRefresh, onSidebar, sidebarOpen, phone])
+  }, [onNavigate, onRefresh, onSidebar, sidebarOpen, phone, drawer, props.onSettings]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The tour: which step it is on. A sidebar click while it runs moves the tour there instead of the page.
   // Back to the start as it ends, so a replay opens on step one rather than flashing the step it ended on.
@@ -415,7 +387,9 @@ const Shell = (props: ShellProps) => {
     window.scrollTo({ top: 0 })
   }
   // Folding the sidebar moves the page at once (padding, so it lays out once, not every frame), then slides the
-  // page from where it was to where it now is, on the sidebar's own curve and timing, so the two travel together.
+  // page from where it was to where it now is, on the sidebar's own curve and timing (a panel on the drawer curve),
+  // so the two travel together. From the keyboard ([) all of it happens at once.
+  const shell = useRef<HTMLDivElement>(null)
   const page = useRef<HTMLDivElement>(null)
   const wasOpen = useRef(sidebarOpen)
   useLayoutEffect(() => {
@@ -423,26 +397,32 @@ const Shell = (props: ShellProps) => {
     wasOpen.current = sidebarOpen
     const el = page.current
     const main = el?.parentElement
-    if (phone || !el || !main || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (phone || !el || !main || reducedMotion()) return
+    if (byKeyboard()) {
+      const root = shell.current
+      root?.setAttribute('data-instant', '')
+      void root?.offsetWidth
+      root?.removeAttribute('data-instant')
+      return
+    }
     const max = parseFloat(getComputedStyle(el).maxWidth) || Infinity
     // A page narrower than the window sits centred, so it moves half the sidebar's width, not all of it.
     const left = (pad: number) => pad + Math.max(0, (main.clientWidth - pad - max) / 2)
     const dx = left(sidebarOpen ? 0 : 220) - left(sidebarOpen ? 220 : 0)
-    el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 170, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' })
+    el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: motionMs('panel'), easing: motionToken('ease-drawer') })
   }, [sidebarOpen, phone])
-  const current = SECTIONS.find((s) => s.key === section)
   const leagueName = leagues.find((l) => l.id === leagueId)?.name
 
   return (
     // Page headers read data-sidebar to leave room for the show-sidebar button when the sidebar is folded.
-    <div className="ff group/shell min-h-dvh bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
+    <div ref={shell} className="ff group/shell min-h-dvh bg-ff-bg text-ff-text antialiased" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
       <FantasyHead title={title} />
 
       {/* Desktop sidebar. Folded, it slides off to the left and leaves the tab order. */}
       <aside
         inert={!sidebarOpen}
         className={cx(
-          'fixed inset-y-0 left-0 z-30 hidden w-[calc(220px+env(safe-area-inset-left))] border-r border-ff-line bg-ff-panel pl-[env(safe-area-inset-left)] motion-safe:transition-transform motion-safe:duration-[170ms] motion-safe:ease-ff-drawer md:block',
+          'fixed inset-y-0 left-0 z-30 hidden w-[calc(220px+env(safe-area-inset-left))] border-r border-ff-line bg-ff-panel pl-[env(safe-area-inset-left)] ff-fold-x motion-safe:transition-transform motion-safe:duration-ff-panel motion-safe:ease-ff-drawer md:block',
           !sidebarOpen && '-translate-x-full',
         )}
       >
@@ -462,7 +442,7 @@ const Shell = (props: ShellProps) => {
           <PanelIcon />
         </button>
         <div className="min-w-0 flex-1 px-3 leading-tight">
-          <div className="truncate text-[15px] font-medium">{bar ? bar.title : current?.label}</div>
+          <div className="truncate text-[15px] font-medium">{bar ? bar.title : sectionLabel(section)}</div>
           {(bar ? bar.sub : leagueName) && <div className="truncate font-mono text-[10.5px] text-ff-muted">{bar ? bar.sub : leagueName}</div>}
         </div>
         {props.assistant}

@@ -55,7 +55,7 @@ export const AskGm = ({
       title={`Ask Assistant GM: “${prompt}”`}
       aria-label={`${label}: ${prompt}`}
       className={cx(
-        'asgm-ask ff-press ff-hit group/ask relative inline-flex h-6 shrink-0 items-center gap-1 border border-ff-accent/30 bg-ff-accent/[0.04] px-1.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-ff-accent hover:border-ff-accent/60 hover:bg-ff-accent/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ff-accent',
+        'asgm-ask transition-colors ff-hit group/ask relative inline-flex h-6 shrink-0 items-center gap-1 border border-ff-accent/30 bg-ff-accent/[0.04] px-1.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-ff-accent hover:border-ff-accent/60 hover:bg-ff-accent/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ff-accent',
         className,
       )}
     >
@@ -83,7 +83,7 @@ export const AsgmHeaderButton = () => {
       aria-keyshortcuts="G"
       title={shown ? 'Close Assistant GM (G)' : 'Ask Assistant GM (G)'}
       className={cx(
-        'asgm-trigger ff-press relative flex h-7 shrink-0 items-center gap-1.5 border pl-1.5 pr-2 text-[12px] font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ff-accent',
+        'asgm-trigger transition-colors relative flex h-7 shrink-0 items-center gap-1.5 border pl-1.5 pr-2 text-[12px] font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ff-accent',
         shown ? 'border-ff-accent/60 bg-ff-accent/[0.08] text-ff-text' : 'border-ff-line bg-ff-panel text-ff-text hover:border-ff-line2 hover:bg-ff-raised',
       )}
     >

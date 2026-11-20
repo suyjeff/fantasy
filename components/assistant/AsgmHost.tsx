@@ -1,9 +1,9 @@
-import React, { useEffect, useId, useLayoutEffect, useRef } from 'react'
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { useFantasy } from '../FantasyContext'
 import { useModal } from '../Sheet'
 import SwipeSheet, { type SwipeSheetHandle } from '../SwipeSheet'
 import { useTradeDock } from '../TradeDock'
-import { useMedia, usePhone } from '../ui'
+import { byKeyboard, useMedia, usePhone } from '../ui'
 import { AsgmChat } from './AsgmChat'
 import { useAsgm, useAsgmContext, useAsgmControl } from './AsgmProvider'
 import { sectionContext } from './contexts'
@@ -30,6 +30,10 @@ const useGiveBack = (panel: React.RefObject<HTMLElement | null>) => {
   )
 }
 
+/** Opened from the keyboard (G, the command palette, Enter on a button), the window and the dock appear at once, as
+ *  every panel in the app does ([data-instant], styles/fantasy.css "Motion"); by pointer they arrive on the panel timing. */
+const useInstant = () => useState(() => byKeyboard())[0] || undefined
+
 /** Escape closes, from anywhere inside, unless something inside (a menu) takes it first. */
 const useEscape = (panel: React.RefObject<HTMLElement | null>, close: () => void) => {
   const fn = useRef(close)
@@ -55,6 +59,7 @@ const Float = ({ close, onDock, onExpand }: { close: () => void; onDock?: () => 
   // Above the dock's minimized trade cards, which sit in this same corner.
   const lifted = dock && dock.mode !== 'open' && (dock.count > 0 || dock.toast)
   const roomy = useMedia('(min-width: 1024px)')
+  const instant = useInstant()
   useGiveBack(panel)
   useEscape(panel, close)
   return (
@@ -64,6 +69,7 @@ const Float = ({ close, onDock, onExpand }: { close: () => void; onDock?: () => 
       role="dialog"
       aria-modal="false"
       aria-labelledby={titleId}
+      data-instant={instant}
       className="asgm-float fixed right-4 z-[33] flex w-[360px] max-w-[calc(100vw-32px)] flex-col lg:w-[400px] border border-ff-line2 bg-ff-panel shadow-[0_18px_60px_-12px_rgba(0,0,0,0.45),0_2px_8px_rgba(0,0,0,0.12)]"
       // Never up into the page's 44px title row, where the GM's own button lives.
       // Under 1024px (a tablet, a narrow window) it is narrower and at most about two thirds of the height, so the
@@ -80,6 +86,7 @@ const Float = ({ close, onDock, onExpand }: { close: () => void; onDock?: () => 
 const Dock = ({ close, onDock, onExpand }: { close: () => void; onDock: () => void; onExpand: () => void }) => {
   const panel = useRef<HTMLElement>(null)
   const titleId = useId()
+  const instant = useInstant()
   useGiveBack(panel)
   useEscape(panel, close)
   // The page makes room: everything in it moves over by the panel's width, laid out once (not every frame).
@@ -91,7 +98,7 @@ const Dock = ({ close, onDock, onExpand }: { close: () => void; onDock: () => vo
     }
   }, [])
   return (
-    <aside ref={panel} data-asgm="" aria-labelledby={titleId} className="asgm-dock fixed bottom-0 right-0 top-0 z-[32] flex flex-col border-l border-ff-line bg-ff-panel pr-[env(safe-area-inset-right)]">
+    <aside ref={panel} data-asgm="" aria-labelledby={titleId} data-instant={instant} className="asgm-dock fixed bottom-0 right-0 top-0 z-[32] flex flex-col border-l border-ff-line bg-ff-panel pr-[env(safe-area-inset-right)]">
       <AsgmChat variant="dock" titleId={titleId} onClose={close} onDock={onDock} onExpand={onExpand} />
     </aside>
   )

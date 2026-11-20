@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { dealActive, dealFromIdea, dealSummary, type Deal } from '../lib/deal'
 import * as dock from '../lib/dock'
 import { MAX_TRADES, type DockState, type DockStep, type DockTrade } from '../lib/dock'
@@ -11,7 +11,7 @@ import TradeBuilder, { BuilderHeader, CLOSE, Glyph, headline, useDealPricing, us
 import { AddIcon } from './icons'
 import { CompareProvider, CompareToggle } from './useCompare'
 import { ShareTradeButton } from './TradeShare'
-import { cx, fmtSigned, reducedMotion, useMedia, usePhone } from './ui'
+import { byKeyboard, cx, fmtSigned, motionMs, useMedia, usePhone } from './ui'
 import { useAsgmContext } from './assistant/AsgmProvider'
 
 // The trade builder's home: up to three trades for the whole app, kept above the pages so they survive being
@@ -196,7 +196,7 @@ const DockHost = ({ state, set, api }: HostProps) => {
             <button
               type="button"
               onClick={() => api.open()}
-              className="tb-ink tb-ink-btn ff-press absolute bottom-full right-[max(0px,env(safe-area-inset-right))] flex items-center gap-1.5 border-x border-t px-3 text-[12.5px] font-medium"
+              className="tb-ink tb-ink-btn transition-colors absolute bottom-full right-[max(0px,env(safe-area-inset-right))] flex items-center gap-1.5 border-x border-t px-3 text-[12.5px] font-medium"
               style={{ height: NEW_TAB }}
             >
               <span className="text-[color:var(--ink-accent)]">
@@ -287,15 +287,15 @@ const Body = ({ state, set, api, trade, layout, titleId, onMinimize, onClose }: 
 
 /** A strip under the builder's header: what just happened, the way back, and × to let it be. */
 const UndoNotice = ({ text, detail, action, onAction, onDismiss }: { text: string; detail: string | null; action: string; onAction: () => void; onDismiss: () => void }) => (
-  <div className="tb-fade flex min-h-11 shrink-0 items-center gap-2 border-b border-ff-line bg-ff-sunken pl-3 md:pl-4">
+  <div className="ff-fade-in flex min-h-11 shrink-0 items-center gap-2 border-b border-ff-line bg-ff-sunken pl-3 md:pl-4">
     <p className="min-w-0 flex-1 truncate text-[12.5px] text-ff-text2">
       <span className="text-ff-text">{text}</span>
       {detail && <span className="font-mono text-[11px] text-ff-muted"> · {detail}</span>}
     </p>
-    <button type="button" onClick={onAction} className="ff-press h-11 shrink-0 px-3 text-[13px] font-medium text-ff-accent hover:bg-ff-raised md:h-9">
+    <button type="button" onClick={onAction} className="transition-colors h-11 shrink-0 px-3 text-[13px] font-medium text-ff-accent hover:bg-ff-raised md:h-9">
       {action}
     </button>
-    <button type="button" onClick={onDismiss} aria-label="Dismiss" title="Dismiss" className="ff-press flex h-11 w-11 shrink-0 items-center justify-center border-l border-ff-line text-ff-muted hover:bg-ff-raised hover:text-ff-text md:h-9 md:w-9">
+    <button type="button" onClick={onDismiss} aria-label="Dismiss" title="Dismiss" className="transition-colors flex h-11 w-11 shrink-0 items-center justify-center border-l border-ff-line text-ff-muted hover:bg-ff-raised hover:text-ff-text md:h-9 md:w-9">
       <Glyph d={CLOSE} size={12} />
     </button>
   </div>
@@ -352,12 +352,25 @@ const DesktopDialog = (props: OpenProps) => {
   const root = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const timer = useRef<number>()
+  // In like the other panels: a transition from the hidden state the first paint commits, at once from the keyboard.
+  useLayoutEffect(() => {
+    const el = root.current
+    if (!el) return
+    const instant = byKeyboard()
+    if (instant) el.setAttribute('data-instant', '')
+    void el.offsetWidth
+    el.setAttribute('data-open', '')
+    if (!instant) return
+    void el.offsetWidth
+    el.removeAttribute('data-instant')
+  }, [])
   const leave = (why: 'min' | 'close') => {
     const el = root.current
-    if (!el || reducedMotion()) return why === 'min' ? api.minimize() : api.close()
+    if (!el || byKeyboard()) return why === 'min' ? api.minimize() : api.close()
     if (el.dataset.leaving) return
+    el.removeAttribute('data-open')
     el.dataset.leaving = why
-    timer.current = window.setTimeout(() => (why === 'min' ? api.minimize() : api.close()), why === 'min' ? 150 : 140)
+    timer.current = window.setTimeout(() => (why === 'min' ? api.minimize() : api.close()), motionMs('reveal'))
   }
   useEffect(() => () => window.clearTimeout(timer.current), [])
   useModal(panel, () => leave('min'))
@@ -420,7 +433,7 @@ const Minimized = ({ trade, label, phone, onOpen, onClose, autoFocus }: { trade:
   return (
     <div className={slot(phone)}>
       {!phone && <span aria-hidden className="absolute inset-x-0 -top-px h-[2px] bg-[color:var(--ink-accent)]" />}
-      <button ref={open} type="button" onClick={onOpen} className={cx('tb-ink-btn ff-press flex min-w-0 flex-1 items-center text-left outline-none', phone ? 'gap-2.5 pl-3 pr-2' : 'gap-2.5 pl-2.5 pr-2')} aria-label={`Open ${what}: ${dealSummary(trade.deal, me, name, lineup)}`}>
+      <button ref={open} type="button" onClick={onOpen} className={cx('tb-ink-btn transition-colors flex min-w-0 flex-1 items-center text-left outline-none', phone ? 'gap-2.5 pl-3 pr-2' : 'gap-2.5 pl-2.5 pr-2')} aria-label={`Open ${what}: ${dealSummary(trade.deal, me, name, lineup)}`}>
         {phone ? (
           <>
             {/* Its number where there are several; the trade glyph where there is one. */}
@@ -463,7 +476,7 @@ const Minimized = ({ trade, label, phone, onOpen, onClose, autoFocus }: { trade:
         onClick={onClose}
         aria-label={`Discard ${what}`}
         title="Discard the trade (you can undo)"
-        className="tb-ink-btn ff-press flex w-11 shrink-0 items-center justify-center border-l border-[color:var(--ink-line)] text-[color:var(--ink-muted)] hover:text-[color:var(--ink-neg)]"
+        className="tb-ink-btn transition-colors flex w-11 shrink-0 items-center justify-center border-l border-[color:var(--ink-line)] text-[color:var(--ink-muted)] hover:text-[color:var(--ink-neg)]"
       >
         <Glyph d={CLOSE} />
       </button>
@@ -509,10 +522,10 @@ const Discarded = ({ text, line, phone, onUndo, onDismiss }: { text: string; lin
         <span className="shrink-0 text-[13px] font-medium">{text}</span>
         <span className="truncate font-mono text-[10.5px] text-[color:var(--ink-muted)]">{line}</span>
       </p>
-      <button ref={undoRef} type="button" onClick={onUndo} className="tb-ink-btn ff-press shrink-0 px-4 text-[13.5px] font-medium text-[color:var(--ink-accent)]">
+      <button ref={undoRef} type="button" onClick={onUndo} className="tb-ink-btn transition-colors shrink-0 px-4 text-[13.5px] font-medium text-[color:var(--ink-accent)]">
         Undo
       </button>
-      <button type="button" onClick={onDismiss} aria-label="Dismiss" title="Dismiss" className="tb-ink-btn ff-press flex w-11 shrink-0 items-center justify-center border-l border-[color:var(--ink-line)] text-[color:var(--ink-muted)]">
+      <button type="button" onClick={onDismiss} aria-label="Dismiss" title="Dismiss" className="tb-ink-btn transition-colors flex w-11 shrink-0 items-center justify-center border-l border-[color:var(--ink-line)] text-[color:var(--ink-muted)]">
         <Glyph d={CLOSE} />
       </button>
     </div>

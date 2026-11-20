@@ -14,8 +14,12 @@ import { Badge, DeltaChip, PlayerAvatar, cx, fmt, fmtSigned, pct, reducedMotion 
 // in on it and the frame settling from the accent to a hairline (styles/fantasy.css, .asgm-card), and its figures
 // tick from where they were to where they land. Reduced motion: the card fades in, the figures are simply there.
 
+/** How long a fresh card's figures count and its bars fill: --asgm-count in styles/fantasy.css. A staged sequence,
+ *  so it keeps its own length (on the app's ease-out curve) rather than a UI duration. */
+const COUNT_MS = 800
+
 /** A number that counts from `from` to `to` once, when it first shows. */
-export const useTicker = (to: number, from: number, on = true, ms = 650) => {
+export const useTicker = (to: number, from: number, on = true, ms = COUNT_MS) => {
   const [v, setV] = useState(on && !reducedMotion() ? from : to)
   useEffect(() => {
     if (!on || reducedMotion() || from === to) return setV(to)
@@ -194,7 +198,7 @@ const TradeCardView = ({ card, onOpen }: { card: Extract<AsgmCard, { kind: 'trad
 }
 
 const OddsRow = ({ label, before, after, fresh, wide }: { label: ReactNode; before?: number; after: number; fresh: boolean; /** Some row has a before: every row keeps room for the change. */ wide: boolean }) => {
-  const v = useTicker(after, before ?? 0, fresh, 800)
+  const v = useTicker(after, before ?? 0, fresh)
   const [grown, setGrown] = useState(!fresh || reducedMotion())
   useEffect(() => {
     if (grown) return
@@ -207,7 +211,7 @@ const OddsRow = ({ label, before, after, fresh, wide }: { label: ReactNode; befo
     <li className="asgm-odds grid grid-cols-[minmax(0,1fr)_minmax(48px,112px)_auto] items-center gap-x-3 px-3 py-1.5">
       <span className="asgm-odds-name min-w-0 truncate text-[12.5px] text-ff-text">{label}</span>
       <span className="asgm-odds-bar relative h-1.5 bg-ff-accent/15" aria-hidden>
-        <span className="absolute inset-y-0 left-0 w-full origin-left bg-ff-accent transition-transform duration-[800ms] ease-ff-out" style={{ transform: `scaleX(${Math.max(0, Math.min(1, at))})` }} />
+        <span className="asgm-fill absolute inset-y-0 left-0 w-full bg-ff-accent" style={{ transform: `scaleX(${Math.max(0, Math.min(1, at))})` }} />
         {before != null && <span className="absolute -inset-y-1 w-px bg-ff-text2" style={{ left: `${Math.max(0, Math.min(1, before)) * 100}%` }} title="Before" />}
       </span>
       <span className={cx('asgm-odds-figs flex items-baseline justify-end gap-1.5', wide && 'w-[84px]')}>

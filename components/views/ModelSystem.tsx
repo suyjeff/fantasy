@@ -5,6 +5,7 @@ import { useFantasy } from '../FantasyContext'
 import { MONKE } from '../Shell'
 import { surname } from '../../lib/scout'
 import { Badge, N, Num, Panel, Sentences, Stat, StatGrid, Table, cx, fmt, fmtSigned, simOdds, pct } from '../ui'
+import { ChevronIcon } from '../icons'
 
 // ---------- Overview ----------
 
@@ -112,7 +113,7 @@ export const OverviewTab = ({ open }: { open: (s: string) => void }) => {
               <span>
                 A team-week strays <N>±{fmt(f.sigma)}</N> pts from its projection, so single games stay close to coin flips
               </span>
-              <button onClick={() => open('forecast')} className="shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
+              <button onClick={() => open('forecast')} className="ff-hit shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
                 forecast →
               </button>
             </li>
@@ -126,7 +127,7 @@ export const OverviewTab = ({ open }: { open: (s: string) => void }) => {
                 </>
               ) : null}
             </span>
-            <button onClick={() => open('data')} className="shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
+            <button onClick={() => open('data')} className="ff-hit shrink-0 font-mono text-[10.5px] text-ff-muted hover:text-ff-accent">
               data →
             </button>
           </li>
@@ -353,7 +354,7 @@ export const SystemTab = ({ onSub }: { onSub: (s: string) => void }) => {
                       >
                         <span className="flex items-baseline justify-between gap-2">
                           <span className="truncate text-[12.5px] text-ff-text">{n.label}</span>
-                          {n.tab && <span className="font-mono text-[9.5px] text-ff-muted">›</span>}
+                          {n.tab && <ChevronIcon dir="right" size={10} className="self-center text-ff-muted" />}
                         </span>
                         <span className="num block truncate text-[10.5px] text-ff-text2">{n.stat}</span>
                         <span className="block truncate font-mono text-[9.5px] text-ff-muted lg:hidden">→ {feeds(n.id).join(', ') || 'shown'}</span>

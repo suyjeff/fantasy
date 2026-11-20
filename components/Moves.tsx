@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useRef } from 'react'
 import { findMoves, type Move, type MoveKind } from '../lib/moves'
 import { useFantasy } from './FantasyContext'
 import { providerName } from '../lib/useLeagueData'
 import { useNews } from './useNews'
-import { Badge, Empty, Panel, PlayerAvatar, ago, cx, fmt, fmtSigned, pct } from './ui'
+import { Badge, Empty, Panel, PlayerAvatar, ago, cx, fmt, fmtSigned, pct, useHitSpread } from './ui'
 
 const KIND: Record<MoveKind, { label: string; tone: 'pos' | 'warn' | 'neg' | 'accent' | 'neutral' }> = {
   start: { label: 'START', tone: 'pos' },
@@ -21,7 +21,7 @@ const Who = ({ id }: { id: string | null | undefined }) => {
   if (!id) return <span className="text-ff-muted">nobody</span>
   const p = data.players[id]
   return (
-    <button type="button" onClick={() => openPlayer(id)} className="inline-flex max-w-full items-baseline gap-1 align-baseline font-medium text-ff-text hover:underline">
+    <button type="button" onClick={() => openPlayer(id)} className="ff-hit-spread inline-flex max-w-full items-baseline gap-1 align-baseline font-medium text-ff-text hover:underline">
       {p && <PlayerAvatar player={p} id={id} size={16} className="translate-y-[2px] self-start" />}
       <span className="truncate">{p?.name ?? id}</span>
     </button>
@@ -194,8 +194,12 @@ export const useMoves = (rosterId: number | null, limit?: number) => {
  * The kind tag sits above its sentence, not beside it, so every sentence starts on the list's own left edge, under the
  * heading above it, and wraps back to that edge too. In a sheet the heading sits a step further in, and so do the rows.
  */
-export const MoveList = ({ moves, compact }: { moves: Move[]; compact?: boolean }) => (
-  <ol className="divide-y divide-ff-line/70">
+export const MoveList = ({ moves, compact }: { moves: Move[]; compact?: boolean }) => {
+  // The names in each sentence are buttons a line tall; on phones their targets reach out as far as they can.
+  const list = useRef<HTMLOListElement>(null)
+  useHitSpread(list)
+  return (
+  <ol ref={list} className="divide-y divide-ff-line/70">
     {moves.map((m) => (
       <li key={m.key} className={cx('grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 px-3 [[data-sheet]_&]:px-4', compact ? 'py-2 text-[12px]' : 'py-2.5 text-[13px]')}>
         <div className="min-w-0">
@@ -210,7 +214,8 @@ export const MoveList = ({ moves, compact }: { moves: Move[]; compact?: boolean 
       </li>
     ))}
   </ol>
-)
+  )
+}
 
 /**
  * The few moves worth making on a roster, ahead of everything else on the page: the lineup fixes that lock at kickoff,
@@ -248,7 +253,7 @@ const MovesPanel = ({ rosterId }: { rosterId: number }) => {
       {mine && (
         <div className="flex items-center justify-between gap-3 border-t border-ff-line px-3 py-1.5 text-[11.5px] text-ff-muted">
           <span>Lineup moves use Sleeper&apos;s projections for week {week}; adds use the pricing horizon.</span>
-          <button type="button" onClick={() => go('waivers', 'moves')} className="shrink-0 font-mono text-[11px] text-ff-text2 hover:text-ff-text">
+          <button type="button" onClick={() => go('waivers', 'moves')} className="ff-hit shrink-0 font-mono text-[11px] text-ff-text2 hover:text-ff-text">
             Waivers →
           </button>
         </div>

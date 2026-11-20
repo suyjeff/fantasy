@@ -4,7 +4,8 @@ import { type Odds, type Part, type Reason, type Recap, type RecapGame, type Rec
 import { useFantasy } from './FantasyContext'
 import { Crown } from './RevealBanner'
 import { ShareButton } from './RevealShare'
-import { Avatar, PlayerAvatar, PosTag, Segmented, cx, fmt, odds as chance, pct } from './ui'
+import { Avatar, PlayerAvatar, PosTag, Segmented, cx, fmt, motionToken, odds as chance, pct } from './ui'
+import { ChevronIcon } from './icons'
 
 // What the reveal settles into: the new ranking with each team's move, and the week that made it. On wide screens
 // the ranking holds the left column and the week reads down the right; on phones they are three pages under tabs.
@@ -532,7 +533,7 @@ const PowerRecap = ({
     // The list's own scroller would clip it on the way in: let it out for the trip.
     const scroller = el.closest<HTMLElement>('.ff-scroll')
     if (scroller) scroller.style.overflow = 'visible'
-    const a = el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 560, easing: 'cubic-bezier(0.77, 0, 0.175, 1)' })
+    const a = el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 560, easing: motionToken('ease-in-out') })
     const restore = () => scroller && (scroller.style.overflow = '')
     a.onfinish = restore
     a.oncancel = restore
@@ -560,9 +561,7 @@ const PowerRecap = ({
             >
               <RowBody team={t} rank={t.rankAfter} crowned={i === 0} hatDelay={entering && !from ? 400 : 0} />
               {phone && (
-                <span aria-hidden className={cx('-mr-1 w-3 font-mono text-[10px] text-ff-muted motion-safe:transition-transform motion-safe:duration-200', selected && 'rotate-180')}>
-                  ▾
-                </span>
+                <ChevronIcon open={selected} className="-mr-1 text-ff-muted" />
               )}
             </button>
             {phone && selected && (

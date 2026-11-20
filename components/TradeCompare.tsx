@@ -166,7 +166,7 @@ const IconBtn = ({ label, onClick, children, disabled, danger }: { label: string
     aria-label={label}
     title={label}
     className={cx(
-      'ff-press flex h-10 min-w-0 flex-1 items-center justify-center border border-ff-line text-[13px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text disabled:pointer-events-none disabled:opacity-35 md:h-8',
+      'transition-colors flex h-10 min-w-0 flex-1 items-center justify-center border border-ff-line text-[13px] text-ff-text2 hover:bg-ff-raised hover:text-ff-text disabled:pointer-events-none disabled:opacity-35 md:h-8',
       danger && 'hover:!text-ff-neg',
     )}
   >
@@ -499,7 +499,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
         <p className="text-[14px] font-medium text-ff-text">Compare trades side by side</p>
         <p className="mx-auto mt-1 max-w-[440px] text-[13px] leading-relaxed text-ff-muted">
           Put up to four trades next to each other and see which one to make: what each does for your lineup and your playoff odds, its value, and how likely it is to be accepted. Add a trade with{' '}
-          <span className="text-ff-text2">Add to compare</span> in the builder, or <span className="text-ff-text2">Compare</span> on a suggested trade.
+          <span className="text-ff-text2">Compare</span> in the builder or on a suggested trade.
         </p>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           {dock && (
@@ -898,7 +898,7 @@ const CompareView = ({ onSuggested }: { onSuggested: () => void }) => {
       <div className="[--col:136px] [--lab:92px] md:[--col:200px] md:[--lab:156px]">
         <div aria-hidden className="sticky z-[6] h-0" style={{ top: stickAt }}>
           {stuck && (
-            <div className="tb-fade overflow-hidden border border-ff-line bg-ff-line shadow-[0_8px_18px_-10px_rgba(0,0,0,0.45)]">
+            <div className="ff-fade-in overflow-hidden border border-ff-line bg-ff-line shadow-[0_8px_18px_-10px_rgba(0,0,0,0.45)]">
               <div ref={cloneRow} className="grid gap-px" style={{ gridTemplateColumns: template }}>
                 <div ref={cloneLabel} className="relative z-[1] flex items-center bg-ff-sunken px-2.5 md:px-3">
                   <span className="font-mono text-[10px] text-ff-muted">{n} of 4</span>
