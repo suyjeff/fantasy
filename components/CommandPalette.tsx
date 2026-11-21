@@ -6,7 +6,7 @@ import { useAvailability } from './useAvailability'
 import { SECTIONS, sectionCode, type SectionKey } from './Shell'
 import { Swatch, type Density } from './ThemePicker'
 import { useOpenTrades, useTradeDock } from './TradeDock'
-import { FootballIcon, GearIcon, TradeIcon } from './icons'
+import { FootballIcon, GearIcon, HistoryIcon, TradeIcon } from './icons'
 import { useAsgmControl } from './assistant/AsgmProvider'
 import { SETTINGS_TABS, type SettingsTab } from './Settings'
 import { Avatar, PlayerAvatar, cx, fmt, ownerLabel, shortcutLabel } from './ui'
@@ -227,8 +227,10 @@ const CommandPalette = ({
           run: () => dock.openTrade(t.id),
         }),
       )
-    if (asgm)
+    if (asgm) {
       items.push({ id: 'asgm', group: 'Actions', label: 'Ask Assistant GM', keywords: 'ai assistant gm chat question help advice', icon: <FootballIcon size={14} className="text-ff-accent" />, hint: 'G', weight: 3, run: () => asgm.open() })
+      items.push({ id: 'asgm:past', group: 'Actions', label: 'Assistant GM › Past conversations', keywords: 'past conversations history previous chats old questions ai assistant gm', icon: <HistoryIcon size={14} />, weight: 2, run: () => asgm.openPast() })
+    }
     if (reveal)
       items.push({ id: 'reveal', group: 'Actions', label: `Replay the week ${reveal.week} power rank`, keywords: 'reveal power rank recap crown weekly', weight: 2, run: reveal.open })
     items.push({ id: 'tour', group: 'Actions', label: 'Replay the tour', keywords: 'help guide onboarding intro walkthrough', run: onTour })

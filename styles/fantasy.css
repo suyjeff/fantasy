@@ -2123,6 +2123,21 @@ html[data-asgm-dock] {
   }
 }
 
+/* A pane swapped in for the conversation (the settings, past conversations): it settles up a few pixels as it fades in,
+   on the reveal timing, so the swap reads as a change of place without slowing a reader who goes back and forth.
+   Reduced motion: none, it is simply there. */
+@media (prefers-reduced-motion: no-preference) {
+  .ff .asgm-pane {
+    animation: asgm-pane var(--ff-dur-reveal) var(--ff-ease-out) both;
+  }
+}
+@keyframes asgm-pane {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
 /* Press: the GM's own controls give to 0.96 on the app's press timing; disabled ones never do. Hover is a change of
    wash or ink, only where a pointer hovers (Tailwind's hover: is gated the same way, tailwind.config.js). */
 .ff .asgm-press {

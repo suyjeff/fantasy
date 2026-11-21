@@ -107,8 +107,10 @@ const PhoneSheet = ({ close, onExpand }: { close: () => void; onExpand: () => vo
   const swipe = useRef<SwipeSheetHandle>(null)
   const panel = useRef<HTMLDivElement>(null)
   const titleId = useId()
+  const s = useAsgm()
   const leave = () => (swipe.current ? swipe.current.dismiss() : close())
-  useModal(panel, leave)
+  // The sheet hears Escape before anything in it: in the settings or the list it goes back to the conversation first.
+  useModal(panel, () => (s.pane !== 'chat' ? s.setPane('chat') : leave()))
   return (
     <SwipeSheet
       ref={swipe}
