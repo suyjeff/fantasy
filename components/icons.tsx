@@ -131,6 +131,15 @@ export const GearIcon = ({ className, size = 14 }: { className?: string; size?: 
   </svg>
 )
 
+/** Past conversations: a clock face whose rim turns back, with a square-cornered arrow where it starts and square hands. */
+export const HistoryIcon = ({ className, size = 14 }: { className?: string; size?: number }) => (
+  <svg aria-hidden width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="square" strokeLinejoin="miter" className={cx('shrink-0', className)}>
+    <path d="M1.75 7A5.25 5.25 0 1 0 3.29 3.29" />
+    <path d="M1.5 1.75v2.5h2.5" />
+    <path d="M7 4.5V7h2.5" />
+  </svg>
+)
+
 /** Follow the device: a monitor on its stand. */
 export const SystemIcon = ({ className, size }: { className?: string; size?: number }) => (
   <Svg className={className} size={size}>

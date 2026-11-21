@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import { blocks, nameIndex, plain, spans } from '../../components/assistant/text'
-import { bound, loadChat, nextUtcMidnight, saveChat, MAX_MESSAGES } from '../../components/assistant/store'
+import { bound, convoFrom, loadBook, nextUtcMidnight, saveBook, MAX_MESSAGES } from '../../components/assistant/store'
 import { sectionContext } from '../../components/assistant/contexts'
 import type { AsgmMessage } from '../assistant/types'
 import type { Analysis } from '../analysis'
@@ -95,20 +95,25 @@ describe('Assistant GM history', () => {
     expect(JSON.stringify(bound(msgs, MAX_MESSAGES, 3000)).length).toBeLessThanOrEqual(3000)
   })
   it('round-trips per league, settling steps left running', () => {
-    saveChat('L1', [user(1), gm(1)])
-    saveChat('L2', [user(2)])
-    const back = loadChat('L1')
-    expect(back.map((m) => m.id)).toEqual(['u1', 'g1'])
-    expect(back[1].role === 'gm' && back[1].steps[0].status).toBe('error')
-    expect(loadChat('L2').map((m) => m.id)).toEqual(['u2'])
-    saveChat('L1', [])
-    expect(loadChat('L1')).toEqual([])
+    saveBook('L1', { current: 'c1', list: [convoFrom('c1', [user(1), gm(1)])] })
+    saveBook('L2', { current: 'c2', list: [convoFrom('c2', [user(2)])] })
+    const back = loadBook('L1')
+    expect(back.current).toBe('c1')
+    expect(back.list[0].messages.map((m) => m.id)).toEqual(['u1', 'g1'])
+    const a = back.list[0].messages[1]
+    expect(a.role === 'gm' && a.steps[0].status).toBe('error')
+    expect(loadBook('L2').list[0].messages.map((m) => m.id)).toEqual(['u2'])
+    // Deleting goes by name: a save merges with what is stored, so leaving one out of the list is not enough.
+    saveBook('L1', { current: 'c1', list: [] }, { deleted: ['c1'] })
+    expect(loadBook('L1').list).toEqual([])
   })
   it('ignores junk in storage', () => {
-    window.localStorage.setItem('ff:asgm:chat:L3', '{"not":"a list"}')
-    expect(loadChat('L3')).toEqual([])
-    window.localStorage.setItem('ff:asgm:chat:L3', '[{"role":"gm"},null,1]')
-    expect(loadChat('L3')).toEqual([])
+    window.localStorage.setItem('ff:asgm:chats:L3', '{"not":"a list"}')
+    expect(loadBook('L3').list).toEqual([])
+    window.localStorage.setItem('ff:asgm:chats:L3', '{"current":1,"list":[{"id":"x","messages":[{"role":"gm"},null,1]},null,"y"]}')
+    expect(loadBook('L3')).toMatchObject({ current: null, list: [] })
+    window.localStorage.setItem('ff:asgm:chats:L3', 'not json')
+    expect(loadBook('L3').list).toEqual([])
   })
   it('knows when the free questions come back', () => {
     expect(new Date(nextUtcMidnight(Date.UTC(2026, 10, 18, 23, 59))).toISOString()).toBe('2026-11-19T00:00:00.000Z')

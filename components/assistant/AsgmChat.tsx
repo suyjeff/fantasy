@@ -4,11 +4,12 @@ import { useFantasy } from '../FantasyContext'
 import { SECTION_KEYS, type SectionKey } from '../Shell'
 import { CLOSE, Glyph } from '../TradeBuilder'
 import { useTradeDock } from '../TradeDock'
-import { AddIcon, BuildIcon, ChevronIcon, GearIcon, OpenIcon } from '../icons'
+import { AddIcon, BuildIcon, ChevronIcon, GearIcon, HistoryIcon, OpenIcon } from '../icons'
 import { cx, reducedMotion } from '../ui'
 import { AsgmBadge, AsgmName } from './AsgmButtons'
 import { AsgmCardView } from './AsgmCards'
-import { useAsgm } from './AsgmProvider'
+import AsgmHistory from './AsgmHistory'
+import { useAsgm, useAsgmControl } from './AsgmProvider'
 import AsgmSettings, { providerLine } from './AsgmSettings'
 import { nextUtcMidnight, resetTime } from './store'
 import { blocks, nameIndex, plain, spans, type NameIndex } from './text'
@@ -37,15 +38,26 @@ const SEND = 'M7 11.5v-9M3.5 6 7 2.5 10.5 6'
 const CHECK = 'M3.5 7.2l2.4 2.4 4.6-5'
 
 /** A square glyph button for the header and the message footer. */
-const IconBtn = ({ d, label, title, onClick, pressed, className, children }: { d?: string; label: string; /** The tooltip, where it says more than the name (a shortcut). */ title?: string; onClick: () => void; pressed?: boolean; className?: string; children?: ReactNode }) => (
+const IconBtn = ({
+  d,
+  label,
+  title,
+  onClick,
+  pressed,
+  className,
+  children,
+  ...rest
+}: { d?: string; label: string; /** The tooltip, where it says more than the name (a shortcut). */ title?: string; onClick: () => void; pressed?: boolean; className?: string; children?: ReactNode } & { [k: `data-${string}`]: string }) => (
   <button
+    {...rest}
     type="button"
     onClick={onClick}
     aria-label={label}
     aria-pressed={pressed}
     title={title ?? label}
     className={cx(
-      'asgm-press asgm-wash-btn flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent md:h-8 md:w-8',
+      // Under 360px a header of five keeps the name whole: each gives up 4px of width, never height.
+      'asgm-press asgm-wash-btn flex h-10 w-10 shrink-0 items-center justify-center text-ff-text2 hover:text-ff-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ff-accent max-[359px]:w-9 md:h-8 md:w-8',
       pressed && 'bg-[var(--asgm-wash-hover)] text-ff-text',
       className,
     )}
@@ -77,13 +89,22 @@ const Header = ({ variant, titleId, onClose, onDock, onExpand }: { variant: Chat
       </div>
       {/* Flush, as a toolbar: each is its own 40px (32px with a pointer) square, so no gap is needed between them. */}
       <div className="flex shrink-0 items-center">
+        {/* One name whatever its state: aria-pressed says whether the list is showing. */}
+        <IconBtn
+          label="Past conversations"
+          title={s.pane === 'past' ? 'Past conversations (showing): press to go back to the conversation' : 'Past conversations'}
+          pressed={s.pane === 'past'}
+          onClick={() => s.setPane(s.pane === 'past' ? 'chat' : 'past')}
+          data-asgm-pane="past"
+        >
+          <HistoryIcon size={14} />
+        </IconBtn>
         {s.messages.length > 0 && (
-          <IconBtn label="New conversation" onClick={s.clear} className={variant === 'page' ? 'md:hidden' : undefined}>
+          <IconBtn label="New conversation" title="New conversation: this one stays in Past conversations" onClick={s.clear} className={variant === 'page' ? 'md:hidden' : undefined}>
             <AddIcon size={12} />
           </IconBtn>
         )}
-        {/* One name whatever its state: aria-pressed says whether the settings are showing. */}
-        <IconBtn label="Settings" title={s.settings ? 'Settings (showing): press to go back to the conversation' : 'Settings: model and key'} pressed={s.settings} onClick={() => s.setSettings(!s.settings)}>
+        <IconBtn label="Settings" title={s.settings ? 'Settings (showing): press to go back to the conversation' : 'Settings: model and key'} pressed={s.settings} onClick={() => s.setSettings(!s.settings)} data-asgm-pane="settings">
           <GearIcon size={14} />
         </IconBtn>
         {onDock && <IconBtn d={variant === 'dock' ? FLOAT : DOCK} label={variant === 'dock' ? 'Float the window' : 'Dock to the right'} onClick={onDock} />}
@@ -763,12 +784,43 @@ export const AsgmChat = ({
   onGoto?: () => void
 }) => {
   const s = useAsgm()
+  const control = useAsgmControl()
+  const root = useRef<HTMLDivElement>(null)
   const [edges, setEdges] = useState<Edges>({ top: false, more: false })
   const onEdges = (e: Edges) => setEdges((x) => (x.top === e.top && x.more === e.more ? x : e))
+  const [paneStuck, setPaneStuck] = useState(false)
+  // Back from the settings or the list (Escape, back, a conversation opened): if focus went with the pane, it goes to
+  // the composer, or on a phone (where that would raise the keyboard over the conversation) to the button that opened
+  // the pane.
+  const pane = s.pane
+  const was = useRef(pane)
+  useEffect(() => {
+    const from = was.current
+    was.current = pane
+    setPaneStuck(false)
+    if (pane !== 'chat' || from === 'chat') return
+    const at = document.activeElement
+    if (at && at !== document.body && root.current?.contains(at)) return
+    if (variant === 'sheet') root.current?.querySelector<HTMLElement>(`[data-asgm-pane="${from}"]`)?.focus({ preventScroll: true })
+    else control?.focus()
+  }, [pane]) // eslint-disable-line react-hooks/exhaustive-deps
+  const back = () => s.setPane('chat')
   return (
-    <div className="flex h-full min-h-0 flex-col" data-asgm="">
+    <div
+      ref={root}
+      className="flex h-full min-h-0 flex-col"
+      data-asgm=""
+      // Escape in the settings or the list goes back to the conversation; in the conversation the window's own handler
+      // closes it (AsgmHost). The phone's sheet hears Escape first and does the same itself.
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape' || pane === 'chat' || e.defaultPrevented) return
+        if ((e.target as HTMLElement).closest('[role="combobox"][aria-expanded="true"], [aria-expanded="true"][aria-haspopup]')) return
+        e.preventDefault()
+        back()
+      }}
+    >
       {/* The header (and the mock's note under it) draw their bottom edge only while the thread is scrolled under them. */}
-      <div className={cx('asgm-head shrink-0 bg-ff-panel', edges.top && !s.settings && 'is-stuck')}>
+      <div className={cx('asgm-head shrink-0 bg-ff-panel', (pane === 'chat' ? edges.top : paneStuck) && 'is-stuck')}>
         <Header variant={variant} titleId={titleId} onClose={onClose} onDock={onDock} onExpand={onExpand} />
         {s.mock && (
           <p className="bg-ff-warn/[0.08] px-3 py-1 font-mono text-[10px] text-ff-text2">
@@ -776,13 +828,16 @@ export const AsgmChat = ({
           </p>
         )}
       </div>
-      {s.settings ? (
-        <div className="ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <AsgmSettings onDone={() => s.setSettings(false)} />
+      {pane === 'settings' ? (
+        <div className="asgm-pane ff-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain" onScroll={(e) => setPaneStuck(e.currentTarget.scrollTop > 2)}>
+          <AsgmSettings onDone={back} />
         </div>
+      ) : pane === 'past' ? (
+        <AsgmHistory variant={variant} onBack={back} onStuck={setPaneStuck} />
       ) : (
         <>
-          <Thread variant={variant} onGoto={onGoto} onEdges={onEdges} />
+          {/* A conversation opened from the list starts fresh, at its end. */}
+          <Thread key={s.currentId} variant={variant} onGoto={onGoto} onEdges={onEdges} />
           <Composer variant={variant} autoFocus={variant !== 'sheet'} over={edges.more} />
         </>
       )}

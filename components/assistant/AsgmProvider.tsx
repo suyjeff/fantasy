@@ -18,12 +18,13 @@ import {
 import type { Analysis } from '../../lib/analysis'
 import type { Models } from '../../lib/models'
 import type { LeagueData } from '../../lib/useLeagueData'
-import { loadChat, loadUse, saveChat, saveUse, uid, type AsgmUse } from './store'
+import { bookKey, loadBook, loadUse, mergeConvos, removeConvos, restoreConvos, saveBook, saveUse, stopped, titleOf, uid, type AsgmConvo, type AsgmRemoved, type AsgmUse } from './store'
 
-// Assistant GM's one conversation, whichever way it is shown: the floating window, the panel docked at the right, its
-// own page, or the phone's sheet. It lives here, above the page (and the shell, so the shell's buttons can open it),
+// Assistant GM's conversations, whichever way they are shown: the floating window, the panel docked at the right, its
+// own page, or the phone's sheet. They live here, above the page (and the shell, so the shell's buttons can open them),
 // with what the GM knows about where you are: each view publishes its context (useAsgmContext), the latest one wins,
-// and the composer shows it as a chip you can take off.
+// and the composer shows it as a chip you can take off. One conversation is open at a time; the others are kept per
+// league (store.ts) and listed under Past conversations, to open again and carry on in.
 
 type GmMessage = Extract<AsgmMessage, { role: 'gm' }>
 
@@ -36,6 +37,8 @@ export type AsgmControl = {
   focus: () => void
   /** The shortcut and the top-right button: open it, or close it when it is already in front of you. */
   toggle: () => void
+  /** Open it on the list of past conversations (the command palette's way in). */
+  openPast: () => void
   /** Publish where the reader is. The latest published context is the GM's; the handle drops it. */
   publish: (ctx: AsgmContext) => { update: (ctx: AsgmContext) => void; drop: () => void }
 }
@@ -57,7 +60,19 @@ export type AsgmState = {
   stop: () => void
   /** Ask the question behind an answer again, in its place. */
   retry: (gmId: string) => void
+  /** Start a new conversation. The one open now stays in the list. */
   clear: () => void
+  /** The open conversation's id (it may have nothing in it yet, and so not be in `convos`). */
+  currentId: string
+  /** This league's conversations with something in them, newest first, the open one included. */
+  convos: AsgmConvo[]
+  /** The league they belong to. */
+  leagueKey: string | null
+  /** Make a past conversation the open one, to read and ask on in. An answer still being written is stopped first. */
+  openConvo: (id: string) => void
+  /** Delete conversations at once; what comes back puts them back (Undo). */
+  removeConvos: (ids: string[]) => AsgmRemoved
+  restoreConvos: (r: AsgmRemoved) => void
   draft: string
   setDraft: (s: string) => void
   /** The context the next question carries: one handed in by open(), else the page's, unless taken off. */
@@ -69,6 +84,9 @@ export type AsgmState = {
   focusTick: number
   /** An answer landed while the GM was closed. */
   unread: boolean
+  /** What shows in place of the conversation: the settings, or the list of past conversations. */
+  pane: AsgmPane
+  setPane: (p: AsgmPane) => void
   settings: boolean
   setSettings: (on: boolean) => void
   // Where questions go.
@@ -83,6 +101,8 @@ export type AsgmState = {
   /** The element focus returns to when the GM closes. */
   opener: React.MutableRefObject<HTMLElement | null>
 }
+
+export type AsgmPane = 'chat' | 'settings' | 'past'
 
 const ControlCtx = createContext<AsgmControl | null>(null)
 const StateCtx = createContext<AsgmState | null>(null)
@@ -155,7 +175,9 @@ export const AsgmProvider = ({
 
   const [open, setOpen] = useState(false)
   const [docked, setDockedState] = useState(false)
-  const [settings, setSettings] = useState(false)
+  const [pane, setPane] = useState<AsgmPane>('chat')
+  const settings = pane === 'settings'
+  const setSettings = useCallback((on: boolean) => setPane(on ? 'settings' : 'chat'), [])
   const [focusTick, setFocusTick] = useState(0)
   const [unread, setUnread] = useState(false)
   const [draft, setDraft] = useState('')
@@ -207,33 +229,89 @@ export const AsgmProvider = ({
     }
   }, [visible, provider]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- The conversation, one per league ----
-  const [chat, setChat] = useState<{ league: string | null; msgs: AsgmMessage[] }>({ league: null, msgs: [] })
+  // ---- The conversations, per league ----
+  // `list` holds only conversations with something said in them; the open one joins it as its first question is asked.
+  const [chat, setChat] = useState<{ league: string | null; current: string; list: AsgmConvo[] }>(() => ({ league: null, current: uid(), list: [] }))
   const [running, setRunning] = useState<string | null>(null)
-  const run = useRef<{ ctl: AbortController; id: string } | null>(null)
+  const run = useRef<{ ctl: AbortController; id: string; convo: string } | null>(null)
+  // What this tab deleted (so a save never brings them back from storage), what it put back since (so a save takes
+  // them off the stored deleted list), and what Undo put back (kept from trimming until the next new conversation).
+  const deleted = useRef(new Set<string>())
+  const revived = useRef(new Set<string>())
+  const keep = useRef(new Set<string>())
   useEffect(() => {
     run.current?.ctl.abort()
     run.current = null
     setRunning(null)
-    setChat({ league: leagueId, msgs: leagueId ? loadChat(leagueId) : [] })
+    deleted.current.clear()
+    revived.current.clear()
+    keep.current.clear()
+    const book = leagueId ? loadBook(leagueId) : { current: null, list: [] }
+    setChat({ league: leagueId, current: book.current && book.list.some((c) => c.id === book.current) ? book.current : uid(), list: book.list })
   }, [leagueId])
+  /** This visit's list made to match `next` (what was stored or merged), keeping this visit's own copy of any
+   *  conversation where it is as new: its messages are whole, where storage holds them bounded. Unchanged: the same list. */
+  const adopt = (list: AsgmConvo[], next: AsgmConvo[]) => {
+    const sig = (xs: AsgmConvo[]) => xs.map((c) => `${c.id}:${c.updatedAt}`).join()
+    if (sig(list) === sig(next)) return list
+    const mine = new Map(list.map((c) => [c.id, c]))
+    return next.map((c) => {
+      const m = mine.get(c.id)
+      return m && m.updatedAt >= c.updatedAt ? m : c
+    })
+  }
   useEffect(() => {
-    if (!running && chat.league && chat.league === leagueId) saveChat(chat.league, chat.msgs)
+    if (running || !chat.league || chat.league !== leagueId) return
+    const kept = saveBook(chat.league, { current: chat.current, list: chat.list }, { deleted: deleted.current, revived: revived.current, keep: keep.current })
+    revived.current.clear()
+    // Another tab's newer conversations come in; over the bounds, the oldest went from storage and go from this visit's
+    // list too, so the list says what is kept.
+    const next = adopt(chat.list, kept.list)
+    if (next !== chat.list) setChat((c) => (c.list === chat.list ? { ...c, list: next } : c))
   }, [chat, running, leagueId])
+  // Another tab saved this league's conversations: take in what it has, and what it deleted.
+  useEffect(() => {
+    if (!leagueId) return
+    const onStore = (e: StorageEvent) => {
+      if (e.key !== bookKey(leagueId) && e.key !== null) return
+      const stored = loadBook(leagueId)
+      const gone = new Set([...(stored.deleted ?? []), ...deleted.current].filter((id) => !revived.current.has(id)))
+      setChat((c) => (c.league !== leagueId ? c : { ...c, list: adopt(c.list, mergeConvos(c.list, stored.list, gone)) }))
+    }
+    window.addEventListener('storage', onStore)
+    return () => window.removeEventListener('storage', onStore)
+  }, [leagueId])
   useEffect(() => () => run.current?.ctl.abort(), [])
+  const messages = useMemo(() => chat.list.find((c) => c.id === chat.current)?.messages ?? [], [chat])
 
   // Text arrives a few words at a time; it is gathered and drawn once a frame, not once a word.
-  const pending = useRef<{ id: string; text: string } | null>(null)
+  const pending = useRef<{ id: string; convo: string; text: string } | null>(null)
   const raf = useRef<number | null>(null)
-  const patch = useCallback((id: string, fn: (m: GmMessage) => GmMessage) => setChat((c) => ({ ...c, msgs: c.msgs.map((m) => (m.id === id && m.role === 'gm' ? fn(m) : m)) })), [])
+  /** Changes one answer, in the conversation it belongs to (open or not). */
+  const patch = useCallback(
+    (convo: string, id: string, fn: (m: GmMessage) => GmMessage) =>
+      setChat((c) => ({ ...c, list: c.list.map((x) => (x.id === convo ? { ...x, messages: x.messages.map((m) => (m.id === id && m.role === 'gm' ? fn(m) : m)) } : x)) })),
+    [],
+  )
   const flush = useCallback(() => {
     if (raf.current != null) cancelAnimationFrame(raf.current)
     raf.current = null
     const p = pending.current
     if (!p || !p.text) return
-    pending.current = { id: p.id, text: '' }
-    patch(p.id, (m) => ({ ...m, text: m.text + p.text }))
+    pending.current = { ...p, text: '' }
+    patch(p.convo, p.id, (m) => ({ ...m, text: m.text + p.text }))
   }, [patch])
+  /** Stops the answer being written, if there is one, and settles it at once as stopped, so it is kept that way in its
+   *  conversation whatever arrives after. For leaving the conversation it is in. */
+  const halt = useCallback(() => {
+    const r = run.current
+    if (!r) return
+    r.ctl.abort()
+    flush()
+    run.current = null
+    setRunning(null)
+    patch(r.convo, r.id, (m) => stopped(m) as GmMessage)
+  }, [flush, patch])
 
   // ---- Context ----
   const entries = useRef(new Map<number, { ctx: AsgmContext; order: number }>())
@@ -260,44 +338,51 @@ export const AsgmProvider = ({
       const q = text.trim()
       const { league: lg, provider: pv, chat: c, running: busy, context: here, storedKey: key } = latest.current
       if (!q || !lg || busy) return
+      const msgs = c.list.find((x) => x.id === c.current)?.messages ?? []
+      const convo = c.current
       const about = ctx ?? here
       const user: AsgmMessage = { role: 'user', id: uid(), text: q, ...(about ? { context: about } : {}), at: Date.now() }
       const gm: GmMessage = { role: 'gm', id: uid(), text: '', steps: [], cards: [], actions: [], at: Date.now() }
       // What came before, without exchanges that ended in an error (the question there was never answered).
-      const history = c.msgs.filter((m, i) => {
-        const next = c.msgs[i + 1]
+      const history = msgs.filter((m, i) => {
+        const next = msgs[i + 1]
         return m.role === 'gm' ? !m.error && !!m.text : !(next?.role === 'gm' && (next.error || !next.text))
       })
-      setChat((s) => ({ ...s, msgs: [...s.msgs, user, gm] }))
+      // The conversation goes to the top of the list as it is asked in; its first question names it.
+      setChat((s) => {
+        const was = s.list.find((x) => x.id === convo)
+        const now: AsgmConvo = was ? { ...was, updatedAt: user.at, messages: [...was.messages, user, gm] } : { id: convo, title: titleOf(q), createdAt: user.at, updatedAt: user.at, messages: [user, gm] }
+        return { ...s, list: [now, ...s.list.filter((x) => x.id !== convo)] }
+      })
       setDraft('')
       setPinned(null)
       setRunning(gm.id)
       const ctl = new AbortController()
-      run.current = { ctl, id: gm.id }
-      pending.current = { id: gm.id, text: '' }
+      run.current = { ctl, id: gm.id, convo }
+      pending.current = { id: gm.id, convo, text: '' }
       const onEvent = (e: AsgmEvent) => {
         if (ctl.signal.aborted && e.type !== 'error') return
         if (e.type === 'text') {
-          if (!pending.current || pending.current.id !== gm.id) pending.current = { id: gm.id, text: '' }
+          if (!pending.current || pending.current.id !== gm.id) pending.current = { id: gm.id, convo, text: '' }
           if (e.reset) {
             // The step turned out to be a tool call, not the answer: drop what it streamed, drawn or not.
             pending.current.text = ''
-            patch(gm.id, (m) => ({ ...m, text: '' }))
+            patch(convo, gm.id, (m) => ({ ...m, text: '' }))
           }
           pending.current.text += e.delta
           if (raf.current == null) raf.current = requestAnimationFrame(flush)
           return
         }
         flush()
-        if (e.type === 'step') patch(gm.id, (m) => ({ ...m, steps: m.steps.some((s) => s.id === e.id) ? m.steps.map((s) => (s.id === e.id ? { ...s, ...e, detail: e.detail ?? s.detail } : s)) : [...m.steps, e] }))
-        else if (e.type === 'card') patch(gm.id, (m) => ({ ...m, cards: [...m.cards, e.card] }))
-        else if (e.type === 'action') patch(gm.id, (m) => ({ ...m, actions: [...m.actions, e.action] }))
+        if (e.type === 'step') patch(convo, gm.id, (m) => ({ ...m, steps: m.steps.some((s) => s.id === e.id) ? m.steps.map((s) => (s.id === e.id ? { ...s, ...e, detail: e.detail ?? s.detail } : s)) : [...m.steps, e] }))
+        else if (e.type === 'card') patch(convo, gm.id, (m) => ({ ...m, cards: [...m.cards, e.card] }))
+        else if (e.type === 'action') patch(convo, gm.id, (m) => ({ ...m, actions: [...m.actions, e.action] }))
         else if (e.type === 'done') {
-          patch(gm.id, (m) => ({ ...m, provider: e.model ? `${e.provider} · ${e.model}` : e.provider }))
+          patch(convo, gm.id, (m) => ({ ...m, provider: e.model ? `${e.provider} · ${e.model}` : e.provider }))
           // The allowance is the house's: only its own answers say what is left of it.
           if (pv === 'house' && e.remaining != null) setHouse((h) => (h ? { ...h, remaining: e.remaining! } : h))
         } else if (e.type === 'error') {
-          patch(gm.id, (m) => ({ ...m, error: e }))
+          patch(convo, gm.id, (m) => ({ ...m, error: e }))
           // Only the house running out empties it: a key's errors and a rate limit ('rate') leave it as it was.
           if (pv === 'house' && e.code === 'quota') setHouse((h) => (h ? { ...h, remaining: 0 } : h))
         }
@@ -306,7 +391,7 @@ export const AsgmProvider = ({
       runTurn({ history, text: q, context: about, league: lg, provider: pv, key: pv === 'house' || pv === 'mock' ? null : key }, onEvent, ctl.signal).finally(() => {
         flush()
         // Steps still running when it ended (a stop, an error) end as stopped, so nothing spins for ever.
-        patch(gm.id, (m) => ({ ...m, steps: m.steps.map((s) => (s.status === 'running' ? { ...s, status: 'error', detail: s.detail ?? 'stopped' } : s)) }))
+        patch(convo, gm.id, (m) => ({ ...m, steps: m.steps.map((s) => (s.status === 'running' ? { ...s, status: 'error', detail: s.detail ?? 'stopped' } : s)) }))
         if (run.current?.id === gm.id) run.current = null
         setRunning((r) => (r === gm.id ? null : r))
         if (!openRef.current) setUnread(true)
@@ -317,22 +402,74 @@ export const AsgmProvider = ({
   const stop = useCallback(() => run.current?.ctl.abort(), [])
   const retry = useCallback(
     (gmId: string) => {
-      const msgs = latest.current.chat.msgs
+      const c = latest.current.chat
+      const msgs = c.list.find((x) => x.id === c.current)?.messages ?? []
       const i = msgs.findIndex((m) => m.id === gmId)
       const q = i > 0 ? msgs[i - 1] : null
       if (!q || q.role !== 'user' || latest.current.running) return
-      setChat((c) => ({ ...c, msgs: c.msgs.filter((m) => m.id !== gmId && m.id !== q.id) }))
+      const without = (x: AsgmConvo) => (x.id === c.current ? { ...x, messages: x.messages.filter((m) => m.id !== gmId && m.id !== q.id) } : x)
+      setChat((s) => ({ ...s, list: s.list.map(without) }))
       // After the removal has rendered, so the history sent does not hold the old exchange.
-      latest.current = { ...latest.current, chat: { ...latest.current.chat, msgs: msgs.filter((m) => m.id !== gmId && m.id !== q.id) } }
+      latest.current = { ...latest.current, chat: { ...c, list: c.list.map(without) } }
       send(q.text, q.context)
     },
     [send],
   )
   const clear = useCallback(() => {
-    run.current?.ctl.abort()
-    setChat((c) => ({ ...c, msgs: [] }))
+    halt()
+    // A new conversation: what Undo put back takes its chances with the bounds again.
+    keep.current.clear()
+    setChat((c) => ({ ...c, current: uid() }))
     setDraft('')
+    setPane('chat')
     setFocusTick((t) => t + 1)
+  }, [halt])
+  const openConvo = useCallback(
+    (id: string) => {
+      if (id !== latest.current.chat.current) halt()
+      setChat((c) => (c.list.some((x) => x.id === id) ? { ...c, current: id } : c))
+      setPane('chat')
+      setFocusTick((t) => t + 1)
+    },
+    [halt],
+  )
+  const remove = useCallback(
+    (ids: string[]) => {
+      const c = latest.current.chat
+      const r = run.current
+      // Deleting the conversation an answer is being written in stops it; Undo brings it back stopped, with every word
+      // that had arrived (the ones still waiting for the next frame included).
+      const stop = r && ids.includes(r.convo) ? r : null
+      const buffered = stop && pending.current?.id === stop.id ? pending.current.text : ''
+      if (stop) halt()
+      const settle = (x: AsgmConvo) =>
+        stop && x.id === stop.convo ? { ...x, messages: x.messages.map((m) => (m.id === stop.id && m.role === 'gm' ? stopped({ ...m, text: m.text + buffered }) : m)) } : x
+      for (const id of ids) {
+        deleted.current.add(id)
+        revived.current.delete(id)
+        keep.current.delete(id)
+      }
+      const fresh = uid()
+      setChat((s) => {
+        const out = removeConvos({ current: s.current, list: s.list }, ids, fresh)
+        return { ...s, list: out.book.list, current: out.book.current ?? fresh }
+      })
+      return removeConvos({ current: c.current, list: c.list.map(settle) }, ids, fresh, c.league).removed
+    },
+    [halt],
+  )
+  /** Undo: only into the league the conversations came from. */
+  const restore = useCallback((r: AsgmRemoved) => {
+    if (r.league !== latest.current.chat.league) return
+    for (const x of r.convos) {
+      deleted.current.delete(x.id)
+      revived.current.add(x.id)
+      keep.current.add(x.id)
+    }
+    setChat((c) => {
+      const book = restoreConvos({ current: c.current, list: c.list }, r, c.league)
+      return { ...c, list: book.list, current: book.current ?? c.current }
+    })
   }, [])
 
   // ---- Opening ----
@@ -346,7 +483,7 @@ export const AsgmProvider = ({
         remember()
         setOpen(true)
         setUnread(false)
-        setSettings(false)
+        setPane('chat')
         if (o?.context) setPinned(o.context)
         if (o?.prompt) {
           if (o.send && !latest.current.running) sendRef.current(o.prompt, o.context)
@@ -355,6 +492,12 @@ export const AsgmProvider = ({
         setFocusTick((t) => t + 1)
       },
       close: () => setOpen(false),
+      openPast: () => {
+        remember()
+        setOpen(true)
+        setUnread(false)
+        setPane('past')
+      },
       focus: () => setFocusTick((t) => t + 1),
       toggle: () => {
         if (openRef.current && !onPageRef.current) return setOpen(false)
@@ -412,12 +555,18 @@ export const AsgmProvider = ({
     setDocked,
     onPage,
     goPage,
-    messages: chat.league === leagueId ? chat.msgs : [],
+    messages: chat.league === leagueId ? messages : [],
     running,
     send,
     stop,
     retry,
     clear,
+    currentId: chat.current,
+    convos: chat.league === leagueId ? chat.list : [],
+    leagueKey: chat.league === leagueId ? leagueId : null,
+    openConvo,
+    removeConvos: remove,
+    restoreConvos: restore,
     draft,
     setDraft,
     context,
@@ -426,6 +575,8 @@ export const AsgmProvider = ({
     league,
     focusTick,
     unread,
+    pane,
+    setPane,
     settings,
     setSettings,
     provider,

@@ -61,6 +61,9 @@ const AsgmPage = () => {
                 <span className="ff-label mr-1.5 !text-ff-text2">Context</span>It knows the page you are on. Take the chip off to ask without it.
               </li>
               <li>
+                <span className="ff-label mr-1.5 !text-ff-text2">History</span>New conversation keeps the last one. Past conversations holds your most recent conversations (up to 30) in this league, in this browser.
+              </li>
+              <li>
                 <span className="ff-label mr-1.5 !text-ff-text2">Anywhere</span>Press <kbd className="border border-ff-line px-1 font-mono text-[10.5px]">G</kbd> on any page, or use the button at the top right.
               </li>
             </ul>
