@@ -121,6 +121,49 @@
   margin-top: var(--ff-gl);
 }
 
+/* The page header's pinned strip (PageHeader: the tabs, else the title row, or a phone's action row). Solid, so nothing
+   scrolling under it shows through. Once the page runs beneath it (.is-stuck) it lifts onto the panel with a hairline
+   and a soft drop. The hairline is inset, so it lands on the rule the title row and the tab strip already draw instead
+   of doubling it; the phone top bar above keeps its own edge. */
+.ff .ff-stickhead {
+  --ff-stick-drop: light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.5));
+  background-color: rgb(var(--ff-bg));
+}
+/* .is-lifted: the title row above pinned tabs, which moves onto the panel with them but leaves the edge to them. */
+.ff .ff-stickhead:is(.is-stuck, .is-lifted) {
+  background-color: rgb(var(--ff-panel));
+}
+.ff .ff-stickhead.is-stuck {
+  box-shadow:
+    inset 0 -1px 0 rgb(var(--ff-line)),
+    0 1px 2px var(--ff-stick-drop),
+    0 8px 16px -8px var(--ff-stick-drop);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ff .ff-stickhead {
+    transition-property: background-color, box-shadow;
+    transition-duration: var(--ff-dur-quick);
+    transition-timing-function: ease-out;
+  }
+}
+/* Forced colours drop box-shadow: a real rule takes the hairline's place, in the strip's own last pixel. */
+@media (forced-colors: active) {
+  .ff .ff-stickhead.is-stuck {
+    border-bottom: 1px solid CanvasText;
+    margin-bottom: -1px;
+  }
+}
+/* Focus and anchors land clear of the pinned header (--ff-stick, its bottom edge, set by PageHeader) and, on a phone,
+   of the tab bar at the bottom. */
+html.ff-page {
+  scroll-padding-top: calc(var(--ff-stick, 0px) + 8px);
+}
+@media (max-width: 767px) {
+  html.ff-page {
+    scroll-padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px) + 8px);
+  }
+}
+
 /* The app owns its scroll: pulling past the top never reloads the whole league (Android's pull-to-refresh). */
 html:has(body .ff),
 html:has(body .ff) body {
@@ -813,6 +856,36 @@ html.ff-page body {
 .ff .ff-aqua.ff-aqua-soft::before {
   opacity: 0.5;
 }
+/* The gem: the same gel as a round button for a single glyph (Assistant GM's send). Its deep band runs from above the
+   glyph to below it, so a light glyph never sits on the plain accent, which falls under 3:1 in some themes (zinc dark,
+   Tokyo Night); the gloss is a small bead at the top, clear of the glyph. */
+.ff .ff-aqua.ff-aqua-gem {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  gap: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, rgb(var(--ff-accent)) 50%, white) 0%,
+    rgb(var(--ff-accent)) 20%,
+    rgb(var(--ff-accent-deep)) 34%,
+    rgb(var(--ff-accent-deep)) 68%,
+    rgb(var(--ff-accent)) 86%,
+    color-mix(in oklab, rgb(var(--ff-accent)) 62%, white) 100%
+  );
+  box-shadow:
+    inset 0 -2px 3px color-mix(in oklab, rgb(var(--ff-accent)) 45%, rgb(255 255 255 / 0.7)),
+    inset 0 1px 1px rgb(255 255 255 / 0.3),
+    0 1px 2px rgb(0 0 0 / 0.22),
+    0 2px 5px rgb(var(--ff-accent-deep) / 0.22);
+}
+.ff .ff-aqua.ff-aqua-gem::before {
+  left: 16%;
+  right: 16%;
+  top: 1.5px;
+  height: 42%;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.04) 80%, rgb(255 255 255 / 0));
+}
 @keyframes ff-aqua-throb {
   to {
     opacity: 0.7;
@@ -1052,7 +1125,7 @@ html[data-ff-density="comfortable"] .ff th.h-8 { height: 36px; }
 html[data-ff-density="comfortable"] .ff :is(button, a, select).h-7 { height: 32px; }
 html[data-ff-density="comfortable"] .ff :is(button, a, select).h-8 { height: 36px; }
 html[data-ff-density="comfortable"] .ff :is(button, a).h-9 { height: 40px; }
-html[data-ff-density="comfortable"] .ff .ff-aqua:not(.ff-aqua-fab) { height: 30px; }
+html[data-ff-density="comfortable"] .ff .ff-aqua:not(.ff-aqua-fab):not(.ff-aqua-gem) { height: 30px; }
 /* Panel and cell padding. */
 html[data-ff-density="comfortable"] .ff .px-3:not([class*=":px-"]) { padding-left: 14px; padding-right: 14px; }
 html[data-ff-density="comfortable"] .ff .py-2:not([class*=":py-"]) { padding-top: 10px; padding-bottom: 10px; }
@@ -2078,6 +2151,152 @@ html[data-asgm-dock] {
   box-shadow:
     0 -1px 0 rgb(var(--ff-line)),
     0 -8px 16px -12px var(--asgm-drop-deep);
+}
+
+/* The composer's field. Its row is the send gem's height and margin (38px; 44px on touch), the line sits centred in
+   it, and the field grows a line at a time from there, the gem staying on the last line. Set at the size of the app's
+   other fields (13px on a 20px line). On a touch screen the text is 16px, below which iOS zooms the page into the
+   field, drawn at 0.875 (14px) by a transform: the field is widened and its leading and padding divided by the same
+   factor, so the drawn line, padding and wrap match a 14px field exactly, and the wrapper clips the unscaled box. The
+   composer measures its height unscaled and takes the difference back with a negative margin (AsgmChat Composer). */
+.ff .asgm-input {
+  /* The theme's accent, kept here for the gem's focus ring: the gem re-points --ff-accent at graphite while it stops. */
+  --asgm-accent: var(--ff-accent);
+}
+.ff .asgm-type {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+.ff .asgm-type > textarea {
+  display: block;
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 10px;
+  line-height: 20px;
+  caret-color: rgb(var(--ff-accent));
+}
+.ff .asgm-type > textarea::placeholder {
+  opacity: 1;
+}
+@media (pointer: coarse) {
+  .ff .asgm-type {
+    overflow: hidden;
+  }
+  .ff .asgm-type > textarea {
+    --asgm-k: 0.875;
+    width: calc(100% / var(--asgm-k));
+    max-width: none;
+    min-height: calc(44px / var(--asgm-k));
+    padding: calc(12px / var(--asgm-k)) calc(10px / var(--asgm-k));
+    line-height: calc(20px / var(--asgm-k));
+    margin-bottom: calc(44px - 44px / var(--asgm-k));
+    transform: scale(var(--asgm-k));
+    transform-origin: 0 0;
+  }
+  .ff .asgm-type > textarea:dir(rtl) {
+    transform-origin: 100% 0;
+  }
+  /* Comfortable density draws it at 15px, as it takes the desktop field from 13px to 14px. */
+  html[data-ff-density='comfortable'] .ff .asgm-type > textarea {
+    --asgm-k: 0.9375;
+  }
+}
+
+/* Send: an Aqua gem in the field's corner, 28px (34px on touch) with 5px around it, so its centre sits on the last
+   line's. Ready, it is the accent's gel and the one Aqua button breathing on screen (the page's own holds still while
+   a question waits); with nothing to send it is clear glass with the glyph in the muted ink and no glow; while the
+   answer is written it turns graphite, as Aqua's own grey appearance did, with a stop square, and holds still. */
+.ff .asgm-send {
+  flex: none;
+  margin: 5px;
+}
+@media (pointer: coarse) {
+  .ff .ff-aqua.asgm-send {
+    width: 34px;
+    height: 34px;
+  }
+}
+.ff .asgm-send-ico {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 13px;
+  height: 13px;
+  /* Engraved into the gel, as the capsule's label is. */
+  filter: drop-shadow(0 -0.5px 0 rgb(0 0 0 / 0.25)) blur(0);
+}
+@media (pointer: coarse) {
+  .ff .asgm-send-ico {
+    width: 15px;
+    height: 15px;
+  }
+}
+.ff .asgm-send[data-state='stop'] .asgm-send-ico.is-go,
+.ff .asgm-send:not([data-state='stop']) .asgm-send-ico.is-stop {
+  opacity: 0;
+}
+/* Send and stop cross-fade, the leaving glyph shrinking and blurring out, only where motion is welcome; under reduced
+   motion the swap is instant, the glyph itself saying which it is. */
+@media (prefers-reduced-motion: no-preference) {
+  .ff .asgm-send-ico {
+    transition-property: opacity, scale, filter;
+    transition-duration: var(--ff-dur-reveal);
+    transition-timing-function: var(--ff-ease-out);
+  }
+  .ff .asgm-send[data-state='stop'] .asgm-send-ico.is-go,
+  .ff .asgm-send:not([data-state='stop']) .asgm-send-ico.is-stop {
+    scale: 0.25;
+    filter: drop-shadow(0 -0.5px 0 rgb(0 0 0 / 0.25)) blur(4px);
+  }
+}
+.ff .asgm-send:focus-visible {
+  outline-color: rgb(var(--asgm-accent) / 0.6);
+}
+.ff .asgm-send:not([data-state='ready'])::after {
+  animation: none;
+}
+html:has(.asgm-send[data-state='ready']) .ff .ff-aqua:not(.asgm-send)::after {
+  animation: none;
+}
+/* Graphite: Aqua's grey gel, the same in every theme, a light square on its deep band. A step darker in dark mode, so
+   it is not the brightest thing on a dark panel. */
+.ff .asgm-send[data-state='stop'] {
+  --ff-accent: 170 176 188;
+  --ff-accent-deep: 118 125 138;
+  --ff-on-accent: 255 255 255;
+  --asgm-g: light-dark(rgb(170 176 188), rgb(122 128 140));
+  --asgm-gd: light-dark(rgb(118 125 138), rgb(80 86 98));
+  border-color: var(--asgm-gd);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--asgm-g) 50%, white) 0%,
+    var(--asgm-g) 20%,
+    var(--asgm-gd) 34%,
+    var(--asgm-gd) 68%,
+    var(--asgm-g) 86%,
+    color-mix(in oklab, var(--asgm-g) 62%, white) 100%
+  );
+}
+/* Clear glass: the field's own ink, a bead of light at the top, the glyph in the muted ink. Calm: no glow, no
+   breathing, no give under a press (it only puts the cursor in the field). */
+.ff .asgm-send[data-state='off'] {
+  color: rgb(var(--ff-muted));
+  text-shadow: none;
+  border-color: rgb(var(--ff-text) / 0.16);
+  background: linear-gradient(180deg, rgb(var(--ff-text) / 0.02), rgb(var(--ff-text) / 0.07));
+  box-shadow:
+    inset 0 -1px 2px rgb(var(--ff-text) / 0.04),
+    0 1px 1px rgb(0 0 0 / 0.06);
+}
+.ff .asgm-send[data-state='off']::before {
+  background: linear-gradient(180deg, light-dark(rgb(255 255 255 / 0.95), rgb(255 255 255 / 0.12)), rgb(255 255 255 / 0));
+}
+.ff .asgm-send[data-state='off'] .asgm-send-ico {
+  filter: none;
+}
+.ff .asgm-send[data-state='off']:is(:hover, :active) {
+  filter: none;
+  scale: none;
 }
 
 /* The window rises out of its corner; the dock slides in from the edge. */

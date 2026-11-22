@@ -37,6 +37,20 @@ export const BuildIcon = ({ className, size }: { className?: string; size?: numb
   </Svg>
 )
 
+/** Send: an arrow straight up, in the heavier stroke a glyph on a filled button takes (Assistant GM's send gem). */
+export const SendIcon = ({ className, size }: { className?: string; size?: number }) => (
+  <Svg className={className} size={size}>
+    <path d="M7 11.5v-9M3.5 6 7 2.5 10.5 6" strokeWidth="1.6" shapeRendering="geometricPrecision" />
+  </Svg>
+)
+
+/** Stop: a filled square, the one fill here, as it marks a state (an answer being written). */
+export const StopIcon = ({ className, size }: { className?: string; size?: number }) => (
+  <Svg className={className} size={size}>
+    <path d="M4 4h6v6H4z" fill="currentColor" stroke="none" />
+  </Svg>
+)
+
 /** Add one more: a plus in a square. */
 export const AddIcon = ({ className, size }: { className?: string; size?: number }) => (
   <Svg className={className} size={size}>
