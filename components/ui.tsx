@@ -127,6 +127,48 @@ export const PhoneBarContext = createContext<(slot: PhoneBarSlot) => void>(() =>
  */
 export const PageTrailContext = createContext<ReactNode>(null)
 
+/**
+ * Whether the page has scrolled under a sticky strip: a zero-height mark sits where the strip would be in the flow, and
+ * once it passes above the strip's `top` there is content beneath it. The strip's bottom is published as `--ff-stick`
+ * on the root, which the page's scroll-padding reads, so focus and anchors land below the pinned header.
+ */
+const useStuck = (watch: unknown) => {
+  const mark = useRef<HTMLSpanElement>(null)
+  const strip = useRef<HTMLDivElement>(null)
+  const [stuck, setStuck] = useState(false)
+  useEffect(() => {
+    const m = mark.current
+    const el = strip.current
+    if (!m || !el) return
+    const root = document.documentElement
+    let io: IntersectionObserver | null = null
+    let at = NaN
+    const measure = () => {
+      const cs = getComputedStyle(el)
+      const top = cs.position === 'sticky' ? Math.round(parseFloat(cs.top) || 0) : NaN
+      root.style.setProperty('--ff-stick', Number.isNaN(top) ? '0px' : `${top + el.offsetHeight}px`)
+      if (top === at) return
+      at = top
+      io?.disconnect()
+      if (Number.isNaN(top)) return setStuck(false)
+      // A zero-height target still intersects on the root's edge, so the mark reads "not stuck" until it is past it.
+      io = new IntersectionObserver(([e]) => setStuck(!e.isIntersecting && e.boundingClientRect.top < top), { rootMargin: `-${top}px 0px 0px 0px` })
+      io.observe(m)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    window.addEventListener('resize', measure)
+    return () => {
+      io?.disconnect()
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+      root.style.removeProperty('--ff-stick')
+    }
+  }, [watch])
+  return { mark, strip, stuck }
+}
+
 /** The text a node shows, to tell whether it changed without comparing elements that are new on every render. */
 const nodeText = (n: ReactNode): string => {
   if (n == null || typeof n === 'boolean') return ''
@@ -149,6 +191,9 @@ const nodeText = (n: ReactNode): string => {
  * - otherwise `meta` and `actions` sit in one slim row just below the tabs,
  *   which scrolls away with the page. With no tabs that row is the pinned one.
  * A page whose only action is a link elsewhere should put it in its content.
+ *
+ * Whichever strip pins lowest (the tabs, else the title row, or on phones the action row) is solid, and lifts onto
+ * the panel with a hairline and a soft drop once the page scrolls under it (`useStuck`, `.ff-stickhead.is-stuck`).
  */
 export const PageHeader = ({
   title,
@@ -178,17 +223,32 @@ export const PageHeader = ({
     return () => setBar(null)
   }, [phone, mobileTitle, titleText, metaText, setBar])
 
-  const glass = 'bg-ff-bg/90 backdrop-blur supports-[backdrop-filter]:bg-ff-bg/80'
+  const inBar = !!mobileTitle
+  const row = !!actions || (!!meta && !inBar)
+  // The strip that pins lowest carries the edge: the tabs when there are any, else the title row (the action row on a phone).
+  const { mark, strip, stuck } = useStuck(`${phone}${!!tabs}${row}`)
+  const edge = (on: boolean) => (on ? { ref: strip, className: cx('ff-stickhead', stuck && 'is-stuck') } : { ref: undefined, className: '' })
+  const markEl = <span ref={mark} aria-hidden className="block h-0" />
   if (phone) {
-    const inBar = !!mobileTitle
-    const row = !!actions || (!!meta && !inBar)
+    const tabEdge = edge(!!tabs)
+    const rowEdge = edge(!tabs)
     return (
       <>
         {/* The top bar shows the name; this keeps the page's level-one heading for screen readers. */}
         <h1 className="sr-only">{title}</h1>
-        {tabs && <div className={cx('ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20', glass)}>{tabs}</div>}
+        {(tabs || row) && markEl}
+        {tabs && (
+          <div ref={tabEdge.ref} className={cx('ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20', tabEdge.className)}>
+            {tabs}
+          </div>
+        )}
         {row && (
-          <div className={cx('ff-pagehead ff-bleed ff-gutter flex min-h-10 items-center justify-between gap-3 py-1', !tabs && cx('sticky top-[var(--ff-top)] z-20', glass))}>
+          // With actions: an even 6px above and below the 40px phone controls, and the page gutter at each end, so the
+          // row sits on the same edges as the cards under it.
+          <div
+            ref={rowEdge.ref}
+            className={cx('ff-pagehead ff-bleed ff-gutter flex items-center justify-between gap-3', actions ? 'min-h-[52px] py-1.5' : 'min-h-10 py-1', !tabs && cx('sticky top-[var(--ff-top)] z-20', rowEdge.className))}
+          >
             {meta && !inBar ? <span className="min-w-0 flex-1 font-mono text-[10.5px] text-ff-muted">{meta}</span> : <span />}
             {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
           </div>
@@ -196,9 +256,12 @@ export const PageHeader = ({
       </>
     )
   }
+  const headEdge = edge(!tabs)
+  const tabEdge = edge(!!tabs)
   return (
     <>
-      <div className={cx('ff-pagehead ff-bleed z-20 md:sticky md:top-0', glass, !tabs && 'sticky top-[var(--ff-top)]', actions || meta || mobileTitle ? '' : 'hidden md:block')}>
+      {!tabs && markEl}
+      <div ref={headEdge.ref} className={cx('ff-pagehead ff-bleed z-20 md:sticky md:top-0', headEdge.className, tabs ? cx('ff-stickhead', stuck && 'is-lifted') : 'sticky top-[var(--ff-top)]', actions || meta || mobileTitle ? '' : 'hidden md:block')}>
         <div
           className={cx(
             'ff-gutter items-center justify-between gap-3 md:flex md:h-11 md:border-b md:border-ff-line md:group-data-[sidebar=closed]/shell:pl-12 ff-fold-x motion-safe:md:transition-[padding] motion-safe:md:duration-ff-panel motion-safe:md:ease-ff-drawer',
@@ -222,7 +285,12 @@ export const PageHeader = ({
           )}
         </div>
       </div>
-      {tabs && <div className={cx('ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 md:top-11', glass)}>{tabs}</div>}
+      {tabs && markEl}
+      {tabs && (
+        <div ref={tabEdge.ref} className={cx('ff-pagehead ff-pagetabs ff-bleed ff-gutter sticky top-[var(--ff-top)] z-20 md:top-11', tabEdge.className)}>
+          {tabs}
+        </div>
+      )}
     </>
   )
 }

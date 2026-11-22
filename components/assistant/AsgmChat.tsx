@@ -1,10 +1,10 @@
-import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { AsgmAction, AsgmMessage } from '../../lib/assistant'
 import { useFantasy } from '../FantasyContext'
 import { SECTION_KEYS, type SectionKey } from '../Shell'
 import { CLOSE, Glyph } from '../TradeBuilder'
 import { useTradeDock } from '../TradeDock'
-import { AddIcon, BuildIcon, ChevronIcon, GearIcon, HistoryIcon, OpenIcon } from '../icons'
+import { AddIcon, BuildIcon, ChevronIcon, GearIcon, HistoryIcon, OpenIcon, SendIcon, StopIcon } from '../icons'
 import { cx, reducedMotion } from '../ui'
 import { AsgmBadge, AsgmName } from './AsgmButtons'
 import { AsgmCardView } from './AsgmCards'
@@ -33,8 +33,6 @@ const FLOAT = 'M2.5 2.5h9v9h-9zM6.5 7.5h5v4'
 const EXPAND = 'M8.5 2.5h3v3M11.5 2.5 8 6M5.5 11.5h-3v-3M2.5 11.5 6 8'
 const COPY = 'M4.5 4.5h7v7h-7zM2.5 9.5v-7h7'
 const RETRY = 'M11 5.5A4.5 4.5 0 1 0 11.5 8M11.5 2.5v3h-3'
-const STOP = 'M4.5 4.5h5v5h-5z'
-const SEND = 'M7 11.5v-9M3.5 6 7 2.5 10.5 6'
 const CHECK = 'M3.5 7.2l2.4 2.4 4.6-5'
 
 /** A square glyph button for the header and the message footer. */
@@ -633,17 +631,81 @@ const Thread = ({ variant, onGoto, onEdges }: { variant: ChatVariant; onGoto?: (
 
 // ---- The composer ----
 
+/** Six lines, then the field scrolls. */
+const GROW_LINES = 6
+
+/**
+ * The send button: Aqua's default button, drawn as a gem (styles/fantasy.css, .ff-aqua-gem). One button for the three
+ * states, so focus stays on it from send to stop and back: clear glass while there is nothing to send, the accent's gel
+ * (breathing, as the default button did) once there is, graphite with a stop square while the answer is written. It is
+ * never a submit button: the state can change between press and click, and a press on Stop must never send.
+ */
+const SendGem = ({ running, off, onSend, onStop }: { running: boolean; off: boolean; onSend: () => void; onStop: () => void }) => {
+  // When the state last changed, and what the button was when the press began: a press that began on Stop, or a click
+  // in the moment after the answer finished, never sends (whatever is typed); a second click of a double click on send
+  // never stops what the first one asked.
+  const changed = useRef(0)
+  const pressedAs = useRef<'stop' | 'send' | null>(null)
+  useEffect(() => {
+    changed.current = Date.now()
+  }, [running])
+  const grab = () => (pressedAs.current = running ? 'stop' : 'send')
+  return (
+    <button
+      type="button"
+      onPointerDown={grab}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && grab()}
+      onClick={(e) => {
+        e.preventDefault()
+        const began = pressedAs.current
+        pressedAs.current = null
+        const settled = Date.now() - changed.current > 400
+        if (running) {
+          if (settled && began !== 'send') onStop()
+        } else if (began !== 'stop' && settled) onSend()
+      }}
+      // Unavailable until there is a question, but still in reach: pressing it then puts the cursor in the box.
+      aria-disabled={(!running && off) || undefined}
+      aria-label={running ? 'Stop the answer' : 'Send'}
+      title={running ? 'Stop' : 'Send (Enter)'}
+      data-state={running ? 'stop' : off ? 'off' : 'ready'}
+      className="ff-aqua ff-aqua-gem asgm-send"
+    >
+      <SendIcon className="asgm-send-ico is-go" />
+      <StopIcon className="asgm-send-ico is-stop" />
+    </button>
+  )
+}
+
 const Composer = ({ variant, autoFocus, over }: { variant: ChatVariant; autoFocus: boolean; /** The thread runs on under it: draw its edge. */ over: boolean }) => {
   const s = useAsgm()
   const box = useRef<HTMLTextAreaElement>(null)
   const hintId = useId()
-  // Grow with what is typed, to six lines, then scroll.
-  useLayoutEffect(() => {
+  // Grow with what is typed, to six lines, then scroll. On a touch screen the field is set at 16px (iOS zooms into
+  // anything smaller) and drawn scaled down to the app's size (--asgm-k, styles/fantasy.css): its box is laid out
+  // unscaled, so the margin below takes back what the scale leaves empty. Measured again whenever the field's box
+  // changes (shown after being hidden, a rotation, a resize, touch or density switched), not only as text is typed.
+  const measure = useCallback(() => {
     const el = box.current
-    if (!el) return
+    // Not rendered (a closed sheet): nothing to measure; the observer runs this again once it is shown.
+    if (!el || !el.getClientRects().length) return
+    const cs = getComputedStyle(el)
+    const k = parseFloat(cs.getPropertyValue('--asgm-k')) || 1
+    const max = GROW_LINES * parseFloat(cs.lineHeight) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 148)}px`
-  }, [s.draft])
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`
+    // The height it was given, min-height included, before the scale draws it smaller.
+    const h = el.offsetHeight
+    el.style.marginBottom = k === 1 ? '' : `${h * k - h}px`
+  }, [])
+  useLayoutEffect(measure, [s.draft, measure])
+  useEffect(() => {
+    const el = box.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => measure())
+    ro.observe(el.parentElement ?? el)
+    return () => ro.disconnect()
+  }, [measure])
   useEffect(() => {
     if (!autoFocus || !s.focusTick) return
     const el = box.current
@@ -653,8 +715,9 @@ const Composer = ({ variant, autoFocus, over }: { variant: ChatVariant; autoFocu
   }, [s.focusTick, autoFocus])
   const empty = !s.draft.trim()
   const submit = () => {
-    // Nothing to send: the cursor goes where the question is written, rather than the button being dead.
-    if (empty) return box.current?.focus()
+    // Nothing to send, or nowhere to send it yet (the gem is drawn off then too): the cursor goes where the question is
+    // written, rather than the button being dead.
+    if (empty || !s.ready) return box.current?.focus()
     if (s.running) return
     s.send(s.draft)
   }
@@ -695,42 +758,27 @@ const Composer = ({ variant, autoFocus, over }: { variant: ChatVariant; autoFocu
           </div>
         )}
         {/* A field keeps its edge (it is a control); it sits on the wash until it has the cursor. */}
-        <div className="asgm-input flex items-end border border-ff-line2 bg-[var(--asgm-wash)] transition-[border-color,background-color,box-shadow] duration-ff-quick focus-within:border-ff-accent/70 focus-within:bg-ff-panel focus-within:shadow-[0_0_0_3px_rgb(var(--ff-accent)/0.14)]">
-          <textarea
-            ref={box}
-            rows={1}
-            value={s.draft}
-            onChange={(e) => s.setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault()
-                submit()
-              }
-            }}
-            placeholder={s.messages.length ? 'Ask a follow-up…' : 'Ask your GM…'}
-            aria-label="Message Assistant GM"
-            aria-describedby={hintId}
-            maxLength={2000}
-            className="ff-scroll min-h-[38px] flex-1 resize-none bg-transparent px-2.5 py-[9px] text-[13.5px] leading-[20px] text-ff-text placeholder:text-ff-muted focus:outline-none"
-          />
-          {s.running ? (
-            <button type="button" onClick={s.stop} aria-label="Stop the answer" title="Stop" className="asgm-press m-1 flex h-[30px] w-[30px] shrink-0 items-center justify-center border border-transparent bg-ff-text/[0.08] text-ff-text hover:bg-ff-text/[0.14] max-md:h-9 max-md:w-9">
-              <svg aria-hidden width="12" height="12" viewBox="0 0 14 14">
-                <path d={STOP} fill="currentColor" />
-              </svg>
-            </button>
-          ) : (
-            <button
-              type="submit"
-              // Unavailable until there is a question, but still in reach: pressing it then puts the cursor in the box.
-              aria-disabled={empty || !s.ready || undefined}
-              aria-label="Send"
-              title="Send (Enter)"
-              className="asgm-press m-1 flex h-[30px] w-[30px] shrink-0 items-center justify-center border border-transparent bg-ff-accent text-white hover:bg-[rgb(var(--ff-accent-deep))] aria-disabled:bg-ff-text/[0.07] aria-disabled:text-ff-muted max-md:h-9 max-md:w-9"
-            >
-              <Glyph d={SEND} size={13} />
-            </button>
-          )}
+        <div className="asgm-input flex items-end border border-ff-line2 bg-[var(--asgm-wash)] transition-[border-color,background-color,box-shadow] duration-ff-quick hover:border-ff-muted/50 focus-within:border-ff-accent/70 focus-within:bg-ff-panel focus-within:shadow-[0_0_0_3px_rgb(var(--ff-accent)/0.14)]">
+          <div className="asgm-type">
+            <textarea
+              ref={box}
+              rows={1}
+              value={s.draft}
+              onChange={(e) => s.setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  submit()
+                }
+              }}
+              placeholder={s.messages.length ? 'Ask a follow-up…' : 'Ask your GM…'}
+              aria-label="Message Assistant GM"
+              aria-describedby={hintId}
+              maxLength={2000}
+              className="ff-scroll resize-none bg-transparent text-[13px] text-ff-text placeholder:text-ff-muted focus:outline-none"
+            />
+          </div>
+          <SendGem running={!!s.running} off={empty || !s.ready} onSend={submit} onStop={s.stop} />
         </div>
         <p id={hintId} className="mt-1.5 flex items-center justify-between gap-3 font-mono text-[10px] text-ff-muted max-md:sr-only">
           <span className="truncate">

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { WIDGETS, type Selection, type WidgetKind } from '../dashboard/widgets'
 import { Button, PageHeader, cx, useHitSpread } from '../ui'
 import { Callout } from '../Callout'
@@ -139,6 +139,16 @@ const DashboardView = () => {
   const [drag, setDrag] = useState<{ id: string; over: string | null } | null>(null)
   const [resizing, setResizing] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
+  // The way back from Reset or a removed widget: the board before it, kept until the board changes again.
+  // `label` names the Undo button ("Undo removing My matchup"); `back` is where focus returns once undone: the
+  // restored widget's ×, or Reset.
+  const [undo, setUndo] = useState<{ note: string; label: string; prev: Widget[]; after: Widget[]; back: string } | null>(null)
+  const undoButton = useRef<HTMLButtonElement>(null)
+  // What the live region says. It is always in the page and only its text changes, so screen readers announce it.
+  const [said, setSaid] = useState('')
+  const say = (text: string) => setSaid((was) => (was === text ? `${text}\u00a0` : text))
+  // Focus that waits for the board to commit: set with the layout it belongs to, applied after that render.
+  const [focusBack, setFocusBack] = useState<string | null>(null)
   const grid = useRef<HTMLDivElement>(null)
   // Phones: the widgets' small header controls (and small controls inside them) reach out to a thumb-sized target.
   useHitSpread(grid)
@@ -157,6 +167,48 @@ const DashboardView = () => {
       // Layout simply does not persist in a private window.
     }
   }, [layout, loaded])
+
+  useEffect(() => {
+    if (undo && layout !== undo.after) setUndo(null)
+  }, [layout, undo])
+  // The control that did it has gone (Reset greys out, a removed widget's × goes with it), so focus waits on Undo.
+  useEffect(() => {
+    if (undo) undoButton.current?.focus({ preventScroll: true })
+  }, [undo])
+  const isDefault = useMemo(() => JSON.stringify(layout) === JSON.stringify(DEFAULT_LAYOUT), [layout])
+  useEffect(() => {
+    if (!focusBack) return
+    setFocusBack(null)
+    // What was undone, if it can be seen; otherwise the bar's own controls. Reset hides once edit mode is left on a
+    // wide screen, so undoing a reset from there lands on Edit layout. Scroll-padding keeps it clear of the header.
+    const shown = (el: HTMLElement | null) => (el && el.getClientRects().length > 0 ? el : null)
+    const pick = (sel: string) => shown(document.querySelector<HTMLElement>(sel))
+    ;(pick(focusBack) ?? pick('[data-dash-edit]') ?? pick('[data-dash-add]'))?.focus()
+  }, [focusBack])
+  const replace = (next: Widget[], note: string, label: string, back: string) => {
+    setUndo({ note, label, prev: layout, after: next, back })
+    setLayout(next)
+    say(`${note}. Undo is available.`)
+  }
+  const reset = () => replace(DEFAULT_LAYOUT, 'Board reset', 'Undo reset', '[data-dash-reset]')
+  const remove = (w: Widget) => {
+    const title = WIDGETS[w.kind].title
+    replace(
+      layout.filter((x) => x.id !== w.id),
+      `Removed ${title}`,
+      `Undo removing ${title}`,
+      `[data-dash-remove="${w.id}"]`,
+    )
+    setMenu(null)
+  }
+  const restore = () => {
+    if (!undo) return
+    setLayout(undo.prev)
+    setUndo(null)
+    say(undo.back === '[data-dash-reset]' ? 'Board restored.' : `${undo.note.replace(/^Removed /, '')} restored.`)
+    // Undo goes with the notice, so focus goes back to what was undone once the board has rendered.
+    setFocusBack(undo.back)
+  }
 
   const keyFor = (w: Widget) => (w.ch ? `ch${w.ch}` : w.id)
   const patch = (id: string, p: Partial<Widget>) => setLayout((xs) => xs.map((x) => (x.id === id ? { ...x, ...p } : x)))
@@ -227,21 +279,44 @@ const DashboardView = () => {
     <>
       <PageHeader
         title="Dashboard"
+        meta={
+          undo ? (
+            // What just happened and the way back, where the board's status sits. The live region below speaks it.
+            <span className="inline-flex max-w-full items-center gap-0.5">
+              <span className="truncate text-ff-text2">{undo.note}</span>
+              <button
+                ref={undoButton}
+                type="button"
+                onClick={restore}
+                aria-label={undo.label}
+                className="inline-flex h-7 shrink-0 items-center px-1.5 font-sans text-[12.5px] font-medium text-ff-accent hover:bg-ff-raised max-md:h-10"
+              >
+                Undo
+              </button>
+            </span>
+          ) : editing ? (
+            <span className="inline-flex items-baseline gap-1.5">
+              <span aria-hidden className="h-1.5 w-1.5 shrink-0 self-center bg-ff-accent" />
+              <span className="text-ff-text2">Editing layout</span>
+              <span className="hidden truncate lg:inline">· drag a title bar to move, an edge to resize</span>
+            </span>
+          ) : (
+            `${layout.length} widget${layout.length === 1 ? '' : 's'}`
+          )
+        }
         actions={
           <>
-            {/* Phones have no edit mode, so Reset stays there; on wide screens it lives in edit mode. */}
-            <Button size="sm" variant="ghost" onClick={() => setLayout(DEFAULT_LAYOUT)} title="Restore the default board" className={editing ? undefined : 'md:hidden'}>
+            {/* Phones have no edit mode (widgets stack, and each one's size menu and × are always there), so Reset
+                stays out on the bar; on wide screens it lives in edit mode, next to Done. */}
+            <Button size="sm" data-dash-reset onClick={reset} disabled={isDefault} title={isDefault ? 'The board is already the default' : 'Restore the default board (you can undo)'} className={editing ? undefined : 'md:hidden'}>
               Reset
             </Button>
-            <Button size="sm" variant={editing ? 'primary' : 'ghost'} onClick={() => setEditing((x) => !x)} title="Show resize handles and grid guides" className="hidden md:inline-flex">
-              {editing ? 'Done' : 'Edit layout'}
-            </Button>
             <div className="relative">
-              <Button size="sm" variant={catalog ? 'primary' : 'outline'} onClick={() => setCatalog((c) => !c)}>
+              <Button size="sm" data-dash-add onClick={() => setCatalog((c) => !c)} aria-expanded={catalog} className={cx(catalog && '!border-ff-line2 !bg-ff-raised')}>
                 + Widget
               </Button>
               {catalog && (
-                <div className="fixed inset-x-2 top-[calc(var(--ff-top)+52px)] z-40 border border-ff-line2 bg-ff-panel shadow-[0_8px_24px_rgba(0,0,0,0.25)] md:absolute md:inset-x-auto md:right-0 md:top-full md:mt-1 md:w-[300px]">
+                <div className="fixed left-[var(--ff-gl)] right-[var(--ff-gr)] top-[calc(var(--ff-top)+56px)] z-40 border border-ff-line2 bg-ff-panel shadow-[0_8px_24px_rgba(0,0,0,0.25)] md:absolute md:left-auto md:right-0 md:top-full md:mt-1 md:w-[300px]">
                   <div className="ff-label border-b border-ff-line px-3 py-1.5">add widget</div>
                   <div className="ff-scroll max-h-[60dvh] overflow-y-auto overscroll-contain">
                     {(Object.keys(WIDGETS) as WidgetKind[]).map((k) => (
@@ -259,9 +334,16 @@ const DashboardView = () => {
                 </div>
               )}
             </div>
+            {/* The mode's way in and out, at the trailing end: Done is the one filled button while editing. */}
+            <Button size="sm" data-dash-edit variant={editing ? 'primary' : 'outline'} onClick={() => setEditing((x) => !x)} title={editing ? 'Finish editing the layout' : 'Show resize handles and grid guides'} className="hidden md:inline-flex">
+              {editing ? 'Done' : 'Edit layout'}
+            </Button>
           </>
         }
       />
+      <div role="status" aria-live="polite" className="sr-only">
+        {said}
+      </div>
       <div className="ff-canvas ff-bleed ff-gutter mt-0 min-h-[calc(100dvh-120px)] py-[var(--ff-gl)]">
         {/* Phones stack widgets at their natural height; the row grid starts at md. */}
         <div ref={grid} className={cx('ff-grid-gap grid grid-cols-1 md:grid-flow-row-dense md:auto-rows-[34px] md:grid-cols-12', editing && 'ff-grid-guides')}>
@@ -324,16 +406,14 @@ const DashboardView = () => {
                       <Menu
                         widget={w}
                         onChange={(p) => patch(w.id, p)}
-                        onRemove={() => {
-                          setLayout((xs) => xs.filter((x) => x.id !== w.id))
-                          setMenu(null)
-                        }}
+                        onRemove={() => remove(w)}
                         onMove={(d) => move(w.id, d)}
                         close={() => setMenu(null)}
                       />
                     )}
                     <button
-                      onClick={() => setLayout((xs) => xs.filter((x) => x.id !== w.id))}
+                      onClick={() => remove(w)}
+                      data-dash-remove={w.id}
                       className="ff-hit-spread ff-hit-wide flex h-full items-center border-l border-ff-line px-2.5 font-mono text-[11px] text-ff-muted hover:bg-ff-raised hover:text-ff-neg"
                       aria-label={`Remove ${meta.title}`}
                       title="Remove"
