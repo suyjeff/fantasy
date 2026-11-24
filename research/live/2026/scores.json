@@ -1,31 +1,31 @@
 {
- "scoredAt": "2026-11-17T22:48:44.396Z",
+ "scoredAt": "2026-11-24T23:47:41.957Z",
  "all": {
   "monke": {
-   "games": 22,
-   "logLoss": 0.6747012909536416,
-   "brier": 0.24227600000000005,
-   "right": 10
+   "games": 33,
+   "logLoss": 0.7002729925046265,
+   "brier": 0.2538461818181819,
+   "right": 15
   },
   "sleeper": {
-   "games": 22,
-   "logLoss": 0.6665015531758256,
-   "brier": 0.23951418181818188,
-   "right": 12
+   "games": 33,
+   "logLoss": 0.6678211231253887,
+   "brier": 0.24050172727272726,
+   "right": 18
   }
  },
  "preKickoff": {
   "monke": {
-   "games": 13,
-   "logLoss": 0.7245886845978128,
-   "brier": 0.2650172307692307,
-   "right": 4
+   "games": 16,
+   "logLoss": 0.7239389500030957,
+   "brier": 0.2648166875,
+   "right": 5
   },
   "sleeper": {
-   "games": 13,
-   "logLoss": 0.7102183293662951,
-   "brier": 0.2574298461538462,
-   "right": 7
+   "games": 16,
+   "logLoss": 0.6991301083672983,
+   "brier": 0.2521108125,
+   "right": 9
   }
  },
  "games": [
@@ -247,6 +247,116 @@
    "y": 0,
    "monke": 0.56,
    "sleeper": 0.512,
+   "preKickoff": true
+  },
+  {
+   "week": 11,
+   "league": "NYC Fantasy Football",
+   "a": 1,
+   "b": 7,
+   "y": 0,
+   "monke": 0.387,
+   "sleeper": 0.244,
+   "preKickoff": false
+  },
+  {
+   "week": 11,
+   "league": "NYC Fantasy Football",
+   "a": 2,
+   "b": 8,
+   "y": 1,
+   "monke": 0.581,
+   "sleeper": 0.498,
+   "preKickoff": false
+  },
+  {
+   "week": 11,
+   "league": "NYC Fantasy Football",
+   "a": 3,
+   "b": 9,
+   "y": 1,
+   "monke": 0.623,
+   "sleeper": 0.859,
+   "preKickoff": false
+  },
+  {
+   "week": 11,
+   "league": "NYC Fantasy Football",
+   "a": 4,
+   "b": 5,
+   "y": 1,
+   "monke": 0.291,
+   "sleeper": 0.358,
+   "preKickoff": false
+  },
+  {
+   "week": 11,
+   "league": "NYC Fantasy Football",
+   "a": 6,
+   "b": 10,
+   "y": 1,
+   "monke": 0.34,
+   "sleeper": 0.323,
+   "preKickoff": false
+  },
+  {
+   "week": 11,
+   "league": "Monke Football League (MFL)",
+   "a": 1,
+   "b": 12,
+   "y": 0,
+   "monke": 0.682,
+   "sleeper": 0.679,
+   "preKickoff": false
+  },
+  {
+   "week": 11,
+   "league": "Monke Football League (MFL)",
+   "a": 2,
+   "b": 4,
+   "y": 1,
+   "monke": 0.455,
+   "sleeper": 0.545,
+   "preKickoff": true
+  },
+  {
+   "week": 11,
+   "league": "Monke Football League (MFL)",
+   "a": 3,
+   "b": 9,
+   "y": 0,
+   "monke": 0.544,
+   "sleeper": 0.488,
+   "preKickoff": false
+  },
+  {
+   "week": 11,
+   "league": "Monke Football League (MFL)",
+   "a": 5,
+   "b": 6,
+   "y": 1,
+   "monke": 0.483,
+   "sleeper": 0.468,
+   "preKickoff": true
+  },
+  {
+   "week": 11,
+   "league": "Monke Football League (MFL)",
+   "a": 7,
+   "b": 10,
+   "y": 1,
+   "monke": 0.703,
+   "sleeper": 0.719,
+   "preKickoff": false
+  },
+  {
+   "week": 11,
+   "league": "Monke Football League (MFL)",
+   "a": 8,
+   "b": 11,
+   "y": 1,
+   "monke": 0.523,
+   "sleeper": 0.556,
    "preKickoff": true
   }
  ]
